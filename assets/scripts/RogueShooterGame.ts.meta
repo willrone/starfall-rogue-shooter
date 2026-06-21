@@ -1,0 +1,13 @@
+{
+  "ver": "4.0.24",
+  "importer": "typescript",
+  "imported": true,
+  "uuid": "859c9b29-eae6-4b85-8d05-0e2317fe0345",
+  "files": [],
+  "subMetas": {},
+  "userData": {
+    "moduleId": "project:///assets/scripts/RogueShooterGame.js",
+    "importerSettings": 7,
+    "simulateGlobals": []
+  }
+}

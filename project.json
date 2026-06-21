@@ -1,0 +1,15 @@
+{
+  "engine": "cocos-creator",
+  "version": "3.8.8",
+  "name": "starfall-rogue-shooter",
+  "id": "com.ronghui.starfallrogueshooter",
+  "author": "ronghui",
+  "description": "星坠幸存者 - 自动瞄准平面射击肉鸽原型",
+  "isNew": false,
+  "type": "project",
+  "platforms": [
+    "web-mobile",
+    "web-desktop",
+    "bytedance-mini-game"
+  ]
+}
