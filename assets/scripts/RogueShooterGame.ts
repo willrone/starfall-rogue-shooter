@@ -1132,6 +1132,7 @@ export class RogueShooterGame extends Component {
     private currentWaveSpecs: EnemySpec[] = [];
     private nextEnemyId = 1;
     private enemies: Enemy[] = [];
+    private enemySet: Set<Enemy> = new Set();
     private bullets: Bullet[] = [];
     private bulletPool: Bullet[] = [];
     private enemyProjectiles: EnemyProjectile[] = [];
@@ -2406,7 +2407,7 @@ export class RogueShooterGame extends Component {
                     const bucket = enemyGrid.get(`${cellX + ox},${cellY + oy}`);
                     if (!bucket) continue;
                     for (const enemy of bucket) {
-                        if (this.enemies.indexOf(enemy) < 0) continue;
+                        if (!this.enemySet.has(enemy)) continue;
                         if (bullet.hitIds.has(enemy.id)) continue;
                         const distSq = this.distanceSq(bullet.x, bullet.y, enemy.node.position.x, enemy.node.position.y);
                         const hitRadius = bullet.radius + enemy.radius;
@@ -2566,8 +2567,8 @@ export class RogueShooterGame extends Component {
     private updateEnemies(dt: number) {
         const px = this.playerX;
         const py = this.playerY;
-        for (const enemy of [...this.enemies]) {
-            if (this.enemies.indexOf(enemy) < 0) continue;
+        for (const enemy of this.enemies) {
+            if (!this.enemySet.has(enemy)) continue;
             const ex = enemy.node.position.x;
             const ey = enemy.node.position.y;
             const dx = px - ex;
@@ -2630,7 +2631,11 @@ export class RogueShooterGame extends Component {
         const hitPulse = enemy.hitFlash > 0 ? (enemy.hitFlash / ENEMY_HIT_FLASH_DURATION) * 0.18 : 0;
         const scaleX = 1 + dashPulse + hitPulse * 0.55;
         const scaleY = 1 - dashPulse * 0.28 + hitPulse;
-        enemy.node.setScale(scaleX, Math.max(0.86, scaleY), 1);
+        if (Math.abs(scaleX - (enemy['_lastScaleX'] || 0)) > 0.005 || Math.abs(scaleY - (enemy['_lastScaleY'] || 0)) > 0.005) {
+            enemy.node.setScale(scaleX, Math.max(0.86, scaleY), 1);
+            enemy['_lastScaleX'] = scaleX;
+            enemy['_lastScaleY'] = scaleY;
+        }
 
         if (enemy.sprite) {
             if (enemy.animation && enemy.animation.frames.length > 0) {
@@ -2641,11 +2646,20 @@ export class RogueShooterGame extends Component {
                 }
             }
             const spriteNode = enemy.sprite.node;
-            spriteNode.setPosition(0, 0, 0);
-            spriteNode.angle = enemy.dashTimer > 0 ? this.clamp(vx, -1, 1) * -8 : 0;
-            enemy.sprite.color = enemy.hitFlash > 0
-                ? this.hex('#FFFFFF', 255)
-                : this.getEnemyTint(enemy, enemy.elite ? 255 : 235);
+            const dashAngle = enemy.dashTimer > 0 ? this.clamp(vx, -1, 1) * -8 : 0;
+            if (Math.abs(dashAngle - (enemy['_lastAngle'] || 0)) > 0.5) {
+                spriteNode.angle = dashAngle;
+                spriteNode.setPosition(0, 0, 0);
+                enemy['_lastAngle'] = dashAngle;
+            }
+            const hitColor = enemy.hitFlash > 0;
+            const wasHitColor = enemy['_wasHitColor'] || false;
+            if (hitColor !== wasHitColor) {
+                enemy.sprite.color = hitColor
+                    ? this.hex('#FFFFFF', 255)
+                    : this.getEnemyTint(enemy, enemy.elite ? 255 : 235);
+                enemy['_wasHitColor'] = hitColor;
+            }
         } else if (enemy.hitFlash > 0) {
             this.drawEnemy(enemy);
         }
@@ -2709,6 +2723,7 @@ export class RogueShooterGame extends Component {
     }
 
     private separateEnemies() {
+        if (this.enemies.length < 6) return;
         const buckets = new Map<string, Enemy[]>();
         for (const enemy of this.enemies) {
             let ax = enemy.node.position.x;
@@ -2995,6 +3010,7 @@ export class RogueShooterGame extends Component {
         };
         this.drawEnemy(enemy);
         this.enemies.push(enemy);
+        this.enemySet.add(enemy);
     }
 
     private getEnemyDamageType(spec: EnemySpec, boss: boolean): DamageType {
@@ -3108,6 +3124,7 @@ export class RogueShooterGame extends Component {
     private killEnemy(enemy: Enemy) {
         const index = this.enemies.indexOf(enemy);
         if (index >= 0) this.enemies.splice(index, 1);
+        this.enemySet.delete(enemy);
         const x = enemy.node.position.x;
         const y = enemy.node.position.y;
         this.playSfx(enemy.boss ? 'sfx_boss_die' : 'sfx_enemy_die', enemy.boss ? 0.82 : 0.45, enemy.boss ? 1.0 : 0.045);
