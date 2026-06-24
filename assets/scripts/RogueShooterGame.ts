@@ -84,6 +84,11 @@ const ENEMY_STATUS_KEY_ARMOR = 'armor';
 const ENEMY_STATUS_KEY_DASH = 'dash';
 const ENEMY_SEP_INTERVAL = 0.045;
 const ENEMY_SEP_PLAYER_DIST = 480;
+const ENEMY_CROWD_MIN_COUNT = 18;
+const ENEMY_CROWD_REPEL_RADIUS = 112;
+const ENEMY_CROWD_MAX_NEIGHBORS = 12;
+const ENEMY_CROWD_REPEL_WEIGHT = 1.45;
+const ENEMY_CROWD_ORBIT_WEIGHT = 0.58;
 
 type GamePhase = 'menu' | 'combat' | 'level-up' | 'item-choice' | 'shop' | 'loot' | 'hangar' | 'paused';
 type BattleEndReason = 'death' | 'extract';
@@ -2573,6 +2578,7 @@ export class RogueShooterGame extends Component {
         this.enemySepTick += dt;
         const doSeparation = this.enemySepTick >= ENEMY_SEP_INTERVAL && this.enemies.length >= 6;
         if (doSeparation) this.enemySepTick = 0;
+        const crowdGrid = this.enemies.length >= ENEMY_CROWD_MIN_COUNT ? this.buildEnemyGrid(ENEMY_SEPARATION_CELL) : null;
 
         for (const enemy of this.enemies) {
             if (!this.enemySet.has(enemy)) continue;
@@ -2591,6 +2597,13 @@ export class RogueShooterGame extends Component {
                 vx = enemy.dashVx;
                 vy = enemy.dashVy;
                 moveSpeed = enemy.speed * (enemy.boss ? 2.15 : 2.9);
+            } else if (crowdGrid) {
+                const steer = this.getEnemyCrowdSteer(enemy, crowdGrid, ex, ey, dx / dist, dy / dist, dist);
+                vx += steer.x;
+                vy += steer.y;
+                const vLen = Math.max(0.001, Math.sqrt(vx * vx + vy * vy));
+                vx /= vLen;
+                vy /= vLen;
             }
             let nextX = ex + vx * moveSpeed * dt;
             let nextY = ey + vy * moveSpeed * dt;
@@ -2617,6 +2630,51 @@ export class RogueShooterGame extends Component {
             this.updateEnemyVisual(enemy, dt, vx, vy, moveSpeed);
         }
         if (doSeparation) this.separateEnemies();
+    }
+
+    private getEnemyCrowdSteer(enemy: Enemy, grid: Map<string, Enemy[]>, ex: number, ey: number, toPlayerX: number, toPlayerY: number, playerDist: number) {
+        let sx = 0;
+        let sy = 0;
+        let checks = 0;
+        const cellX = Math.floor(ex / ENEMY_SEPARATION_CELL);
+        const cellY = Math.floor(ey / ENEMY_SEPARATION_CELL);
+        for (let ox = -1; ox <= 1 && checks < ENEMY_CROWD_MAX_NEIGHBORS; ox++) {
+            for (let oy = -1; oy <= 1 && checks < ENEMY_CROWD_MAX_NEIGHBORS; oy++) {
+                const bucket = grid.get(`${cellX + ox},${cellY + oy}`);
+                if (!bucket) continue;
+                for (let i = 0; i < bucket.length && checks < ENEMY_CROWD_MAX_NEIGHBORS; i++) {
+                    const other = bucket[i];
+                    if (other === enemy || !this.enemySet.has(other)) continue;
+                    checks += 1;
+                    const dx = ex - other.node.position.x;
+                    const dy = ey - other.node.position.y;
+                    const minDist = enemy.radius + other.radius + ENEMY_SEPARATION_PADDING;
+                    const range = Math.max(ENEMY_CROWD_REPEL_RADIUS, minDist * 1.75);
+                    if (Math.abs(dx) > range || Math.abs(dy) > range) continue;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq <= 0.001 || distSq > range * range) continue;
+                    const dist = Math.sqrt(distSq);
+                    const pressure = (range - dist) / range;
+                    sx += (dx / dist) * pressure * ENEMY_CROWD_REPEL_WEIGHT;
+                    sy += (dy / dist) * pressure * ENEMY_CROWD_REPEL_WEIGHT;
+                }
+            }
+        }
+
+        const preferredRing = this.playerRadius + enemy.radius + 42 + (enemy.id % 9) * 13;
+        if (playerDist < preferredRing) {
+            const outward = (preferredRing - playerDist) / preferredRing;
+            sx -= toPlayerX * outward * 1.6;
+            sy -= toPlayerY * outward * 1.6;
+        }
+        if (playerDist < preferredRing + 150) {
+            const orbitSign = enemy.id % 2 === 0 ? 1 : -1;
+            const orbit = this.clamp((preferredRing + 150 - playerDist) / 150, 0, 1) * ENEMY_CROWD_ORBIT_WEIGHT;
+            sx += -toPlayerY * orbitSign * orbit;
+            sy += toPlayerX * orbitSign * orbit;
+        }
+
+        return { x: sx, y: sy };
     }
 
     private updateEnemyVisual(enemy: Enemy, dt: number, vx: number, vy: number, moveSpeed: number) {
