@@ -1,5 +1,7 @@
 import {
     _decorator,
+    AudioClip,
+    AudioSource,
     Camera,
     Canvas,
     Color,
@@ -41,6 +43,7 @@ const WORLD_TOP = 3200;
 const CAMERA_FOCUS_X = 0;
 const CAMERA_FOCUS_Y = -96;
 const ART_DIR = 'art';
+const AUDIO_DIR = 'audio';
 const PLACEHOLDER_ART_DIR = 'art/placeholder';
 const HANGAR_EQUIPMENT_SLOTS = 8;
 const EQUIPPED_SLOT_COUNT = 6;
@@ -1031,6 +1034,16 @@ export class RogueShooterGame extends Component {
     private startButton: ButtonView | null = null;
     private artFrames = new Map<string, SpriteFrame>();
     private spriteStripCache = new Map<string, SpriteStripAnimation>();
+    private sfxSource: AudioSource | null = null;
+    private bgmSource: AudioSource | null = null;
+    private sfxClips = new Map<string, AudioClip>();
+    private bgmClips = new Map<string, AudioClip>();
+    private sfxCooldowns: Record<string, number> = {};
+    private audioReady = false;
+    private audioUnlocked = false;
+    private currentBgmName = '';
+    private sfxVolume = 0.72;
+    private bgmVolume = 0.34;
     private playerIdleAnimation: SpriteStripAnimation | null = null;
     private playerRunAnimations = new Map<PlayerDirection, SpriteStripAnimation>();
     private playerDirection: PlayerDirection = 'south';
@@ -1133,6 +1146,7 @@ export class RogueShooterGame extends Component {
         this.createCanvas();
         this.loadProgress();
         this.buildScene();
+        this.initAudio();
         this.loadPlaceholderArt(() => this.openHome());
         input.on(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         input.on(Input.EventType.KEY_UP, this.onKeyUp, this);
@@ -1153,6 +1167,7 @@ export class RogueShooterGame extends Component {
 
     update(dt: number) {
         this.updateToast(dt);
+        this.updateSfxCooldowns(dt);
         this.updateFloatingTexts(dt);
         if (this.phase === 'combat') {
             const combatDt = Math.min(dt, MAX_COMBAT_DT);
@@ -1231,6 +1246,97 @@ export class RogueShooterGame extends Component {
             this.buildSpriteStripAnimations();
             done();
         });
+    }
+
+    private initAudio() {
+        this.sfxSource = this.node.addComponent(AudioSource);
+        this.bgmSource = this.node.addComponent(AudioSource);
+        this.bgmSource.loop = true;
+        this.bgmSource.volume = this.bgmVolume;
+
+        resources.loadDir(AUDIO_DIR, AudioClip, (error, clips) => {
+            if (error) {
+                console.warn('Failed to load audio assets; game will continue muted.', error);
+                return;
+            }
+
+            for (const clip of clips) {
+                if (clip.name.startsWith('bgm_')) {
+                    this.bgmClips.set(clip.name, clip);
+                } else if (clip.name.startsWith('sfx_')) {
+                    this.sfxClips.set(clip.name, clip);
+                }
+            }
+            this.audioReady = true;
+            this.syncBgmForPhase();
+        });
+    }
+
+    private unlockAudio() {
+        if (this.audioUnlocked) return;
+        this.audioUnlocked = true;
+        this.syncBgmForPhase(true);
+    }
+
+    private updateSfxCooldowns(dt: number) {
+        for (const name of Object.keys(this.sfxCooldowns)) {
+            this.sfxCooldowns[name] -= dt;
+            if (this.sfxCooldowns[name] <= 0) delete this.sfxCooldowns[name];
+        }
+    }
+
+    private playSfx(name: string, volume = 1, cooldown = 0.035) {
+        if (!this.audioReady || !this.audioUnlocked || !this.sfxSource) return;
+        if (this.sfxCooldowns[name] && this.sfxCooldowns[name] > 0) return;
+        const clip = this.sfxClips.get(name);
+        if (!clip) return;
+        this.sfxSource.playOneShot(clip, this.sfxVolume * volume);
+        if (cooldown > 0) this.sfxCooldowns[name] = cooldown;
+    }
+
+    private playShootSfx(style: WeaponAttackStyle) {
+        switch (style) {
+            case 'shotgun':
+                this.playSfx('sfx_shoot_shotgun', 0.78, 0.09);
+                break;
+            case 'rail':
+                this.playSfx('sfx_shoot_rail', 0.78, 0.12);
+                break;
+            case 'laser':
+            case 'pulse':
+            case 'disc':
+            case 'scythe':
+                this.playSfx('sfx_shoot_laser', 0.68, 0.08);
+                break;
+            default:
+                this.playSfx('sfx_shoot_rifle', 0.64, 0.055);
+                break;
+        }
+    }
+
+    private requestBgm(name: string) {
+        this.currentBgmName = name;
+        this.syncBgmForPhase();
+    }
+
+    private syncBgmForPhase(forceRestart = false) {
+        if (!this.audioReady || !this.audioUnlocked || !this.bgmSource || !this.currentBgmName) return;
+        const clip = this.bgmClips.get(this.currentBgmName);
+        if (!clip) return;
+        if (!forceRestart && this.bgmSource.clip === clip && this.bgmSource.playing) return;
+        this.bgmSource.stop();
+        this.bgmSource.clip = clip;
+        this.bgmSource.loop = true;
+        this.bgmSource.volume = this.bgmVolume;
+        this.bgmSource.play();
+    }
+
+    private requestPhaseBgm() {
+        if (this.phase === 'combat') {
+            this.requestBgm(this.isBossWave() ? 'bgm_boss_loop' : 'bgm_combat_loop');
+        } else {
+            this.requestBgm('bgm_hangar');
+        }
     }
 
     private buildSpriteStripAnimations() {
@@ -1564,6 +1670,8 @@ export class RogueShooterGame extends Component {
 
     private openHome() {
         this.clearWorld();
+        this.phase = 'hangar';
+        this.requestBgm('bgm_hangar');
         this.showHangar('出战槽：最多 2 把武器，战斗中只能激活 1 把；帽子、护甲、鞋子、首饰各 1 件。');
     }
 
@@ -1576,6 +1684,7 @@ export class RogueShooterGame extends Component {
 
         this.clearWorld();
         this.phase = 'combat';
+        this.requestBgm('bgm_combat_loop');
         this.battleIndex = this.battlesWon + 1;
         this.combatTime = 0;
         this.cycleTime = 0;
@@ -1937,6 +2046,7 @@ export class RogueShooterGame extends Component {
         for (const angle of angles) {
             this.createBullet(angle, damage, this.getBulletPierce(), weaponStyle, weaponColor);
         }
+        this.playShootSfx(weaponStyle);
         this.spawnMuzzleFlash(baseAngle, weaponStyle, weaponColor, angles.length);
     }
 
@@ -2556,12 +2666,15 @@ export class RogueShooterGame extends Component {
 
         if (this.isBossWave()) {
             this.bossSpawned = true;
+            this.requestBgm('bgm_boss_loop');
+            this.playSfx('sfx_boss_warning', 0.9, 1.2);
             this.spawnBoss();
             this.showToast(`第 ${this.waveIndex} 波：Boss 出现，击杀后才能进入下一波。`);
             return;
         }
 
         this.bossSpawned = false;
+        this.requestBgm('bgm_combat_loop');
         this.showToast(`第 ${this.waveIndex} 波开始，${Math.round(this.waveDuration)} 秒内怪潮会持续涌入。`);
     }
 
@@ -2789,6 +2902,7 @@ export class RogueShooterGame extends Component {
             finalTag ? 23 : 21,
         );
         enemy.hitFlash = ENEMY_HIT_FLASH_DURATION;
+        this.playSfx('sfx_hit_enemy', enemy.boss ? 0.46 : 0.32, 0.035);
         enemy.hp -= finalAmount;
         if (enemy.hp <= 0) {
             this.killEnemy(enemy);
@@ -2824,6 +2938,7 @@ export class RogueShooterGame extends Component {
         if (index >= 0) this.enemies.splice(index, 1);
         const x = enemy.node.position.x;
         const y = enemy.node.position.y;
+        this.playSfx(enemy.boss ? 'sfx_boss_die' : 'sfx_enemy_die', enemy.boss ? 0.82 : 0.45, enemy.boss ? 1.0 : 0.045);
         this.drawEnemyDeathBurst(x, y, enemy.radius, enemy.spec.color, enemy.elite || enemy.boss);
         enemy.node.destroy();
         this.killCount += 1;
@@ -2864,6 +2979,7 @@ export class RogueShooterGame extends Component {
             this.bossKills += 1;
             this.bossDefeatedThisWave = true;
             this.bossSpawned = false;
+            this.requestBgm('bgm_combat_loop');
             this.showToast(`第 ${this.waveIndex} 波 Boss 已击杀，撑到本波结束进入下一波。`);
         }
         if (this.shouldEnemyExplodeOnDeath(enemy)) {
@@ -2954,6 +3070,7 @@ export class RogueShooterGame extends Component {
         }
         if (damage > 0) {
             this.playerHp = Math.max(0, this.playerHp - damage);
+            this.playSfx('sfx_player_hit', 0.65, 0.28);
             this.spawnFloatingText(`-${Math.ceil(damage)}`, this.playerX, this.playerY + this.playerRadius + 28, '#F94144', 25);
             this.showToast(`受击 -${Math.ceil(damage)}，拉开距离。`);
         }
@@ -3127,11 +3244,14 @@ export class RogueShooterGame extends Component {
 
     private collectPickup(pickup: Pickup) {
         if (pickup.type === 'xp') {
+            this.playSfx('sfx_pickup', 0.22, 0.09);
             this.gainXp(pickup.amount);
         } else if (this.isChestPickup(pickup.type)) {
             if (this.phase !== 'combat') return;
+            this.playSfx('sfx_chest_open', 0.7, 0.35);
             this.openItemChoices(pickup.type === 'chest-rare' ? 'rare' : 'common');
         } else {
+            this.playSfx('sfx_pickup', pickup.type === 'cores' || pickup.type === 'crystals' ? 0.52 : 0.32, 0.08);
             this.addBattleResource(pickup.type, pickup.amount);
             if (pickup.type === 'cores' || pickup.type === 'crystals') {
                 const resource = this.getResourceDef(pickup.type);
@@ -3146,6 +3266,7 @@ export class RogueShooterGame extends Component {
             this.xp -= this.xpToNext;
             this.level += 1;
             this.xpToNext = Math.round(this.xpToNext * 1.24 + 22 + this.level * 5);
+            this.playSfx('sfx_level_up', 0.78, 0.45);
             this.openLevelChoices();
         }
     }
@@ -3305,6 +3426,7 @@ export class RogueShooterGame extends Component {
 
     private openSettlement(reason: BattleEndReason, reward: ResourceWallet) {
         this.phase = 'hangar';
+        this.requestBgm('bgm_hangar');
         if (this.hangarPanel) this.hangarPanel.active = true;
         if (this.hangarPanelShadow) this.hangarPanelShadow.active = true;
         this.setShopPanelActive(false);
@@ -4790,6 +4912,7 @@ export class RogueShooterGame extends Component {
         this.shotTimer = next ? Math.min(this.weaponCooldowns[next.id] ?? 0.18, this.getFireInterval()) : 0.18;
         this.playerWeaponFrameName = '';
         this.updatePlayerWeaponVisual();
+        this.playSfx('sfx_ui_click', 0.42, 0.08);
         this.showToast(next ? `切换武器：${next.name}` : '已切换武器。');
         this.refreshHud();
     }
@@ -5131,6 +5254,7 @@ export class RogueShooterGame extends Component {
     }
 
     private onKeyDown(event: EventKeyboard) {
+        this.unlockAudio();
         this.pressedKeys.add(event.keyCode);
         if (event.keyCode === KeyCode.KEY_Q || event.keyCode === KeyCode.KEY_E) {
             this.switchActiveWeapon();
@@ -5154,6 +5278,7 @@ export class RogueShooterGame extends Component {
     }
 
     private onTouchStart(event: EventTouch) {
+        this.unlockAudio();
         if (this.phase !== 'combat') return;
         const location = event.getUILocation();
         this.touchActive = true;
@@ -5231,7 +5356,11 @@ export class RogueShooterGame extends Component {
         node.on(Node.EventType.TOUCH_CANCEL, () => node.setScale(Vec3.ONE), this);
         node.on(Node.EventType.TOUCH_END, () => {
             node.setScale(Vec3.ONE);
-            if (!view.disabled) onClick();
+            if (!view.disabled) {
+                this.unlockAudio();
+                this.playSfx('sfx_ui_click', 0.55, 0.045);
+                onClick();
+            }
         }, this);
 
         return view;
