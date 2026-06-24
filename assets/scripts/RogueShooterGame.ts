@@ -1006,6 +1006,9 @@ export class RogueShooterGame extends Component {
     private xpBar: Graphics | null = null;
     private menuPanel: Node | null = null;
     private menuPanelShadow: Node | null = null;
+    private loadingPanel: Node | null = null;
+    private loadingTitleLabel: Label | null = null;
+    private loadingProgressLabel: Label | null = null;
     private pausePanel: Node | null = null;
     private pausePanelShadow: Node | null = null;
     private settingsPanel: Node | null = null;
@@ -1254,22 +1257,34 @@ export class RogueShooterGame extends Component {
         this.buildPausePanel(root);
         this.buildSettingsPanel(root);
         this.buildInfoPanel(root);
+        this.buildLoadingPanel(root);
     }
 
     private loadPlaceholderArt(done: () => void) {
-        resources.loadDir(ART_DIR, SpriteFrame, (error, frames) => {
-            if (error) {
-                console.warn('Failed to load game art, falling back to Graphics', error);
-                done();
-                return;
-            }
+        this.setLoadingProgress('加载美术资源 0%');
+        resources.loadDir(
+            ART_DIR,
+            SpriteFrame,
+            (finished, total) => {
+                const progress = total > 0 ? Math.round((finished / total) * 100) : 0;
+                this.setLoadingProgress(`加载美术资源 ${progress}%`);
+            },
+            (error, frames) => {
+                if (error) {
+                    console.warn('Failed to load game art, falling back to Graphics', error);
+                    this.setLoadingProgress('资源加载失败，使用基础图形继续');
+                    done();
+                    return;
+                }
 
-            for (const frame of frames) {
-                this.artFrames.set(frame.name, frame);
-            }
-            this.buildSpriteStripAnimations();
-            done();
-        });
+                for (const frame of frames) {
+                    this.artFrames.set(frame.name, frame);
+                }
+                this.buildSpriteStripAnimations();
+                this.setLoadingProgress('加载完成');
+                done();
+            },
+        );
     }
 
     private initAudio() {
@@ -1700,6 +1715,33 @@ export class RogueShooterGame extends Component {
         this.drawJoystick();
     }
 
+    private buildLoadingPanel(root: Node) {
+        const panel = this.rect(root, 'LoadingPanel', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#111827');
+        panel.active = true;
+        this.loadingPanel = panel;
+        const gfx = panel.getComponent(Graphics);
+        if (gfx) {
+            gfx.fillColor = this.hex('#172554', 210);
+            gfx.circle(560, 220, 260);
+            gfx.fill();
+            gfx.fillColor = this.hex('#F97316', 170);
+            gfx.circle(108, 1080, 310);
+            gfx.fill();
+            gfx.strokeColor = this.hex('#FACC15', 125);
+            gfx.lineWidth = 6;
+            gfx.circle(360, 596, 160);
+            gfx.stroke();
+        }
+        this.loadingTitleLabel = this.label(panel, 'LoadingTitle', '星坠幸存者', 70, 420, 580, 72, 54, '#FFF7ED', Label.HorizontalAlign.CENTER, true);
+        this.label(panel, 'LoadingSubTitle', '正在整备星舰与武器', 92, 506, 536, 40, 24, '#FDE68A', Label.HorizontalAlign.CENTER, true);
+        this.loadingProgressLabel = this.label(panel, 'LoadingProgress', '加载中...', 92, 606, 536, 44, 22, '#E2E8F0', Label.HorizontalAlign.CENTER, true);
+        this.label(panel, 'LoadingHint', '提示：拾取经验升级，撑不住时可撤离带回资源', 76, 1040, 568, 58, 21, '#CBD5E1', Label.HorizontalAlign.CENTER, true);
+    }
+
+    private setLoadingProgress(message: string) {
+        if (this.loadingProgressLabel) this.loadingProgressLabel.string = message;
+    }
+
     private buildMenuPanel(root: Node) {
         this.menuPanelShadow = this.rect(root, 'MenuPanelShadow', 48, 220, 624, 790, '#020617', 28);
         this.menuPanelShadow.active = false;
@@ -1777,6 +1819,7 @@ export class RogueShooterGame extends Component {
         this.phase = 'menu';
         this.requestBgm('bgm_hangar');
         this.setAllOverlayPanelsActive(false);
+        if (this.loadingPanel) this.loadingPanel.active = false;
         if (this.menuPanel) this.menuPanel.active = true;
         if (this.menuPanelShadow) this.menuPanelShadow.active = true;
         this.setCombatHudControlsActive(false);
