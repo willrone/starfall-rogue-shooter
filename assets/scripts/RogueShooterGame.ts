@@ -1149,6 +1149,22 @@ export class RogueShooterGame extends Component {
     private floatingTexts: FloatingText[] = [];
     private floatingTextPool: FloatingText[] = [];
     private debugHudEnabled = false;
+    private perfFrameMs = 0;
+    private perfPreMs = 0;
+    private perfPlayerMs = 0;
+    private perfWeaponMs = 0;
+    private perfBulletMs = 0;
+    private perfEnemyProjectileMs = 0;
+    private perfEnemyMs = 0;
+    private perfSeparationMs = 0;
+    private perfPickupMs = 0;
+    private perfHudMs = 0;
+    private perfDrawEnemy = 0;
+    private perfDrawBullet = 0;
+    private perfDrawDrone = 0;
+    private perfCrowdSteerCalls = 0;
+    private perfCrowdChecks = 0;
+    private perfSepChecks = 0;
     private killCount = 0;
     private battleAlloy = 0;
     private battleCores = 0;
@@ -1208,31 +1224,82 @@ export class RogueShooterGame extends Component {
     }
 
     update(dt: number) {
+        const frameStart = this.perfNow();
+        this.resetPerfCounters();
+
+        let t = this.perfNow();
         this.updateToast(dt);
         this.updateSfxCooldowns(dt);
         this.updateFloatingTexts(dt);
+        this.perfPreMs = this.perfNow() - t;
+
         if (this.phase === 'combat') {
             const combatDt = Math.min(dt, MAX_COMBAT_DT);
             this.combatTime += combatDt;
             this.invulnerableTimer = Math.max(0, this.invulnerableTimer - combatDt);
+
+            t = this.perfNow();
             this.updatePlayer(combatDt);
             this.updateDroneVisuals(combatDt);
             this.updateCamera(combatDt);
+            this.perfPlayerMs = this.perfNow() - t;
+
+            t = this.perfNow();
             this.updateSpawning(combatDt);
             this.updateWeapons(combatDt);
+            this.perfWeaponMs = this.perfNow() - t;
+
+            t = this.perfNow();
             this.updateBullets(combatDt);
+            this.perfBulletMs = this.perfNow() - t;
+
+            t = this.perfNow();
             this.updateEnemyProjectiles(combatDt);
+            this.perfEnemyProjectileMs = this.perfNow() - t;
+
+            t = this.perfNow();
             this.updateEnemies(combatDt);
             this.resolvePlayerAfterEnemyMovement();
             this.updateDroneVisuals(0);
+            this.perfEnemyMs = this.perfNow() - t;
+
+            t = this.perfNow();
             this.updatePickups(combatDt);
             this.updateRegen(combatDt);
             this.updateShield(combatDt);
+            this.perfPickupMs = this.perfNow() - t;
+
             if (this.playerHp <= 0) {
                 this.finishBattle('death');
             }
         }
+
+        t = this.perfNow();
         this.refreshHud();
+        this.perfHudMs = this.perfNow() - t;
+        this.perfFrameMs = this.perfNow() - frameStart;
+    }
+
+    private perfNow() {
+        return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    }
+
+    private resetPerfCounters() {
+        this.perfPreMs = 0;
+        this.perfPlayerMs = 0;
+        this.perfWeaponMs = 0;
+        this.perfBulletMs = 0;
+        this.perfEnemyProjectileMs = 0;
+        this.perfEnemyMs = 0;
+        this.perfSeparationMs = 0;
+        this.perfPickupMs = 0;
+        this.perfHudMs = 0;
+        this.perfDrawEnemy = 0;
+        this.perfDrawBullet = 0;
+        this.perfDrawDrone = 0;
+        this.perfCrowdSteerCalls = 0;
+        this.perfCrowdChecks = 0;
+        this.perfSepChecks = 0;
     }
 
     private createCanvas() {
@@ -2628,7 +2695,11 @@ export class RogueShooterGame extends Component {
             enemy.node.setPosition(nextX, nextY, 4);
             this.updateEnemyVisual(enemy, dt, vx, vy, moveSpeed);
         }
-        if (doSeparation) this.separateEnemies();
+        if (doSeparation) {
+            const sepStart = this.perfNow();
+            this.separateEnemies();
+            this.perfSeparationMs = this.perfNow() - sepStart;
+        }
     }
 
     private getEnemyCrowdSteer(enemy: Enemy, grid: Map<string, Enemy[]>, ex: number, ey: number, toPlayerX: number, toPlayerY: number, playerDist: number) {
@@ -2673,6 +2744,8 @@ export class RogueShooterGame extends Component {
             sy += toPlayerX * orbitSign * orbit;
         }
 
+        this.perfCrowdSteerCalls += 1;
+        this.perfCrowdChecks += checks;
         return { x: sx, y: sy };
     }
 
@@ -2849,6 +2922,7 @@ export class RogueShooterGame extends Component {
             if (Math.abs(ax - enemy.node.position.x) > 0.5 || Math.abs(ay - enemy.node.position.y) > 0.5) {
                 enemy.node.setPosition(ax, ay, 4);
             }
+            this.perfSepChecks += checks;
             const finalCellX = Math.floor(ax / ENEMY_SEPARATION_CELL);
             const finalCellY = Math.floor(ay / ENEMY_SEPARATION_CELL);
             const key = `${finalCellX},${finalCellY}`;
@@ -4485,7 +4559,9 @@ export class RogueShooterGame extends Component {
         this.debugLabel.string = [
             `DBG ${this.phase} W${this.waveIndex} ${Math.round(this.waveElapsed)}/${Math.round(this.waveDuration)}s ${bossText}`,
             `E ${this.enemies.length}/${this.getEnemyCap()}  B ${this.bullets.length}  EP ${this.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickups.length}  FT ${this.floatingTexts.length}`,
-        ].join('  |  ');
+            `MS F${this.perfFrameMs.toFixed(1)} pre${this.perfPreMs.toFixed(1)} ply${this.perfPlayerMs.toFixed(1)} wep${this.perfWeaponMs.toFixed(1)} bul${this.perfBulletMs.toFixed(1)} ep${this.perfEnemyProjectileMs.toFixed(1)} ene${this.perfEnemyMs.toFixed(1)} sep${this.perfSeparationMs.toFixed(1)} pk${this.perfPickupMs.toFixed(1)} hud${this.perfHudMs.toFixed(1)}`,
+            `DRAW enemy${this.perfDrawEnemy} bullet${this.perfDrawBullet} drone${this.perfDrawDrone}  STEER ${this.perfCrowdSteerCalls}/${this.perfCrowdChecks}  SEPCHK ${this.perfSepChecks}`,
+        ].join('\n');
     }
 
     private drawBars() {
@@ -4563,6 +4639,7 @@ export class RogueShooterGame extends Component {
     }
 
     private drawDroneVisual(visual: DroneVisual, dronePower: number, pulse = 1) {
+        this.perfDrawDrone += 1;
         const gfx = visual.gfx;
         const core = 5 + Math.min(4, dronePower * 0.35) + pulse * 1.4;
         gfx.clear();
@@ -4633,6 +4710,7 @@ export class RogueShooterGame extends Component {
     }
 
     private drawEnemy(enemy: Enemy) {
+        this.perfDrawEnemy += 1;
         enemy.gfx.clear();
         if (enemy.sprite) {
             const visualRadius = enemy.visualRadius || enemy.radius + 8;
@@ -4816,6 +4894,7 @@ export class RogueShooterGame extends Component {
     }
 
     private drawBullet(bullet: Bullet) {
+        this.perfDrawBullet += 1;
         bullet.gfx.clear();
         if (bullet.sprite) {
             bullet.sprite.color = this.hex(bullet.accent, 235);
