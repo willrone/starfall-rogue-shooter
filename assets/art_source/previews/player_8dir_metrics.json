@@ -1,0 +1,776 @@
+[
+  {
+    "name": "player_survivor_idle",
+    "label": "idle/front",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2012,
+      373
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          26,
+          11,
+          133,
+          149
+        ],
+        "alpha_nonzero_pct": 46.31,
+        "opaque_pct": 40.11
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          22,
+          11,
+          137,
+          149
+        ],
+        "alpha_nonzero_pct": 46.15,
+        "opaque_pct": 39.66
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          21,
+          11,
+          138,
+          149
+        ],
+        "alpha_nonzero_pct": 47.48,
+        "opaque_pct": 40.93
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          15,
+          11,
+          144,
+          149
+        ],
+        "alpha_nonzero_pct": 46.56,
+        "opaque_pct": 39.22
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          26,
+          11,
+          133,
+          149
+        ],
+        "alpha_nonzero_pct": 44.85,
+        "opaque_pct": 38.51
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          16,
+          11,
+          143,
+          149
+        ],
+        "alpha_nonzero_pct": 45.67,
+        "opaque_pct": 39.4
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_south",
+    "label": "south",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2075,
+      594
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          30,
+          11,
+          129,
+          149
+        ],
+        "alpha_nonzero_pct": 42.3,
+        "opaque_pct": 37.28
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          29,
+          11,
+          130,
+          149
+        ],
+        "alpha_nonzero_pct": 39.05,
+        "opaque_pct": 34.32
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          29,
+          11,
+          131,
+          149
+        ],
+        "alpha_nonzero_pct": 40.68,
+        "opaque_pct": 35.4
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          31,
+          11,
+          128,
+          149
+        ],
+        "alpha_nonzero_pct": 39.42,
+        "opaque_pct": 34.71
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          23,
+          11,
+          136,
+          149
+        ],
+        "alpha_nonzero_pct": 41.18,
+        "opaque_pct": 36.28
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          17,
+          11,
+          143,
+          149
+        ],
+        "alpha_nonzero_pct": 43.81,
+        "opaque_pct": 37.97
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_south_east",
+    "label": "south-east",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2043,
+      339
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          25,
+          11,
+          134,
+          149
+        ],
+        "alpha_nonzero_pct": 43.74,
+        "opaque_pct": 38.73
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          17,
+          11,
+          142,
+          149
+        ],
+        "alpha_nonzero_pct": 43.73,
+        "opaque_pct": 38.3
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          19,
+          11,
+          140,
+          149
+        ],
+        "alpha_nonzero_pct": 45.48,
+        "opaque_pct": 40.17
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          16,
+          11,
+          143,
+          149
+        ],
+        "alpha_nonzero_pct": 45.49,
+        "opaque_pct": 39.98
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          11,
+          13,
+          149,
+          146
+        ],
+        "alpha_nonzero_pct": 43.05,
+        "opaque_pct": 37.46
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          11,
+          18,
+          149,
+          142
+        ],
+        "alpha_nonzero_pct": 34.8,
+        "opaque_pct": 30.24
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_east",
+    "label": "east",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2105,
+      747
+    ],
+    "trimmed_size": [
+      2105,
+      747
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          47,
+          11,
+          112,
+          149
+        ],
+        "alpha_nonzero_pct": 30.33,
+        "opaque_pct": 17.14
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          47,
+          11,
+          112,
+          149
+        ],
+        "alpha_nonzero_pct": 30.52,
+        "opaque_pct": 16.97
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          48,
+          11,
+          112,
+          149
+        ],
+        "alpha_nonzero_pct": 29.81,
+        "opaque_pct": 17.06
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          47,
+          11,
+          112,
+          149
+        ],
+        "alpha_nonzero_pct": 30.39,
+        "opaque_pct": 17.21
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          47,
+          11,
+          112,
+          149
+        ],
+        "alpha_nonzero_pct": 30.44,
+        "opaque_pct": 16.74
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          47,
+          11,
+          112,
+          149
+        ],
+        "alpha_nonzero_pct": 30.48,
+        "opaque_pct": 17.16
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_north_east",
+    "label": "north-east",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2172,
+      724
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          48,
+          11,
+          111,
+          149
+        ],
+        "alpha_nonzero_pct": 12.13,
+        "opaque_pct": 8.75
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          46,
+          11,
+          113,
+          149
+        ],
+        "alpha_nonzero_pct": 10.72,
+        "opaque_pct": 7.5
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          43,
+          11,
+          116,
+          149
+        ],
+        "alpha_nonzero_pct": 11.88,
+        "opaque_pct": 8.43
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          42,
+          11,
+          118,
+          149
+        ],
+        "alpha_nonzero_pct": 13.47,
+        "opaque_pct": 9.64
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          43,
+          11,
+          116,
+          149
+        ],
+        "alpha_nonzero_pct": 12.08,
+        "opaque_pct": 8.52
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 10.3,
+        "opaque_pct": 7.07
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_north",
+    "label": "north",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2172,
+      724
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          31,
+          11,
+          128,
+          149
+        ],
+        "alpha_nonzero_pct": 40.97,
+        "opaque_pct": 36.32
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          32,
+          11,
+          128,
+          149
+        ],
+        "alpha_nonzero_pct": 36.77,
+        "opaque_pct": 32.38
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          26,
+          11,
+          134,
+          149
+        ],
+        "alpha_nonzero_pct": 40.28,
+        "opaque_pct": 35.64
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          32,
+          11,
+          128,
+          149
+        ],
+        "alpha_nonzero_pct": 36.83,
+        "opaque_pct": 32.37
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          23,
+          11,
+          137,
+          149
+        ],
+        "alpha_nonzero_pct": 38.04,
+        "opaque_pct": 33.16
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          31,
+          11,
+          128,
+          149
+        ],
+        "alpha_nonzero_pct": 41.16,
+        "opaque_pct": 36.66
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_north_west",
+    "label": "north-west",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2043,
+      366
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          29,
+          11,
+          130,
+          149
+        ],
+        "alpha_nonzero_pct": 38.18,
+        "opaque_pct": 33.73
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          33,
+          11,
+          127,
+          149
+        ],
+        "alpha_nonzero_pct": 37.62,
+        "opaque_pct": 33.58
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          30,
+          11,
+          129,
+          149
+        ],
+        "alpha_nonzero_pct": 39.82,
+        "opaque_pct": 35.75
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          31,
+          11,
+          128,
+          149
+        ],
+        "alpha_nonzero_pct": 38.18,
+        "opaque_pct": 33.97
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          26,
+          11,
+          134,
+          149
+        ],
+        "alpha_nonzero_pct": 38.68,
+        "opaque_pct": 34.34
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          11,
+          12,
+          149,
+          147
+        ],
+        "alpha_nonzero_pct": 38.11,
+        "opaque_pct": 33.41
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_west",
+    "label": "west",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2172,
+      724
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 29.04,
+        "opaque_pct": 7.59
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 29.11,
+        "opaque_pct": 7.79
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 29.43,
+        "opaque_pct": 7.27
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 29.46,
+        "opaque_pct": 7.79
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 29.43,
+        "opaque_pct": 8.14
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 29.84,
+        "opaque_pct": 7.6
+      }
+    ]
+  },
+  {
+    "name": "player_survivor_run_south_west",
+    "label": "south-west",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2172,
+      724
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.66,
+        "opaque_pct": 15.53
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.88,
+        "opaque_pct": 15.37
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.66,
+        "opaque_pct": 15.32
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.68,
+        "opaque_pct": 15.49
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.92,
+        "opaque_pct": 15.46
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.77,
+        "opaque_pct": 15.6
+      }
+    ]
+  }
+]

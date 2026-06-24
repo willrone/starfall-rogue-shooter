@@ -1,0 +1,18 @@
+{
+  "name": "enemy_boss_idle",
+  "raw_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/generated/enemy_boss_idle_raw.png",
+  "final_path": "/Users/ronghui/Documents/game_dev_cocos/assets/resources/art/enemies/enemy_boss_idle.png",
+  "preview_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/previews/enemy_boss_idle.gif",
+  "frames": 8,
+  "cell_size": 224,
+  "fps": 8,
+  "raw_size": [
+    2172,
+    724
+  ],
+  "trimmed_size": [
+    2144,
+    421
+  ],
+  "generated_at": 1782269989
+}

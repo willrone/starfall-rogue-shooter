@@ -1,0 +1,512 @@
+[
+  {
+    "name": "enemy_mite_walk",
+    "size": [
+      768,
+      128
+    ],
+    "frames": 6,
+    "cell": 128,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2156,
+      724
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          26,
+          9,
+          102,
+          119
+        ],
+        "alpha_nonzero_pct": 18.46,
+        "opaque_pct": 14.71
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          20,
+          9,
+          107,
+          119
+        ],
+        "alpha_nonzero_pct": 20.36,
+        "opaque_pct": 16.5
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          23,
+          9,
+          105,
+          119
+        ],
+        "alpha_nonzero_pct": 19.98,
+        "opaque_pct": 16.15
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          26,
+          9,
+          102,
+          119
+        ],
+        "alpha_nonzero_pct": 16.23,
+        "opaque_pct": 12.52
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          20,
+          9,
+          107,
+          119
+        ],
+        "alpha_nonzero_pct": 19.22,
+        "opaque_pct": 15.44
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          36,
+          9,
+          91,
+          119
+        ],
+        "alpha_nonzero_pct": 10.13,
+        "opaque_pct": 6.36
+      }
+    ]
+  },
+  {
+    "name": "enemy_runner_walk",
+    "size": [
+      768,
+      128
+    ],
+    "frames": 6,
+    "cell": 128,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2099,
+      297
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          9,
+          27,
+          119,
+          101
+        ],
+        "alpha_nonzero_pct": 28.0,
+        "opaque_pct": 23.86
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          9,
+          26,
+          119,
+          101
+        ],
+        "alpha_nonzero_pct": 30.66,
+        "opaque_pct": 26.22
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          9,
+          25,
+          119,
+          103
+        ],
+        "alpha_nonzero_pct": 34.85,
+        "opaque_pct": 30.71
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          9,
+          20,
+          119,
+          107
+        ],
+        "alpha_nonzero_pct": 38.92,
+        "opaque_pct": 34.23
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          9,
+          33,
+          119,
+          94
+        ],
+        "alpha_nonzero_pct": 29.61,
+        "opaque_pct": 25.93
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          9,
+          26,
+          119,
+          101
+        ],
+        "alpha_nonzero_pct": 28.58,
+        "opaque_pct": 24.29
+      }
+    ]
+  },
+  {
+    "name": "enemy_brute_walk",
+    "size": [
+      640,
+      160
+    ],
+    "frames": 4,
+    "cell": 160,
+    "raw_size": [
+      1983,
+      793
+    ],
+    "trimmed_size": [
+      1983,
+      793
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          37,
+          11,
+          123,
+          149
+        ],
+        "alpha_nonzero_pct": 39.49,
+        "opaque_pct": 24.85
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          37,
+          11,
+          123,
+          149
+        ],
+        "alpha_nonzero_pct": 39.43,
+        "opaque_pct": 23.86
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          37,
+          11,
+          123,
+          149
+        ],
+        "alpha_nonzero_pct": 40.04,
+        "opaque_pct": 25.15
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          37,
+          11,
+          123,
+          149
+        ],
+        "alpha_nonzero_pct": 39.54,
+        "opaque_pct": 23.69
+      }
+    ]
+  },
+  {
+    "name": "enemy_splitter_idle",
+    "size": [
+      960,
+      160
+    ],
+    "frames": 6,
+    "cell": 160,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2172,
+      724
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 30.67,
+        "opaque_pct": 17.46
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.03,
+        "opaque_pct": 17.54
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 30.63,
+        "opaque_pct": 17.65
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 31.24,
+        "opaque_pct": 18.77
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 30.55,
+        "opaque_pct": 17.32
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          45,
+          11,
+          114,
+          149
+        ],
+        "alpha_nonzero_pct": 30.77,
+        "opaque_pct": 17.57
+      }
+    ]
+  },
+  {
+    "name": "enemy_warden_idle",
+    "size": [
+      1152,
+      192
+    ],
+    "frames": 6,
+    "cell": 192,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2104,
+      456
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          35,
+          13,
+          157,
+          178
+        ],
+        "alpha_nonzero_pct": 33.32,
+        "opaque_pct": 29.36
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          36,
+          13,
+          156,
+          178
+        ],
+        "alpha_nonzero_pct": 31.72,
+        "opaque_pct": 27.65
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          28,
+          13,
+          163,
+          178
+        ],
+        "alpha_nonzero_pct": 32.76,
+        "opaque_pct": 28.12
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          38,
+          13,
+          154,
+          178
+        ],
+        "alpha_nonzero_pct": 29.4,
+        "opaque_pct": 25.39
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          35,
+          13,
+          157,
+          178
+        ],
+        "alpha_nonzero_pct": 31.22,
+        "opaque_pct": 26.94
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          18,
+          13,
+          174,
+          178
+        ],
+        "alpha_nonzero_pct": 34.31,
+        "opaque_pct": 29.64
+      }
+    ]
+  },
+  {
+    "name": "enemy_boss_idle",
+    "size": [
+      1792,
+      224
+    ],
+    "frames": 8,
+    "cell": 224,
+    "raw_size": [
+      2172,
+      724
+    ],
+    "trimmed_size": [
+      2163,
+      312
+    ],
+    "frame_stats": [
+      {
+        "frame": 0,
+        "bbox": [
+          18,
+          15,
+          206,
+          208
+        ],
+        "alpha_nonzero_pct": 53.22,
+        "opaque_pct": 50.28
+      },
+      {
+        "frame": 1,
+        "bbox": [
+          18,
+          15,
+          205,
+          208
+        ],
+        "alpha_nonzero_pct": 52.73,
+        "opaque_pct": 49.84
+      },
+      {
+        "frame": 2,
+        "bbox": [
+          19,
+          15,
+          205,
+          208
+        ],
+        "alpha_nonzero_pct": 59.42,
+        "opaque_pct": 56.27
+      },
+      {
+        "frame": 3,
+        "bbox": [
+          20,
+          15,
+          204,
+          208
+        ],
+        "alpha_nonzero_pct": 57.03,
+        "opaque_pct": 53.54
+      },
+      {
+        "frame": 4,
+        "bbox": [
+          29,
+          15,
+          195,
+          208
+        ],
+        "alpha_nonzero_pct": 49.47,
+        "opaque_pct": 46.63
+      },
+      {
+        "frame": 5,
+        "bbox": [
+          22,
+          15,
+          202,
+          208
+        ],
+        "alpha_nonzero_pct": 56.02,
+        "opaque_pct": 53.26
+      },
+      {
+        "frame": 6,
+        "bbox": [
+          15,
+          16,
+          208,
+          207
+        ],
+        "alpha_nonzero_pct": 55.45,
+        "opaque_pct": 52.6
+      },
+      {
+        "frame": 7,
+        "bbox": [
+          15,
+          16,
+          208,
+          208
+        ],
+        "alpha_nonzero_pct": 55.49,
+        "opaque_pct": 52.6
+      }
+    ]
+  }
+]
