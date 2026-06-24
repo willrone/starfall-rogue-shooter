@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "assets" / "resources" / "art" / "placeholder"
+PREVIEW_OUT = ROOT / "assets" / "art_source" / "previews"
 SIZE = 128
 
 
@@ -205,7 +206,8 @@ def contact_sheet(paths: list[Path]) -> None:
         y = (index // cols) * cell + 8
         sheet.alpha_composite(image, (x, y))
         draw.text((index % cols * cell + 12, y + 126), labels[index], fill=rgba("#e2e8f0"))
-    sheet.save(OUT / "contact_sheet.png")
+    PREVIEW_OUT.mkdir(parents=True, exist_ok=True)
+    sheet.save(PREVIEW_OUT / "placeholder_contact_sheet.png")
 
 
 def main() -> None:

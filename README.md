@@ -37,8 +37,8 @@ Cocos Creator 3.8.8 平面射击肉鸽原型。
 
 ## 占位美术
 
-- 透明 PNG 素材在 `assets/resources/art/placeholder/`。
-- `contact_sheet.png` 是整套占位素材总览。
+- 运行时需要的透明 PNG 素材在 `assets/resources/art/placeholder/`。
+- 美术总览、生成记录和预览素材放在 `assets/art_source/`，不进入运行时 resources 包。
 - `tools/generate_placeholder_art.py` 可以重新生成同风格素材。
 - 游戏会优先从 `resources` 加载这些素材；加载失败时回退到脚本绘制的几何图形。
 
