@@ -2075,8 +2075,8 @@ export class RogueShooterGame extends Component {
             this.playerSprite.spriteFrame = animation.frames[frameIndex];
             this.playerSprite.node.getComponent(UITransform)?.setContentSize(PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE);
         }
-        const bob = this.playerMoving ? Math.abs(Math.sin(this.combatTime * animation.fps * Math.PI * 0.52)) * 3 : Math.sin(this.combatTime * 2.6) * 1.5;
-        this.playerSprite.node.setPosition(0, bob, 0);
+        this.playerSprite.node.setPosition(0, 0, 0);
+        this.playerSprite.node.setScale(1, 1, 1);
     }
 
     private resolvePlayerEnemyCollision(x: number, y: number): Vec2 {
@@ -2626,26 +2626,11 @@ export class RogueShooterGame extends Component {
             this.drawEnemy(enemy);
         }
 
-        const familyRate = enemy.spec.family === 'runner'
-            ? 9.4
-            : enemy.spec.family === 'brute'
-                ? 4.1
-                : enemy.spec.family === 'warden'
-                    ? 3.6
-                    : enemy.spec.family === 'splitter'
-                        ? 5.6
-                        : 6.6;
-        const t = this.combatTime + enemy.animSeed;
-        const stride = Math.sin(t * familyRate);
-        const breath = Math.sin(t * (familyRate * 0.47));
-        const dashPulse = enemy.dashTimer > 0 ? 0.18 : 0;
-        const armorWeight = enemy.armorTimer > 0 ? 0.08 : 0;
-        const hitPulse = enemy.hitFlash > 0 ? (enemy.hitFlash / ENEMY_HIT_FLASH_DURATION) * 0.2 : 0;
-        const bossWeight = enemy.boss ? 0.04 : 0;
-        const speedWeight = this.clamp(moveSpeed / Math.max(1, enemy.speed), 0.25, enemy.dashTimer > 0 ? 1.45 : 1.05);
-        const squashX = 1 + stride * 0.045 * speedWeight + dashPulse + hitPulse * 0.55 + bossWeight;
-        const squashY = 1 - stride * 0.032 * speedWeight - dashPulse * 0.42 + hitPulse + armorWeight;
-        enemy.node.setScale(Math.max(0.78, squashX), Math.max(0.78, squashY), 1);
+        const dashPulse = enemy.dashTimer > 0 ? 0.12 : 0;
+        const hitPulse = enemy.hitFlash > 0 ? (enemy.hitFlash / ENEMY_HIT_FLASH_DURATION) * 0.18 : 0;
+        const scaleX = 1 + dashPulse + hitPulse * 0.55;
+        const scaleY = 1 - dashPulse * 0.28 + hitPulse;
+        enemy.node.setScale(scaleX, Math.max(0.86, scaleY), 1);
 
         if (enemy.sprite) {
             if (enemy.animation && enemy.animation.frames.length > 0) {
@@ -2656,11 +2641,8 @@ export class RogueShooterGame extends Component {
                 }
             }
             const spriteNode = enemy.sprite.node;
-            const bob = Math.abs(stride) * (enemy.spec.family === 'runner' ? 5 : enemy.boss ? 2 : 3);
-            const sway = Math.sin(t * (familyRate * 0.62)) * (enemy.spec.family === 'runner' ? 4 : 2);
-            spriteNode.setPosition(sway, bob, 0);
-            const lean = this.clamp(vx, -1, 1) * (enemy.dashTimer > 0 ? -10 : -5);
-            spriteNode.angle = lean + breath * (enemy.spec.family === 'brute' ? 2 : 4);
+            spriteNode.setPosition(0, 0, 0);
+            spriteNode.angle = enemy.dashTimer > 0 ? this.clamp(vx, -1, 1) * -8 : 0;
             enemy.sprite.color = enemy.hitFlash > 0
                 ? this.hex('#FFFFFF', 255)
                 : this.getEnemyTint(enemy, enemy.elite ? 255 : 235);
