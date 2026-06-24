@@ -153,6 +153,7 @@ interface Enemy {
     speed: number;
     damage: number;
     radius: number;
+    visualRadius: number;
     elite: boolean;
     boss: boolean;
     damageType: DamageType;
@@ -961,13 +962,14 @@ const PLAYER_RUN_ANIMATION_META: Record<PlayerDirection, { frameName: string; fr
 };
 const PLAYER_IDLE_ANIMATION_META = { frameName: 'player_survivor_idle', frames: 6, cellSize: 160, fps: 8 };
 const PLAYER_VISUAL_SIZE = 96;
+const PLAYER_BODY_ANIMATION_DIRECTION: PlayerDirection = 'south';
 const ENEMY_VISUAL_SIZE_MULTIPLIER: Record<string, number> = {
-    mite: 5.4,
-    runner: 5.5,
-    brute: 4.6,
-    splitter: 5,
-    warden: 4.1,
-    boss: 4.55,
+    mite: 6.4,
+    runner: 6.3,
+    brute: 5.2,
+    splitter: 5.7,
+    warden: 4.6,
+    boss: 4.8,
 };
 const ENEMY_STRIP_META: Record<string, { frameName: string; frames: number; cellSize: number; fps: number }> = {
     mite: { frameName: 'enemy_mite_walk', frames: 6, cellSize: 128, fps: 8 },
@@ -2055,12 +2057,13 @@ export class RogueShooterGame extends Component {
 
     private updatePlayerSpriteAnimation(dt: number) {
         if (!this.playerSprite) return;
+        const bodyDirection = PLAYER_BODY_ANIMATION_DIRECTION;
         const animation = this.playerMoving
-            ? this.playerRunAnimations.get(this.playerDirection) || this.playerRunAnimations.get('south') || this.playerIdleAnimation
-            : this.playerIdleAnimation || this.playerRunAnimations.get(this.playerDirection) || this.playerRunAnimations.get('south');
+            ? this.playerRunAnimations.get(bodyDirection) || this.playerRunAnimations.get('south') || this.playerIdleAnimation
+            : this.playerIdleAnimation || this.playerRunAnimations.get(bodyDirection) || this.playerRunAnimations.get('south');
         if (!animation || animation.frames.length <= 0) return;
 
-        const animationKey = `${this.playerMoving ? 'run' : 'idle'}:${this.playerDirection}`;
+        const animationKey = `${this.playerMoving ? 'run' : 'idle'}:${this.playerMoving ? bodyDirection : 'idle'}`;
         if (animationKey !== this.playerAnimationKey) {
             this.playerAnimationKey = animationKey;
             this.playerAnimationFrameIndex = -1;
@@ -2993,6 +2996,7 @@ export class RogueShooterGame extends Component {
             speed: Math.max(42, spec.speed * (boss ? 0.78 : elite ? 0.9 : 1) + this.endlessCycle * 5 + this.waveIndex * 0.8),
             damage: spec.damage * (boss ? 1.85 : elite ? 1.42 : 1.05) * (1 + (this.endlessCycle - 1) * 0.16 + this.waveIndex * 0.012 + this.combatTime * 0.0009),
             radius: enemyRadius,
+            visualRadius: Math.max(enemyRadius + 12, enemyVisualSize * 0.42),
             elite,
             boss,
             damageType: this.getEnemyDamageType(spec, boss),
@@ -4557,32 +4561,42 @@ export class RogueShooterGame extends Component {
     private drawEnemy(enemy: Enemy) {
         enemy.gfx.clear();
         if (enemy.sprite) {
+            const visualRadius = enemy.visualRadius || enemy.radius + 8;
+            const tint = this.getEnemyTint(enemy, 255);
             enemy.sprite.color = enemy.hitFlash > 0
                 ? this.hex('#FFFFFF', 255)
-                : this.getEnemyTint(enemy, enemy.elite ? 255 : 235);
-            enemy.gfx.fillColor = this.hex('#020617', 85);
-            enemy.gfx.circle(4, -5, enemy.radius + 5);
+                : tint;
+            enemy.gfx.fillColor = this.hex('#020617', 145);
+            enemy.gfx.ellipse(4, -8, visualRadius + 8, visualRadius * 0.72 + 5);
             enemy.gfx.fill();
+            enemy.gfx.fillColor = this.hex(enemy.spec.color, enemy.boss ? 72 : 58);
+            enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 12 : 7));
+            enemy.gfx.fill();
+            enemy.gfx.strokeColor = this.hex(enemy.hitFlash > 0 ? '#FFFFFF' : enemy.spec.accent, enemy.boss ? 245 : 225);
+            enemy.gfx.lineWidth = enemy.boss ? 6 : enemy.elite ? 5 : 4;
+            enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 8 : 5));
+            enemy.gfx.stroke();
             this.drawEnemyVariantMark(enemy);
             if (enemy.elite || enemy.boss) {
-                enemy.gfx.strokeColor = this.hex(enemy.boss ? '#F94144' : '#F8FAFC', enemy.boss ? 235 : 190);
-                enemy.gfx.lineWidth = enemy.boss ? 5 : 3;
-                enemy.gfx.circle(0, 0, enemy.radius + (enemy.boss ? 13 : 7));
+                enemy.gfx.strokeColor = this.hex(enemy.boss ? '#F94144' : '#F8FAFC', enemy.boss ? 245 : 215);
+                enemy.gfx.lineWidth = enemy.boss ? 6 : 4;
+                enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 18 : 11));
                 enemy.gfx.stroke();
             }
             if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
-                enemy.gfx.strokeColor = this.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 210);
-                enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 4 : 3;
-                enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 10 : 6));
+                enemy.gfx.strokeColor = this.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 230);
+                enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 5 : 4;
+                enemy.gfx.circle(0, 0, visualRadius + (enemy.armorTimer > 0 ? 15 : 10));
                 enemy.gfx.stroke();
             }
             if (enemy.hp < enemy.maxHp) {
                 const ratio = this.clamp(enemy.hp / enemy.maxHp, 0, 1);
+                const barWidth = Math.max(enemy.radius * 2, visualRadius * 1.45);
                 enemy.gfx.fillColor = this.hex('#0F172A');
-                enemy.gfx.roundRect(-enemy.radius, enemy.radius + 8, enemy.radius * 2, 6, 3);
+                enemy.gfx.roundRect(-barWidth / 2, visualRadius + 10, barWidth, 7, 3);
                 enemy.gfx.fill();
                 enemy.gfx.fillColor = this.hex('#F94144');
-                enemy.gfx.roundRect(-enemy.radius, enemy.radius + 8, enemy.radius * 2 * ratio, 6, 3);
+                enemy.gfx.roundRect(-barWidth / 2, visualRadius + 10, barWidth * ratio, 7, 3);
                 enemy.gfx.fill();
             }
             return;
