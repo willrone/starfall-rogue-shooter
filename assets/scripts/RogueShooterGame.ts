@@ -961,22 +961,12 @@ const PLAYER_RUN_ANIMATION_META: Record<PlayerDirection, { frameName: string; fr
 };
 const PLAYER_IDLE_ANIMATION_META = { frameName: 'player_survivor_idle', frames: 6, cellSize: 160, fps: 8 };
 const PLAYER_VISUAL_SIZE = 96;
-const PLAYER_DIRECTION_VISUAL_SCALE_X: Record<PlayerDirection, number> = {
-    south: 1,
-    south_east: 0.85,
-    east: 1.6,
-    north_east: 1.55,
-    north: 1.03,
-    north_west: 1,
-    west: 1.5,
-    south_west: 1.5,
-};
 const ENEMY_VISUAL_SIZE_MULTIPLIER: Record<string, number> = {
-    mite: 4.8,
-    runner: 4.9,
-    brute: 4.15,
-    splitter: 4.6,
-    warden: 3.85,
+    mite: 5.4,
+    runner: 5.5,
+    brute: 4.6,
+    splitter: 5,
+    warden: 4.1,
     boss: 4.55,
 };
 const ENEMY_STRIP_META: Record<string, { frameName: string; frames: number; cellSize: number; fps: number }> = {
@@ -2082,8 +2072,6 @@ export class RogueShooterGame extends Component {
             this.playerSprite.spriteFrame = animation.frames[frameIndex];
             this.playerSprite.node.getComponent(UITransform)?.setContentSize(PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE);
         }
-        const visualScaleX = this.playerMoving ? PLAYER_DIRECTION_VISUAL_SCALE_X[this.playerDirection] : 1;
-        this.playerSprite.node.setScale(visualScaleX, 1, 1);
         const bob = this.playerMoving ? Math.abs(Math.sin(this.combatTime * animation.fps * Math.PI * 0.52)) * 3 : Math.sin(this.combatTime * 2.6) * 1.5;
         this.playerSprite.node.setPosition(0, bob, 0);
     }
