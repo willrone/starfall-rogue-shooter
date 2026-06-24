@@ -4294,16 +4294,12 @@ export class RogueShooterGame extends Component {
             if (equipment.attackStyle) {
                 lines.push(`攻击风格：${getWeaponStyleName(equipment.attackStyle)}${equipment.kind === 'weapon' && equipped ? '；战斗中只有当前武器属性生效' : ''}`);
             }
-            lines.push([
-                `攻击力 +${this.formatStat(equipment.weaponStats.damage * detailLevel)}`,
-                `攻击速度 +${this.formatStat(equipment.weaponStats.fireRate * detailLevel * 3.5)}%`,
-                `穿透 +${this.formatStat(equipment.weaponStats.pierce * detailLevel)}`,
-            ].join('  '));
-            lines.push([
-                `散射 +${this.formatStat(equipment.weaponStats.multiShot * detailLevel)}`,
-                `无人机 +${this.formatStat(equipment.weaponStats.drone * detailLevel)}`,
-                `弹速 +${this.formatStat(equipment.weaponStats.bulletSpeed * detailLevel)}`,
-            ].join('  '));
+            const dmg = equipment.weaponStats.damage * detailLevel;
+            const rate = equipment.weaponStats.fireRate * detailLevel;
+            const pier = equipment.weaponStats.pierce * detailLevel;
+            const multi = equipment.weaponStats.multiShot * detailLevel;
+            lines.push(`伤害 ${this.formatStat(dmg)}  |  射速 ${this.formatStat(rate)}次/秒  |  穿透 ${this.formatStat(pier)}`);
+            lines.push(`弹丸 +${this.formatStat(multi)}  |  弹速倍率 ${this.formatStat(equipment.weaponStats.bulletSpeed * detailLevel)}`);
         } else {
             lines.push(this.formatGearStats(equipment, detailLevel));
         }
@@ -4347,7 +4343,7 @@ export class RogueShooterGame extends Component {
                 ? ` | 机${this.formatStat(stats.dronePower)}×${this.getDroneStrikeCount(stats.dronePower)}`
                 : '';
             this.statLabel.string = inRun
-                ? `存活 ${this.formatTime(this.combatTime)} | Lv.${this.level} | 合金 ${this.battleAlloy} | HP ${Math.ceil(this.playerHp)}/${Math.ceil(this.playerMaxHp)} 护${Math.ceil(this.playerShield)} | 攻${Math.ceil(stats.attackPower)} 暴${Math.round(stats.critChance * 100)}%${droneText} | 怪${this.enemies.length} 池${enemyPoolCount}/${TOTAL_ENEMY_TYPES}`
+                ? `存活 ${this.formatTime(this.combatTime)} | Lv.${this.level} | 合金 ${this.battleAlloy} | HP ${Math.ceil(this.playerHp)}/${Math.ceil(this.playerMaxHp)} 护${Math.ceil(this.playerShield)} | 暴${Math.round(stats.critChance * 100)}%${droneText} | 怪${this.enemies.length} 池${enemyPoolCount}/${TOTAL_ENEMY_TYPES}`
                 : `永久资源：${this.formatWallet(this.getInventoryWallet())}`;
         }
         if (this.equipmentLabel) {
@@ -5139,22 +5135,41 @@ export class RogueShooterGame extends Component {
     }
 
     private getBulletDamage() {
-        return Math.max(2, this.getCharacterStats().attackPower);
+        const weapon = this.getActiveWeapon();
+        const weaponDamage = weapon ? weapon.weaponStats?.damage || 0 : 0;
+        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
+        const base = weaponDamage * level;
+        const bonus = Math.max(0, this.getCharacterStats().attackPower);
+        return Math.max(2, base + bonus * 0.15);
     }
 
     private getFireInterval() {
-        const attackSpeed = this.clamp(this.getCharacterStats().attackSpeed, -0.55, 4.5);
-        return Math.max(0.07, 0.54 / (1 + attackSpeed));
+        const weapon = this.getActiveWeapon();
+        const weaponFireRate = weapon ? weapon.weaponStats?.fireRate || 0 : 0;
+        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
+        const baseRate = weaponFireRate * level;
+        const attackSpeedBonus = this.getCharacterStats().attackSpeed;
+        return Math.max(0.07, 1 / Math.max(0.15, baseRate + attackSpeedBonus * 0.45));
     }
 
     private getBulletSpeed() {
-        return Math.max(260, this.getCharacterStats().bulletSpeed);
+        const weapon = this.getActiveWeapon();
+        const weaponSpeed = weapon?.weaponStats?.bulletSpeed || 0;
+        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
+        const base = weaponSpeed * level;
+        const bonus = this.getCharacterStats().bulletSpeed;
+        return Math.max(260, 300 + base * 140 + bonus * 0.4);
     }
 
     private getBulletPierce() {
-        const pierce = Math.max(0, this.getCharacterStats().pierce);
-        const guaranteed = Math.floor(pierce);
-        return guaranteed + (Math.random() < pierce - guaranteed ? 1 : 0);
+        const weapon = this.getActiveWeapon();
+        const weaponPierce = weapon?.weaponStats?.pierce || 0;
+        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
+        const base = weaponPierce * level;
+        const bonus = this.getCharacterStats().pierce;
+        const total = base + bonus * 0.3;
+        const guaranteed = Math.floor(total);
+        return guaranteed + (Math.random() < total - guaranteed ? 1 : 0);
     }
 
     private getOwnedWeapons() {
@@ -5268,10 +5283,10 @@ export class RogueShooterGame extends Component {
         const stats = createBaseCharacterStats();
         this.addCharacterStats(stats, this.runStats);
 
-        stats.attackPower += this.getWeaponStat('damage');
-        stats.attackSpeed += this.getWeaponStat('fireRate') * 0.035;
-        stats.bulletSpeed += this.getWeaponStat('bulletSpeed') * 18;
-        stats.pierce += Math.floor(Math.sqrt(Math.max(0, this.getWeaponStat('pierce'))) / 1.4);
+        stats.attackPower += this.getWeaponStat('damage') * 0.12;
+        stats.attackSpeed += this.getWeaponStat('fireRate') * 0.18;
+        stats.bulletSpeed += this.getWeaponStat('bulletSpeed') * 6;
+        stats.pierce += this.getWeaponStat('pierce') * 0.18;
         stats.multiShot += this.getWeaponStat('multiShot');
         stats.dronePower += this.getWeaponStat('drone');
 
