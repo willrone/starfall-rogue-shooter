@@ -5313,8 +5313,9 @@ export class RogueShooterGame extends Component {
         const weaponDamage = weapon ? weapon.weaponStats?.damage || 0 : 0;
         const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
         const base = weaponDamage * level;
-        const bonus = Math.max(0, this.getCharacterStats().attackPower);
-        return Math.max(2, base + bonus * 0.15);
+        const baseAttackPower = createBaseCharacterStats().attackPower;
+        const attackDelta = this.getCharacterStats().attackPower - baseAttackPower;
+        return Math.max(2, base + baseAttackPower * 0.15 + attackDelta);
     }
 
     private getFireInterval() {
@@ -5457,7 +5458,6 @@ export class RogueShooterGame extends Component {
         const stats = createBaseCharacterStats();
         this.addCharacterStats(stats, this.runStats);
 
-        stats.attackPower += this.getWeaponStat('damage') * 0.12;
         stats.attackSpeed += this.getWeaponStat('fireRate') * 0.18;
         stats.bulletSpeed += this.getWeaponStat('bulletSpeed') * 6;
         stats.pierce += this.getWeaponStat('pierce') * 0.18;
