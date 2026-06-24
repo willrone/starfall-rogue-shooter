@@ -82,6 +82,8 @@ const MAX_CHESTS_PER_WAVE = 2;
 const ENEMY_HIT_FLASH_DURATION = 0.14;
 const ENEMY_STATUS_KEY_ARMOR = 'armor';
 const ENEMY_STATUS_KEY_DASH = 'dash';
+const ENEMY_SEP_INTERVAL = 0.045;
+const ENEMY_SEP_PLAYER_DIST = 480;
 
 type GamePhase = 'menu' | 'combat' | 'level-up' | 'item-choice' | 'shop' | 'loot' | 'hangar' | 'paused';
 type BattleEndReason = 'death' | 'extract';
@@ -1133,6 +1135,7 @@ export class RogueShooterGame extends Component {
     private nextEnemyId = 1;
     private enemies: Enemy[] = [];
     private enemySet: Set<Enemy> = new Set();
+    private enemySepTick = 999;
     private bullets: Bullet[] = [];
     private bulletPool: Bullet[] = [];
     private enemyProjectiles: EnemyProjectile[] = [];
@@ -2567,6 +2570,10 @@ export class RogueShooterGame extends Component {
     private updateEnemies(dt: number) {
         const px = this.playerX;
         const py = this.playerY;
+        this.enemySepTick += dt;
+        const doSeparation = this.enemySepTick >= ENEMY_SEP_INTERVAL && this.enemies.length >= 6;
+        if (doSeparation) this.enemySepTick = 0;
+
         for (const enemy of this.enemies) {
             if (!this.enemySet.has(enemy)) continue;
             const ex = enemy.node.position.x;
@@ -2609,7 +2616,7 @@ export class RogueShooterGame extends Component {
             enemy.node.setPosition(nextX, nextY, 4);
             this.updateEnemyVisual(enemy, dt, vx, vy, moveSpeed);
         }
-        this.separateEnemies();
+        if (doSeparation) this.separateEnemies();
     }
 
     private updateEnemyVisual(enemy: Enemy, dt: number, vx: number, vy: number, moveSpeed: number) {
@@ -2724,10 +2731,21 @@ export class RogueShooterGame extends Component {
 
     private separateEnemies() {
         if (this.enemies.length < 6) return;
+        const px = this.playerX;
+        const py = this.playerY;
+        const distSqThreshold = ENEMY_SEP_PLAYER_DIST * ENEMY_SEP_PLAYER_DIST;
         const buckets = new Map<string, Enemy[]>();
         for (const enemy of this.enemies) {
             let ax = enemy.node.position.x;
             let ay = enemy.node.position.y;
+            if (!enemy.boss) {
+                const edx = ax - px;
+                const edy = ay - py;
+                if (edx * edx + edy * edy > distSqThreshold) {
+                    buckets.delete(`${Math.floor(ax / ENEMY_SEPARATION_CELL)},${Math.floor(ay / ENEMY_SEPARATION_CELL)}`);
+                    continue;
+                }
+            }
             const cellX = Math.floor(ax / ENEMY_SEPARATION_CELL);
             const cellY = Math.floor(ay / ENEMY_SEPARATION_CELL);
             let checks = 0;
@@ -2764,12 +2782,16 @@ export class RogueShooterGame extends Component {
                         ay = this.clamp(ay - ny * enemyPush, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius);
                         bx = this.clamp(bx + nx * otherPush, WORLD_LEFT + other.radius, WORLD_RIGHT - other.radius);
                         by = this.clamp(by + ny * otherPush, WORLD_BOTTOM + other.radius, WORLD_TOP - other.radius);
-                        other.node.setPosition(bx, by, 4);
+                        if (Math.abs(bx - other.node.position.x) > 0.5 || Math.abs(by - other.node.position.y) > 0.5) {
+                            other.node.setPosition(bx, by, 4);
+                        }
                     }
                 }
             }
 
-            enemy.node.setPosition(ax, ay, 4);
+            if (Math.abs(ax - enemy.node.position.x) > 0.5 || Math.abs(ay - enemy.node.position.y) > 0.5) {
+                enemy.node.setPosition(ax, ay, 4);
+            }
             const finalCellX = Math.floor(ax / ENEMY_SEPARATION_CELL);
             const finalCellY = Math.floor(ay / ENEMY_SEPARATION_CELL);
             const key = `${finalCellX},${finalCellY}`;
