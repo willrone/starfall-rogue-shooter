@@ -16,8 +16,6 @@ All body strips are 6 frames, 160×160 per frame:
 - `player_survivor_run_west.png`
 - `player_survivor_run_south_west.png`
 
-`player_survivor_run.png` is currently an alias copy of `player_survivor_run_south.png` for compatibility with older code.
-
 ## Direction order for code
 
 ```ts

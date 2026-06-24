@@ -18,7 +18,6 @@ RUNTIME_ART_DIRS = [
     PROJECT_ROOT / "assets" / "resources" / "art" / "characters",
     PROJECT_ROOT / "assets" / "resources" / "art" / "enemies",
     PROJECT_ROOT / "assets" / "resources" / "art" / "weapons",
-    PROJECT_ROOT / "assets" / "resources" / "art" / "ui",
 ]
 
 

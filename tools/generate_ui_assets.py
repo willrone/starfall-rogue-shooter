@@ -15,7 +15,6 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 ART = ROOT / "assets" / "resources" / "art"
 APP_STORE = ROOT / "assets" / "app_store"
-UI_DIR = ART / "ui"
 
 
 def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -85,7 +84,6 @@ def draw_starfield(draw: ImageDraw.ImageDraw, w: int, h: int, count: int) -> Non
 
 def save_app_icon() -> None:
     APP_STORE.mkdir(parents=True, exist_ok=True)
-    UI_DIR.mkdir(parents=True, exist_ok=True)
     icon = gradient((1024, 1024), "#1D4ED8", "#F97316")
     d = ImageDraw.Draw(icon)
     draw_starfield(d, 1024, 1024, 72)
@@ -118,8 +116,7 @@ def save_app_icon() -> None:
     d.rounded_rectangle((250, 76, 774, 214), radius=58, fill=(15, 23, 42, 180))
     d.text(((1024 - tw) / 2, 90), text, font=title_font, fill=(255, 247, 237, 255), stroke_width=4, stroke_fill=(15, 23, 42, 255))
 
-    for out in [APP_STORE / "app_icon_1024.png", UI_DIR / "app_icon_1024.png"]:
-        icon.save(out)
+    icon.save(APP_STORE / "app_icon_1024.png")
 
 
 def save_share_cover() -> None:
@@ -147,7 +144,6 @@ def save_share_cover() -> None:
 
 
 def save_loading_key_art() -> None:
-    UI_DIR.mkdir(parents=True, exist_ok=True)
     key = gradient((720, 1280), "#172554", "#EA580C")
     d = ImageDraw.Draw(key)
     draw_starfield(d, 720, 1280, 96)
@@ -158,7 +154,6 @@ def save_loading_key_art() -> None:
     paste_center(key, player, (320, 660))
     d.text((94, 198), "星坠幸存者", font=load_font(58, True), fill=(255, 247, 237, 255), stroke_width=3, stroke_fill=(15, 23, 42, 255))
     d.text((134, 278), "正在整备星舰与武器", font=load_font(28), fill=(254, 243, 199, 255))
-    key.save(UI_DIR / "loading_key_art.png")
     key.save(APP_STORE / "loading_key_art_720x1280.png")
 
 
@@ -166,7 +161,7 @@ def main() -> None:
     save_app_icon()
     save_share_cover()
     save_loading_key_art()
-    print(f"Generated UI assets in {APP_STORE} and {UI_DIR}")
+    print(f"Generated submission UI assets in {APP_STORE}")
 
 
 if __name__ == "__main__":
