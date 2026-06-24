@@ -2400,7 +2400,6 @@ export class RogueShooterGame extends Component {
             bullet.x += bullet.vx * dt;
             bullet.y += bullet.vy * dt;
             bullet.node.setPosition(bullet.x, bullet.y, 6);
-            this.drawBullet(bullet);
 
             if (bullet.life <= 0 || bullet.x < WORLD_LEFT - 180 || bullet.x > WORLD_RIGHT + 180 || bullet.y < WORLD_BOTTOM - 180 || bullet.y > WORLD_TOP + 180) {
                 removing.push(bullet);
@@ -4822,13 +4821,12 @@ export class RogueShooterGame extends Component {
             bullet.sprite.color = this.hex(bullet.accent, 235);
             bullet.sprite.node.getComponent(UITransform)?.setContentSize(bullet.radius * 3.2, bullet.radius * 3.2);
         }
-        const lifeRatio = bullet.maxLife > 0 ? this.clamp(bullet.life / bullet.maxLife, 0, 1) : 1;
         const tailLength = bullet.style === 'rail' ? 34 : bullet.style === 'laser' ? 42 : bullet.style === 'shotgun' ? 16 : bullet.style === 'meteor' ? 12 : 22;
         const coreRadius = bullet.radius * (bullet.style === 'rail' ? 0.56 : bullet.style === 'laser' ? 0.45 : 0.72);
-        bullet.gfx.fillColor = this.hex(bullet.color, Math.round(55 + 90 * lifeRatio));
+        bullet.gfx.fillColor = this.hex(bullet.color, 145);
         bullet.gfx.roundRect(-tailLength, -bullet.radius * 0.42, tailLength + bullet.radius, bullet.radius * 0.84, bullet.radius * 0.42);
         bullet.gfx.fill();
-        bullet.gfx.fillColor = this.hex(bullet.accent, Math.round(185 + 60 * lifeRatio));
+        bullet.gfx.fillColor = this.hex(bullet.accent, 245);
         if (bullet.style === 'disc') {
             bullet.gfx.circle(0, 0, bullet.radius);
             bullet.gfx.fill();
