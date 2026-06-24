@@ -1544,79 +1544,123 @@ export class RogueShooterGame extends Component {
     }
 
     private drawArena(root: Node) {
-        this.rect(root, 'ArenaBase', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#0B1020');
-        this.rect(root, 'DeepSpaceBandTop', 0, 0, DESIGN_WIDTH, 180, '#111827');
-        this.rect(root, 'DeepSpaceBandBottom', 0, 1120, DESIGN_WIDTH, 160, '#111827');
+        this.rect(root, 'DeepSpaceBase', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#07111F');
+        this.rect(root, 'NebulaBandTop', 0, 0, DESIGN_WIDTH, 250, '#111A33');
+        this.rect(root, 'NebulaBandBottom', 0, 1060, DESIGN_WIDTH, 220, '#160F2A');
+
+        const sky = new Node('StaticStarSky');
+        sky.layer = Layers.Enum.UI_2D;
+        root.addChild(sky);
+        sky.setPosition(0, 0, -60);
+        sky.addComponent(UITransform).setContentSize(DESIGN_WIDTH, DESIGN_HEIGHT);
+        const gfx = sky.addComponent(Graphics);
+
+        gfx.fillColor = this.hex('#4CC9F0', 75);
+        for (let i = 0; i < 86; i++) {
+            const x = 18 + ((i * 83) % (DESIGN_WIDTH - 36));
+            const y = 18 + ((i * 137) % (DESIGN_HEIGHT - 36));
+            const r = 1 + (i % 3) * 0.7;
+            gfx.circle(x, y, r);
+            gfx.fill();
+        }
+
+        gfx.fillColor = this.hex('#B5179E', 42);
+        gfx.circle(610, 166, 82);
+        gfx.fill();
+        gfx.fillColor = this.hex('#F9C74F', 70);
+        gfx.circle(616, 160, 38);
+        gfx.fill();
+        gfx.strokeColor = this.hex('#F8FAFC', 52);
+        gfx.lineWidth = 3;
+        gfx.moveTo(544, 180);
+        gfx.lineTo(684, 142);
+        gfx.stroke();
     }
 
     private drawWorldArena(world: Node) {
-        const floor = new Node('WorldFloor');
+        const floor = new Node('PlanetBattlefield');
         floor.layer = Layers.Enum.UI_2D;
         world.addChild(floor);
         floor.setPosition(0, 0, -20);
         floor.addComponent(UITransform).setContentSize(WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM);
         const floorGfx = floor.addComponent(Graphics);
-        floorGfx.fillColor = this.hex('#121827');
+
+        floorGfx.fillColor = this.hex('#14243A');
         floorGfx.roundRect(WORLD_LEFT, WORLD_BOTTOM, WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM, 52);
         floorGfx.fill();
-        floorGfx.strokeColor = this.hex('#334155', 210);
-        floorGfx.lineWidth = 8;
-        floorGfx.roundRect(WORLD_LEFT, WORLD_BOTTOM, WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM, 52);
+        floorGfx.fillColor = this.hex('#1F3651', 180);
+        floorGfx.roundRect(WORLD_LEFT + 120, WORLD_BOTTOM + 150, WORLD_RIGHT - WORLD_LEFT - 240, WORLD_TOP - WORLD_BOTTOM - 300, 180);
+        floorGfx.fill();
+        floorGfx.fillColor = this.hex('#2E4A63', 120);
+        floorGfx.circle(-1260, -920, 1280);
+        floorGfx.fill();
+        floorGfx.fillColor = this.hex('#4CC9F0', 34);
+        floorGfx.circle(-1260, -920, 1540);
+        floorGfx.fill();
+        floorGfx.fillColor = this.hex('#020617', 80);
+        floorGfx.circle(1720, 1280, 1120);
+        floorGfx.fill();
+
+        floorGfx.strokeColor = this.hex('#4CC9F0', 115);
+        floorGfx.lineWidth = 5;
+        floorGfx.roundRect(WORLD_LEFT + 42, WORLD_BOTTOM + 42, WORLD_RIGHT - WORLD_LEFT - 84, WORLD_TOP - WORLD_BOTTOM - 84, 42);
+        floorGfx.stroke();
+        floorGfx.strokeColor = this.hex('#7DD3FC', 42);
+        floorGfx.lineWidth = 2;
+        for (let x = WORLD_LEFT; x <= WORLD_RIGHT; x += 320) {
+            floorGfx.moveTo(x, WORLD_BOTTOM);
+            floorGfx.lineTo(x + 220, WORLD_TOP);
+        }
+        for (let y = WORLD_BOTTOM; y <= WORLD_TOP; y += 320) {
+            floorGfx.moveTo(WORLD_LEFT, y);
+            floorGfx.lineTo(WORLD_RIGHT, y + 120);
+        }
         floorGfx.stroke();
 
-        const grid = new Node('ArenaGrid');
-        grid.layer = Layers.Enum.UI_2D;
-        world.addChild(grid);
-        grid.setPosition(0, 0, -18);
-        const gfx = grid.addComponent(Graphics);
-        gfx.lineWidth = 2;
-        gfx.strokeColor = this.hex('#243247', 170);
-        for (let x = WORLD_LEFT; x <= WORLD_RIGHT; x += 160) {
-            gfx.moveTo(x, WORLD_BOTTOM);
-            gfx.lineTo(x, WORLD_TOP);
+        floorGfx.strokeColor = this.hex('#F9C74F', 105);
+        floorGfx.lineWidth = 7;
+        for (let i = 0; i < 34; i++) {
+            const x = WORLD_LEFT + 260 + (i % 7) * 690 + ((i * 47) % 120);
+            const y = WORLD_BOTTOM + 300 + Math.floor(i / 7) * 760 + ((i * 91) % 170);
+            floorGfx.moveTo(x - 78, y - 18);
+            floorGfx.lineTo(x - 20, y + 14);
+            floorGfx.lineTo(x + 34, y - 5);
+            floorGfx.lineTo(x + 92, y + 28);
         }
-        for (let y = WORLD_BOTTOM; y <= WORLD_TOP; y += 160) {
-            gfx.moveTo(WORLD_LEFT, y);
-            gfx.lineTo(WORLD_RIGHT, y);
-        }
-        gfx.stroke();
+        floorGfx.stroke();
 
-        gfx.lineWidth = 4;
-        gfx.strokeColor = this.hex('#334155', 180);
-        for (let x = WORLD_LEFT; x <= WORLD_RIGHT; x += 640) {
-            gfx.moveTo(x, WORLD_BOTTOM);
-            gfx.lineTo(x, WORLD_TOP);
-        }
-        for (let y = WORLD_BOTTOM; y <= WORLD_TOP; y += 640) {
-            gfx.moveTo(WORLD_LEFT, y);
-            gfx.lineTo(WORLD_RIGHT, y);
-        }
-        gfx.stroke();
-
-        gfx.lineWidth = 4;
-        gfx.strokeColor = this.hex('#4CC9F0', 95);
-        gfx.roundRect(WORLD_LEFT + 42, WORLD_BOTTOM + 42, WORLD_RIGHT - WORLD_LEFT - 84, WORLD_TOP - WORLD_BOTTOM - 84, 42);
-        gfx.stroke();
-
-        gfx.fillColor = this.hex('#334155', 90);
-        for (let i = 0; i < 76; i++) {
-            const x = WORLD_LEFT + 240 + (i % 8) * 570 + ((i * 97) % 140);
-            const y = WORLD_BOTTOM + 260 + Math.floor(i / 8) * 590 + ((i * 53) % 180);
-            gfx.roundRect(x - 34, y - 8, 68, 16, 8);
-            gfx.fill();
+        floorGfx.fillColor = this.hex('#07111F', 96);
+        floorGfx.strokeColor = this.hex('#7DD3FC', 60);
+        floorGfx.lineWidth = 3;
+        for (let i = 0; i < 46; i++) {
+            const x = WORLD_LEFT + 280 + (i % 9) * 560 + ((i * 71) % 130);
+            const y = WORLD_BOTTOM + 220 + Math.floor(i / 9) * 760 + ((i * 37) % 210);
+            const r = 26 + (i % 5) * 12;
+            floorGfx.circle(x, y, r);
+            floorGfx.fill();
+            floorGfx.circle(x - r * 0.24, y + r * 0.2, r * 0.55);
+            floorGfx.stroke();
         }
 
-        gfx.strokeColor = this.hex('#4CC9F0', 120);
-        gfx.lineWidth = 3;
+        floorGfx.fillColor = this.hex('#94A3B8', 92);
+        for (let i = 0; i < 62; i++) {
+            const x = WORLD_LEFT + 220 + (i % 10) * 500 + ((i * 97) % 155);
+            const y = WORLD_BOTTOM + 260 + Math.floor(i / 10) * 690 + ((i * 53) % 190);
+            floorGfx.roundRect(x - 36, y - 9, 72, 18, 8);
+            floorGfx.fill();
+        }
+
+        floorGfx.strokeColor = this.hex('#F8FAFC', 80);
+        floorGfx.lineWidth = 3;
         for (let x = WORLD_LEFT + 640; x < WORLD_RIGHT; x += 640) {
             for (let y = WORLD_BOTTOM + 640; y < WORLD_TOP; y += 640) {
-                gfx.moveTo(x - 34, y);
-                gfx.lineTo(x + 34, y);
-                gfx.moveTo(x, y - 34);
-                gfx.lineTo(x, y + 34);
+                floorGfx.moveTo(x - 38, y);
+                floorGfx.lineTo(x + 38, y);
+                floorGfx.moveTo(x, y - 38);
+                floorGfx.lineTo(x, y + 38);
             }
         }
-        gfx.stroke();
+        floorGfx.stroke();
     }
 
     private buildHud(root: Node) {
