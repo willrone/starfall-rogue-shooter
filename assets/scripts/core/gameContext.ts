@@ -33,7 +33,7 @@ export interface GameEvents {
     'shop-changed': {};
 }
 
-export type EventHandler<T = any> = (data: T) => void;
+export type EventHandler<T = unknown> = (data: T) => void;
 
 export class GameEventBus {
     private handlers = new Map<string, Set<EventHandler>>();

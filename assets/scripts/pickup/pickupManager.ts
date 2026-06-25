@@ -31,6 +31,7 @@ import type {
 } from '../core/types';
 import {
     addCharacterStats as addStats,
+    createEmptyCharacterStats,
 } from '../core/stats';
 import {
     LEVEL_UPGRADES,
@@ -139,12 +140,7 @@ export class PickupManager {
     private get panels() { return this.ctx.panels; }
 
     private createEmptyStats(): CharacterStats {
-        const cs: any = {};
-        const base = this.ctx.getCharacterStats();
-        for (const key of Object.keys(base) as StatKey[]) {
-            cs[key] = 0;
-        }
-        return cs as CharacterStats;
+        return createEmptyCharacterStats();
     }
 
     // ── Pickup art helpers ─────────────────────────────────────────────────
@@ -628,8 +624,9 @@ export class PickupManager {
     applyStatEffects(effects: StatEffect[]): void {
         const hpBefore = this.ctx.getMaxHp();
         const shieldBefore = this.ctx.getShieldMax();
+        const stats = this.runStats as Record<StatKey, number>;
         for (const effect of effects) {
-            (this.runStats as any)[effect.stat] += effect.amount;
+            stats[effect.stat] += effect.amount;
         }
         this.cs.playerMaxHp = this.ctx.getMaxHp();
         this.cs.playerShieldMax = this.ctx.getShieldMax();

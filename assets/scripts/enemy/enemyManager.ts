@@ -1,5 +1,5 @@
-import { Graphics, Layers, Node, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
-import type { ChestPickupType, DamageType, EnemySpec, PickupType, ResourceType } from '../core/types';
+import { Color, Graphics, Layers, Node, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
+import type { CharacterStats, ChestPickupType, DamageType, EnemySpec, PickupType, ResourceType } from '../core/types';
 import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS } from '../catalogs/enemyCatalog';
 
 export const WORLD_LEFT = -2400;
@@ -65,7 +65,10 @@ export interface Enemy {
     visualStateKey: string;
     animation: SpriteStripAnimation | null;
     animationFrameIndex: number;
-    [key: string]: any;
+    _lastScaleX?: number;
+    _lastScaleY?: number;
+    _lastAngle?: number;
+    _wasHitColor?: boolean;
 }
 
 export const ENEMY_VISUAL_SIZE_MULTIPLIER: Record<string, number> = {
@@ -127,8 +130,8 @@ export interface EnemyHostContext {
     requestBgm(name: string): void;
     dropPickup(type: PickupType, amount: number, x: number, y: number): void;
     scaleResourceAmount(amount: number): number;
-    getCharacterStats(): any;
-    hex(color: string, alpha?: number): any;
+    getCharacterStats(): CharacterStats;
+    hex(color: string, alpha?: number): Color;
     clamp(v: number, min: number, max: number): number;
     distanceSq(x1: number, y1: number, x2: number, y2: number): number;
     randomRange(min: number, max: number): number;
@@ -155,7 +158,7 @@ export class EnemyManager {
     constructor(public ctx: EnemyHostContext) {}
 
     private get cs(): EnemyHostContext {
-        return (((this.ctx as any).cs as EnemyHostContext | undefined) || this.ctx);
+        return this.ctx;
     }
 
     public updateSpawning(dt: number) {
