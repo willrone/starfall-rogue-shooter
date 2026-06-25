@@ -346,7 +346,10 @@ export class ProjectileManager {
                             bullet.hitIds.add(enemy.id);
                             const roll = this.ctx.enemyMgr.rollOutgoingDamage(enemy, bullet.damage);
                             this.ctx.enemyMgr.damageEnemy(enemy, roll.amount, roll.color, roll.tag);
-                            this.spawnBulletHitSpark(bullet.x, bullet.y, bullet.style, bullet.color, bullet.accent);
+                            // 限制火花频率：每3次命中才画1次，减少渲染节点 churn
+                            if (Math.random() < 0.33) {
+                                this.spawnBulletHitSpark(bullet.x, bullet.y, bullet.style, bullet.color, bullet.accent);
+                            }
                             bullet.pierce -= 1;
                             if (bullet.pierce < 0) {
                                 removing.push(bullet);
