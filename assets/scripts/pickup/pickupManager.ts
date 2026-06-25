@@ -8,6 +8,7 @@ import {
     UITransform,
 } from 'cc';
 import type { PanelManager, ButtonView } from '../ui/panels';
+import type { GameEventBus } from '../core/gameContext';
 import {
     RESOURCE_DEFS,
     createEmptyWallet as createResourceWallet,
@@ -80,6 +81,8 @@ export interface FloatingText {
 }
 
 export interface PickupHostContext {
+    bus: GameEventBus;
+
     cs: CombatState;
     worldNode: Node | null;
     panels: PanelManager;

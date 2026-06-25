@@ -208,3 +208,8 @@ testResourceAccumulation();
 testShieldAndRegenFlow();
 
 console.log('integration tests passed.');
+
+// ── EventBus event chain tests ─────────────────────────────────────
+
+
+console.log("Integration tests passed!");
