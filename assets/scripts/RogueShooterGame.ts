@@ -87,8 +87,11 @@ import {
 import { WEAPON_FAMILIES, WEAPON_VARIANTS, WEAPON_CATALOG, WEAPON_COUNT, buildWeaponCatalog, getWeaponStyleName } from './catalogs/weaponCatalog';
 import { EQUIPMENT, GEAR_BLUEPRINTS, GEAR_RARITIES, GEAR_CATALOG, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from './catalogs/equipmentCatalog';
 import { ENEMY_SPECS, BOSS_ENEMY_COUNT, TOTAL_ENEMY_TYPES, ENEMY_VARIANTS, buildEnemyCatalog } from './catalogs/enemyCatalog';
-import { EnemyManager, ENEMY_PLAYER_PADDING, ENEMY_PROJECTILE_LIMIT, ENEMY_STRIP_META, MAX_CHESTS_PER_WAVE, type Enemy, type EnemyHostContext, type SpriteStripAnimation } from './enemy/enemyManager';
+import { EnemyManager, ENEMY_PLAYER_PADDING, ENEMY_STRIP_META, MAX_CHESTS_PER_WAVE, type Enemy, type EnemyHostContext, type SpriteStripAnimation } from './enemy/enemyManager';
 import { CombatState, createCombatState, resetCombatSession } from './state/combatState';
+import { ProjectileManager, BULLET_HIT_CELL, type Bullet, type EnemyProjectile, type ProjectileHostContext } from './projectile/projectileManager';
+
+const ENEMY_PROJECTILE_LIMIT = 140;
 
 const { ccclass } = _decorator;
 
@@ -121,7 +124,6 @@ const SHOP_ITEM_COUNT = 6;
 const UI_SAFE_TOP = 56;
 const UI_SAFE_BOTTOM = 32;
 const MIN_TOUCH_BUTTON_HEIGHT = 48;
-const BULLET_HIT_CELL = 160;
 const MAX_COMBAT_DT = 1 / 30;
 const PICKUP_MERGE_RADIUS = 78;
 const PICKUP_COMPACT_RADIUS = 240;
@@ -138,39 +140,6 @@ interface ButtonView {
     color: string;
     disabledColor: string;
     disabled: boolean;
-}
-
-interface EnemyProjectile {
-    node: Node;
-    gfx: Graphics;
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    damage: number;
-    radius: number;
-    life: number;
-    damageType: DamageType;
-    color: string;
-}
-
-interface Bullet {
-    node: Node;
-    gfx: Graphics;
-    sprite: Sprite | null;
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    damage: number;
-    radius: number;
-    pierce: number;
-    life: number;
-    maxLife: number;
-    color: string;
-    accent: string;
-    style: WeaponAttackStyle;
-    hitIds: Set<number>;
 }
 
 interface Pickup {
@@ -273,10 +242,7 @@ export class RogueShooterGame extends Component {
     private weaponCooldowns: Record<string, number> = {};
 
     private enemyMgr = new EnemyManager(this as unknown as EnemyHostContext);
-    private bullets: Bullet[] = [];
-    private bulletPool: Bullet[] = [];
-    private enemyProjectiles: EnemyProjectile[] = [];
-    private enemyProjectilePool: EnemyProjectile[] = [];
+    private proj = new ProjectileManager(this as unknown as ProjectileHostContext);
     private pickups: Pickup[] = [];
     private floatingTexts: FloatingText[] = [];
     private floatingTextPool: FloatingText[] = [];
@@ -292,7 +258,6 @@ export class RogueShooterGame extends Component {
     private perfPickupMs = 0;
     private perfHudMs = 0;
     private perfDrawEnemy = 0;
-    private perfDrawBullet = 0;
     private perfDrawDrone = 0;
     private perfCrowdSteerCalls = 0;
     private perfCrowdChecks = 0;
@@ -367,7 +332,7 @@ export class RogueShooterGame extends Component {
             this.perfBulletMs = this.perfNow() - t;
 
             t = this.perfNow();
-            this.updateEnemyProjectiles(combatDt);
+            this.proj.updateEnemyProjectiles(combatDt);
             this.perfEnemyProjectileMs = this.perfNow() - t;
 
             t = this.perfNow();
@@ -408,7 +373,7 @@ export class RogueShooterGame extends Component {
         this.perfPickupMs = 0;
         this.perfHudMs = 0;
         this.perfDrawEnemy = 0;
-        this.perfDrawBullet = 0;
+        this.proj.perfDrawBullet = 0;
         this.perfDrawDrone = 0;
         this.perfCrowdSteerCalls = 0;
         this.perfCrowdChecks = 0;
@@ -1402,297 +1367,39 @@ export class RogueShooterGame extends Component {
         this.spawnMuzzleFlash(baseAngle, weaponStyle, weaponColor, angles.length);
     }
 
-    private getWeaponAccentColor(style: WeaponAttackStyle, fallback: string) {
-        switch (style) {
-            case 'shotgun': return '#FFE8A3';
-            case 'rail': return '#A7F3D0';
-            case 'laser': return '#D9FFF3';
-            case 'chain': return '#FDE68A';
-            case 'pulse': return '#FBCFE8';
-            case 'drone': return '#ECFCCB';
-            case 'disc': return '#FFF7AD';
-            case 'spray': return '#BBF7D0';
-            case 'meteor': return '#FED7AA';
-            case 'ricochet': return '#BAE6FD';
-            case 'scythe': return '#F5D0FE';
-            case 'rifle':
-            default:
-                return fallback === '#4CC9F0' ? '#F8FAFC' : '#FFF7ED';
-        }
-    }
-
-    private getWeaponBulletRadius(style: WeaponAttackStyle) {
-        switch (style) {
-            case 'shotgun': return 6;
-            case 'rail': return 5;
-            case 'laser': return 4;
-            case 'pulse': return 9;
-            case 'disc': return 10;
-            case 'spray': return 5;
-            case 'meteor': return 12;
-            case 'scythe': return 11;
-            default: return 7;
-        }
-    }
-
-    private getWeaponBulletLife(style: WeaponAttackStyle) {
-        switch (style) {
-            case 'shotgun': return 0.9;
-            case 'rail': return 1.72;
-            case 'laser': return 1.24;
-            case 'meteor': return 1.18;
-            case 'spray': return 0.82;
-            default: return 1.45;
-        }
-    }
-
     private spawnMuzzleFlash(angle: number, style: WeaponAttackStyle, color: string, shotCount: number) {
-        if (!this.worldNode) return;
-        const node = new Node('MuzzleFlash');
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode.addChild(node);
-        const distance = 38;
-        node.setPosition(this.cs.playerX + Math.cos(angle) * distance, this.cs.playerY + Math.sin(angle) * distance, 12);
-        node.angle = angle * 180 / Math.PI;
-        const gfx = node.addComponent(Graphics);
-        const length = style === 'rail' ? 58 : style === 'shotgun' ? 42 : style === 'meteor' ? 34 : 30;
-        const width = style === 'shotgun' ? 16 + shotCount * 2 : style === 'rail' ? 8 : 12;
-        gfx.fillColor = this.hex(color, 170);
-        gfx.moveTo(-4, 0);
-        gfx.lineTo(length, width * 0.5);
-        gfx.lineTo(length * 0.68, 0);
-        gfx.lineTo(length, -width * 0.5);
-        gfx.close();
-        gfx.fill();
-        gfx.fillColor = this.hex(this.getWeaponAccentColor(style, color), 230);
-        gfx.circle(0, 0, Math.max(7, width * 0.42));
-        gfx.fill();
-        this.scheduleOnce(() => node.destroy(), 0.075);
+        this.proj.spawnMuzzleFlash(angle, style, color, shotCount);
     }
 
     private spawnBulletHitSpark(x: number, y: number, style: WeaponAttackStyle, color: string, accent: string) {
-        if (!this.worldNode) return;
-        const node = new Node('BulletHitSpark');
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode.addChild(node);
-        node.setPosition(x, y, 13);
-        const gfx = node.addComponent(Graphics);
-        const radius = style === 'meteor' ? 24 : style === 'pulse' ? 20 : style === 'rail' ? 16 : 12;
-        gfx.fillColor = this.hex(color, 70);
-        gfx.circle(0, 0, radius);
-        gfx.fill();
-        gfx.strokeColor = this.hex(accent, 215);
-        gfx.lineWidth = style === 'rail' ? 4 : 3;
-        gfx.circle(0, 0, radius * 0.72);
-        gfx.stroke();
-        if (style === 'rail' || style === 'laser') {
-            gfx.moveTo(-radius, 0);
-            gfx.lineTo(radius, 0);
-            gfx.moveTo(0, -radius * 0.55);
-            gfx.lineTo(0, radius * 0.55);
-            gfx.stroke();
-        }
-        this.scheduleOnce(() => node.destroy(), 0.11);
+        this.proj.spawnBulletHitSpark(x, y, style, color, accent);
     }
 
     private createBullet(angle: number, damage: number, pierce: number, style: WeaponAttackStyle, color: string) {
-        const speed = this.getBulletSpeed();
-        const bullet = this.acquireBullet();
-        bullet.x = this.cs.playerX;
-        bullet.y = this.cs.playerY;
-        bullet.vx = Math.cos(angle) * speed;
-        bullet.vy = Math.sin(angle) * speed;
-        bullet.damage = damage;
-        bullet.style = style;
-        bullet.color = color;
-        bullet.accent = this.getWeaponAccentColor(style, color);
-        bullet.radius = this.getWeaponBulletRadius(style);
-        bullet.pierce = pierce;
-        bullet.life = this.getWeaponBulletLife(style);
-        bullet.maxLife = bullet.life;
-        bullet.hitIds.clear();
-        bullet.node.active = true;
-        bullet.node.setPosition(bullet.x, bullet.y, 6);
-        bullet.node.angle = angle * 180 / Math.PI;
-        this.drawBullet(bullet);
-        this.bullets.push(bullet);
+        this.proj.createBullet(angle, damage, pierce, style, color);
     }
 
     private acquireBullet(): Bullet {
-        const pooled = this.bulletPool.pop();
-        if (pooled) return pooled;
-
-        const node = new Node('Bullet');
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode!.addChild(node);
-        node.addComponent(UITransform).setContentSize(24, 24);
-        const gfx = node.addComponent(Graphics);
-        const sprite = this.addSpriteChild(node, 'BulletArt', 'bullet_plasma', 28, 28);
-        return {
-            node,
-            gfx,
-            sprite,
-            x: 0,
-            y: 0,
-            vx: 0,
-            vy: 0,
-            damage: 0,
-            radius: 7,
-            pierce: 0,
-            life: 0,
-            maxLife: 0,
-            color: '#4CC9F0',
-            accent: '#F8FAFC',
-            style: 'rifle',
-            hitIds: new Set<number>(),
-        };
+        return this.proj.acquireBullet();
     }
 
     private updateBullets(dt: number) {
-        const removing: Bullet[] = [];
-        const enemyGrid = this.enemyMgr.buildEnemyGrid(BULLET_HIT_CELL);
-        for (const bullet of this.bullets) {
-            bullet.life -= dt;
-            bullet.x += bullet.vx * dt;
-            bullet.y += bullet.vy * dt;
-            bullet.node.setPosition(bullet.x, bullet.y, 6);
+        this.proj.updateBullets(dt);
+    }
 
-            if (bullet.life <= 0 || bullet.x < WORLD_LEFT - 180 || bullet.x > WORLD_RIGHT + 180 || bullet.y < WORLD_BOTTOM - 180 || bullet.y > WORLD_TOP + 180) {
-                removing.push(bullet);
-                continue;
-            }
+    private drawBullet(bullet: Bullet) {
+        this.proj.drawBullet(bullet);
+    }
 
-            const cellX = Math.floor(bullet.x / BULLET_HIT_CELL);
-            const cellY = Math.floor(bullet.y / BULLET_HIT_CELL);
-            let bulletRemoved = false;
-            for (let ox = -1; ox <= 1 && !bulletRemoved; ox++) {
-                for (let oy = -1; oy <= 1 && !bulletRemoved; oy++) {
-                    const bucket = enemyGrid.get(`${cellX + ox},${cellY + oy}`);
-                    if (!bucket) continue;
-                    for (const enemy of bucket) {
-                        if (!this.enemyMgr.enemySet.has(enemy)) continue;
-                        if (bullet.hitIds.has(enemy.id)) continue;
-                        const distSq = this.distanceSq(bullet.x, bullet.y, enemy.node.position.x, enemy.node.position.y);
-                        const hitRadius = bullet.radius + enemy.radius;
-                        if (distSq <= hitRadius * hitRadius) {
-                            bullet.hitIds.add(enemy.id);
-                            const roll = this.enemyMgr.rollOutgoingDamage(enemy, bullet.damage);
-                            this.enemyMgr.damageEnemy(enemy, roll.amount, roll.color, roll.tag);
-                            this.spawnBulletHitSpark(bullet.x, bullet.y, bullet.style, bullet.color, bullet.accent);
-                            bullet.pierce -= 1;
-                            if (bullet.pierce < 0) {
-                                removing.push(bullet);
-                                bulletRemoved = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        for (const bullet of removing) {
-            this.removeBullet(bullet);
-        }
+    private removeBullet(bullet: Bullet) {
+        this.proj.removeBullet(bullet);
+    }
+
+    private recycleBullet(bullet: Bullet, removeFromActive: boolean) {
+        this.proj.recycleBullet(bullet, removeFromActive);
     }
 
 
-    private createEnemyProjectile(x: number, y: number, angle: number, damage: number, damageType: DamageType, speed: number) {
-        if (this.enemyProjectiles.length >= ENEMY_PROJECTILE_LIMIT) {
-            const oldest = this.enemyProjectiles.shift();
-            if (oldest) this.recycleEnemyProjectile(oldest, false);
-        }
-
-        const projectile = this.acquireEnemyProjectile();
-        projectile.x = x;
-        projectile.y = y;
-        projectile.vx = Math.cos(angle) * speed;
-        projectile.vy = Math.sin(angle) * speed;
-        projectile.damage = damage;
-        projectile.radius = damageType === 'fire' ? 10 : 8;
-        projectile.life = 3.2;
-        projectile.damageType = damageType;
-        projectile.color = this.getDamageTypeColor(damageType);
-        projectile.node.active = true;
-        projectile.node.setPosition(projectile.x, projectile.y, 7);
-        projectile.node.angle = angle * 180 / Math.PI;
-        this.drawEnemyProjectile(projectile);
-        this.enemyProjectiles.push(projectile);
-    }
-
-    private acquireEnemyProjectile(): EnemyProjectile {
-        const pooled = this.enemyProjectilePool.pop();
-        if (pooled) return pooled;
-
-        const node = new Node('EnemyProjectile');
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode!.addChild(node);
-        node.addComponent(UITransform).setContentSize(28, 28);
-        const gfx = node.addComponent(Graphics);
-        return {
-            node,
-            gfx,
-            x: 0,
-            y: 0,
-            vx: 0,
-            vy: 0,
-            damage: 0,
-            radius: 8,
-            life: 0,
-            damageType: 'physical',
-            color: this.getDamageTypeColor('physical'),
-        };
-    }
-
-    private updateEnemyProjectiles(dt: number) {
-        const removing: EnemyProjectile[] = [];
-        for (const projectile of this.enemyProjectiles) {
-            projectile.life -= dt;
-            projectile.x += projectile.vx * dt;
-            projectile.y += projectile.vy * dt;
-            projectile.node.setPosition(projectile.x, projectile.y, 7);
-            if (projectile.life <= 0 || projectile.x < WORLD_LEFT - 160 || projectile.x > WORLD_RIGHT + 160 || projectile.y < WORLD_BOTTOM - 160 || projectile.y > WORLD_TOP + 160) {
-                removing.push(projectile);
-                continue;
-            }
-
-            const hitRadius = projectile.radius + this.cs.playerRadius;
-            if (this.distanceSq(projectile.x, projectile.y, this.cs.playerX, this.cs.playerY) <= hitRadius * hitRadius) {
-                if (this.cs.invulnerableTimer <= 0) this.takeDamage(projectile.damage, projectile.damageType);
-                removing.push(projectile);
-            }
-        }
-        for (const projectile of removing) {
-            this.removeEnemyProjectile(projectile);
-        }
-    }
-
-    private drawEnemyProjectile(projectile: EnemyProjectile) {
-        projectile.gfx.clear();
-        projectile.gfx.fillColor = this.hex('#020617', 110);
-        projectile.gfx.circle(2, -2, projectile.radius + 3);
-        projectile.gfx.fill();
-        projectile.gfx.fillColor = this.hex(projectile.color);
-        projectile.gfx.circle(0, 0, projectile.radius);
-        projectile.gfx.fill();
-        projectile.gfx.strokeColor = this.hex('#F8FAFC', 150);
-        projectile.gfx.lineWidth = 2;
-        projectile.gfx.circle(0, 0, projectile.radius + 1);
-        projectile.gfx.stroke();
-    }
-
-    private removeEnemyProjectile(projectile: EnemyProjectile) {
-        this.recycleEnemyProjectile(projectile, true);
-    }
-
-    private recycleEnemyProjectile(projectile: EnemyProjectile, removeFromActive: boolean) {
-        if (removeFromActive) {
-            const index = this.enemyProjectiles.indexOf(projectile);
-            if (index >= 0) this.enemyProjectiles.splice(index, 1);
-        }
-        projectile.gfx.clear();
-        projectile.node.active = false;
-        this.enemyProjectilePool.push(projectile);
-    }
 
 
 
@@ -2947,9 +2654,9 @@ export class RogueShooterGame extends Component {
         const bossText = boss ? `Boss ${Math.ceil(boss.hp)}/${Math.ceil(boss.maxHp)}` : 'Boss -';
         this.panels.debugLabel.string = [
             `DBG ${this.cs.phase} W${this.cs.waveIndex} ${Math.round(this.cs.waveElapsed)}/${Math.round(this.cs.waveDuration)}s ${bossText}`,
-            `E ${this.enemyMgr.enemies.length}/${this.enemyMgr.getEnemyCap()}  B ${this.bullets.length}  EP ${this.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickups.length}  FT ${this.floatingTexts.length}`,
+            `E ${this.enemyMgr.enemies.length}/${this.enemyMgr.getEnemyCap()}  B ${this.proj.bullets.length}  EP ${this.proj.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickups.length}  FT ${this.floatingTexts.length}`,
             `MS F${this.perfFrameMs.toFixed(1)} pre${this.perfPreMs.toFixed(1)} ply${this.perfPlayerMs.toFixed(1)} wep${this.perfWeaponMs.toFixed(1)} bul${this.perfBulletMs.toFixed(1)} ep${this.perfEnemyProjectileMs.toFixed(1)} ene${this.perfEnemyMs.toFixed(1)} sep${this.perfSeparationMs.toFixed(1)} pk${this.perfPickupMs.toFixed(1)} hud${this.perfHudMs.toFixed(1)}`,
-            `DRAW enemy${this.perfDrawEnemy} bullet${this.perfDrawBullet} drone${this.perfDrawDrone}  STEER ${this.perfCrowdSteerCalls}/${this.perfCrowdChecks}  SEPCHK ${this.perfSepChecks}`,
+            `DRAW enemy${this.perfDrawEnemy} bullet${this.proj.perfDrawBullet} drone${this.perfDrawDrone}  STEER ${this.perfCrowdSteerCalls}/${this.perfCrowdChecks}  SEPCHK ${this.perfSepChecks}`,
         ].join('\n');
     }
 
@@ -3100,40 +2807,6 @@ export class RogueShooterGame extends Component {
 
 
 
-
-    private drawBullet(bullet: Bullet) {
-        this.perfDrawBullet += 1;
-        bullet.gfx.clear();
-        if (bullet.sprite) {
-            bullet.sprite.color = this.hex(bullet.accent, 235);
-            bullet.sprite.node.getComponent(UITransform)?.setContentSize(bullet.radius * 3.2, bullet.radius * 3.2);
-        }
-        const tailLength = bullet.style === 'rail' ? 34 : bullet.style === 'laser' ? 42 : bullet.style === 'shotgun' ? 16 : bullet.style === 'meteor' ? 12 : 22;
-        const coreRadius = bullet.radius * (bullet.style === 'rail' ? 0.56 : bullet.style === 'laser' ? 0.45 : 0.72);
-        bullet.gfx.fillColor = this.hex(bullet.color, 145);
-        bullet.gfx.roundRect(-tailLength, -bullet.radius * 0.42, tailLength + bullet.radius, bullet.radius * 0.84, bullet.radius * 0.42);
-        bullet.gfx.fill();
-        bullet.gfx.fillColor = this.hex(bullet.accent, 245);
-        if (bullet.style === 'disc') {
-            bullet.gfx.circle(0, 0, bullet.radius);
-            bullet.gfx.fill();
-            bullet.gfx.fillColor = this.hex(bullet.color, 230);
-            bullet.gfx.circle(0, 0, bullet.radius * 0.45);
-            bullet.gfx.fill();
-        } else if (bullet.style === 'scythe') {
-            bullet.gfx.moveTo(-bullet.radius * 0.8, -bullet.radius * 0.3);
-            bullet.gfx.quadraticCurveTo(bullet.radius * 0.45, -bullet.radius * 1.15, bullet.radius * 1.05, 0);
-            bullet.gfx.quadraticCurveTo(bullet.radius * 0.45, bullet.radius * 1.15, -bullet.radius * 0.8, bullet.radius * 0.3);
-            bullet.gfx.close();
-            bullet.gfx.fill();
-        } else if (bullet.style === 'rail' || bullet.style === 'laser') {
-            bullet.gfx.roundRect(-bullet.radius * 0.3, -coreRadius, bullet.radius * 2.2, coreRadius * 2, coreRadius);
-            bullet.gfx.fill();
-        } else {
-            bullet.gfx.circle(0, 0, coreRadius);
-            bullet.gfx.fill();
-        }
-    }
 
     private drawPickup(pickup: Pickup) {
         const chest = this.isChestPickup(pickup.type);
@@ -3505,42 +3178,19 @@ export class RogueShooterGame extends Component {
     }
 
     private getBulletDamage() {
-        const weapon = this.getActiveWeapon();
-        const weaponDamage = weapon ? weapon.weaponStats?.damage || 0 : 0;
-        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
-        const base = weaponDamage * level;
-        const baseAttackPower = createBaseCharacterStats().attackPower;
-        const attackDelta = this.getCharacterStats().attackPower - baseAttackPower;
-        return Math.max(2, base + baseAttackPower * 0.15 + attackDelta);
+        return this.proj.getBulletDamage();
     }
 
     private getFireInterval() {
-        const weapon = this.getActiveWeapon();
-        const weaponFireRate = weapon ? weapon.weaponStats?.fireRate || 0 : 0;
-        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
-        const baseRate = weaponFireRate * level;
-        const attackSpeedBonus = this.getCharacterStats().attackSpeed;
-        return Math.max(0.07, 1 / Math.max(0.15, baseRate + attackSpeedBonus * 0.45));
+        return this.proj.getFireInterval();
     }
 
     private getBulletSpeed() {
-        const weapon = this.getActiveWeapon();
-        const weaponSpeed = weapon?.weaponStats?.bulletSpeed || 0;
-        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
-        const base = weaponSpeed * level;
-        const bonus = this.getCharacterStats().bulletSpeed;
-        return Math.max(260, 300 + base * 140 + bonus * 0.4);
+        return this.proj.getBulletSpeed();
     }
 
     private getBulletPierce() {
-        const weapon = this.getActiveWeapon();
-        const weaponPierce = weapon?.weaponStats?.pierce || 0;
-        const level = weapon ? this.getEquipmentLevel(weapon.id) : 1;
-        const base = weaponPierce * level;
-        const bonus = this.getCharacterStats().pierce;
-        const total = base + bonus * 0.3;
-        const guaranteed = Math.floor(total);
-        return guaranteed + (Math.random() < total - guaranteed ? 1 : 0);
+        return this.proj.getBulletPierce();
     }
 
     private getOwnedWeapons() {
@@ -3892,8 +3542,8 @@ export class RogueShooterGame extends Component {
 
     private clearWorld() {
         for (const enemy of this.enemyMgr.enemies) enemy.node.destroy();
-        for (const bullet of [...this.bullets]) this.recycleBullet(bullet, true);
-        for (const projectile of [...this.enemyProjectiles]) this.recycleEnemyProjectile(projectile, true);
+        for (const bullet of [...this.proj.bullets]) this.proj.recycleBullet(bullet, true);
+        for (const projectile of [...this.proj.enemyProjectiles]) this.proj.recycleEnemyProjectile(projectile, true);
         for (const pickup of this.pickups) pickup.node.destroy();
         for (const floatingText of [...this.floatingTexts]) this.recycleFloatingText(floatingText, true);
         this.clearDroneVisuals();
@@ -3902,8 +3552,6 @@ export class RogueShooterGame extends Component {
         this.enemyMgr.enemySet.clear();
         this.enemyMgr.currentWaveSpecs = [];
         this.enemyMgr.enemySepTick = 999;
-        this.bullets = [];
-        this.enemyProjectiles = [];
         this.pickups = [];
         this.floatingTexts = [];
         this.playerNode = null;
@@ -3914,21 +3562,6 @@ export class RogueShooterGame extends Component {
         this.cs.cameraX = 0;
         this.cs.cameraY = 0;
         if (this.worldNode) this.worldNode.setPosition(0, 0, 0);
-    }
-
-    private removeBullet(bullet: Bullet) {
-        this.recycleBullet(bullet, true);
-    }
-
-    private recycleBullet(bullet: Bullet, removeFromActive: boolean) {
-        if (removeFromActive) {
-            const index = this.bullets.indexOf(bullet);
-            if (index >= 0) this.bullets.splice(index, 1);
-        }
-        bullet.hitIds.clear();
-        bullet.gfx.clear();
-        bullet.node.active = false;
-        this.bulletPool.push(bullet);
     }
 
     private removePickup(pickup: Pickup) {
