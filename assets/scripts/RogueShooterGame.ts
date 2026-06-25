@@ -27,6 +27,8 @@ import {
     view,
 } from 'cc';
 
+import { PanelManager } from './ui/panels';
+
 import {
     RESOURCE_DEFS,
     createEmptyWallet as createResourceWallet,
@@ -312,64 +314,8 @@ export class RogueShooterGame extends Component {
     private joystickBaseGfx: Graphics | null = null;
     private joystickKnobGfx: Graphics | null = null;
 
-    private titleLabel: Label | null = null;
-    private timerLabel: Label | null = null;
-    private statLabel: Label | null = null;
-    private equipmentLabel: Label | null = null;
-    private debugLabel: Label | null = null;
-    private toastLabel: Label | null = null;
-    private hpBar: Graphics | null = null;
-    private xpBar: Graphics | null = null;
-    private menuPanel: Node | null = null;
-    private menuPanelShadow: Node | null = null;
-    private loadingPanel: Node | null = null;
-    private loadingTitleLabel: Label | null = null;
-    private loadingProgressLabel: Label | null = null;
-    private pausePanel: Node | null = null;
-    private pausePanelShadow: Node | null = null;
-    private settingsPanel: Node | null = null;
-    private settingsPanelShadow: Node | null = null;
-    private settingsBodyLabel: Label | null = null;
-    private bgmToggleButton: ButtonView | null = null;
-    private sfxToggleButton: ButtonView | null = null;
-    private infoPanel: Node | null = null;
-    private infoPanelShadow: Node | null = null;
-    private infoTitleLabel: Label | null = null;
-    private infoBodyLabel: Label | null = null;
-    private levelPanel: Node | null = null;
-    private levelPanelShadow: Node | null = null;
-    private levelTitleLabel: Label | null = null;
-    private levelHintLabel: Label | null = null;
-    private levelChoiceButtons: ButtonView[] = [];
-    private levelBackButton: ButtonView | null = null;
-    private levelRefreshButton: ButtonView | null = null;
-    private shopPanel: Node | null = null;
-    private shopPanelShadow: Node | null = null;
-    private shopTitleLabel: Label | null = null;
-    private shopTipLabel: Label | null = null;
-    private shopButtons: ButtonView[] = [];
-    private shopSlotRefreshButtons: ButtonView[] = [];
-    private shopCloseButton: ButtonView | null = null;
-    private hangarPanel: Node | null = null;
-    private hangarPanelShadow: Node | null = null;
-    private hangarTitleLabel: Label | null = null;
-    private hangarStatsLabel: Label | null = null;
-    private hangarTipLabel: Label | null = null;
-    private lootButtons: ButtonView[] = [];
-    private equipmentButtons: ButtonView[] = [];
-    private equippedButtons: ButtonView[] = [];
-    private switchWeaponButton: ButtonView | null = null;
-    private shopButton: ButtonView | null = null;
-    private extractButton: ButtonView | null = null;
-    private pauseButton: ButtonView | null = null;
-    private hangarBackButton: ButtonView | null = null;
-    private prevEquipmentButton: ButtonView | null = null;
-    private nextEquipmentButton: ButtonView | null = null;
-    private equipActionButton: ButtonView | null = null;
-    private upgradeActionButton: ButtonView | null = null;
     private visibleHangarEquipment: EquipmentDef[] = [];
-    private equipmentDetailLabel: Label | null = null;
-    private startButton: ButtonView | null = null;
+    private panels = new PanelManager();
     private artFrames = new Map<string, SpriteFrame>();
     private spriteStripCache = new Map<string, SpriteStripAnimation>();
     private sfxSource: AudioSource | null = null;
@@ -637,7 +583,7 @@ export class RogueShooterGame extends Component {
     }
 
     private loadPlaceholderArt(done: () => void) {
-        this.setLoadingProgress('加载美术资源 0%');
+        this.panels.setLoadingProgress('加载美术资源 0%');
 
         let finishedDirs = 0;
         let totalProgress = 0;
@@ -645,7 +591,7 @@ export class RogueShooterGame extends Component {
         const finishOnce = (message: string) => {
             if (entered) return;
             entered = true;
-            this.setLoadingProgress(message);
+            this.panels.setLoadingProgress(message);
             done();
         };
 
@@ -668,7 +614,7 @@ export class RogueShooterGame extends Component {
                 (finished, total) => {
                     const dirProgress = total > 0 ? finished / total : 1;
                     totalProgress = Math.max(totalProgress, (finishedDirs + dirProgress) / ART_DIRS.length);
-                    this.setLoadingProgress(`加载美术资源 ${Math.round(totalProgress * 100)}%`);
+                    this.panels.setLoadingProgress(`加载美术资源 ${Math.round(totalProgress * 100)}%`);
                 },
                 (error, frames) => {
                     if (error) {
@@ -981,61 +927,61 @@ export class RogueShooterGame extends Component {
         this.rect(root, 'HudShadow', 28, top + 8, 664, 188, '#020617', 18);
         this.rect(root, 'HudPanel', 20, top, 664, 188, '#F8FAFC', 18, '#CBD5E1');
         this.rect(root, 'HudAccent', 42, top + 18, 8, 42, '#F94144', 4);
-        this.titleLabel = this.label(root, 'Title', '星坠幸存者', 58, top + 10, 290, 48, 30, '#0F172A', Label.HorizontalAlign.LEFT);
-        this.timerLabel = this.label(root, 'Timer', '', 440, top + 12, 210, 40, 28, '#0F172A', Label.HorizontalAlign.RIGHT);
-        this.statLabel = this.label(root, 'Stats', '', 58, top + 62, 596, 28, 15, '#475569', Label.HorizontalAlign.LEFT);
-        this.equipmentLabel = this.label(root, 'Equipment', '', 58, top + 92, 210, 28, 16, '#64748B', Label.HorizontalAlign.LEFT);
-        this.switchWeaponButton = this.button(root, 'SwitchWeaponButton', 284, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#B5179E', '#94A3B8', () => this.switchActiveWeapon());
-        this.switchWeaponButton.label.string = '切武器';
-        this.shopButton = this.button(root, 'OpenShopButton', 378, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#4CC9F0', '#94A3B8', () => this.openShop());
-        this.shopButton.label.string = '商店';
-        this.extractButton = this.button(root, 'ExtractButton', 472, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#F8961E', '#94A3B8', () => this.extractBattle());
-        this.extractButton.label.string = '撤离';
-        this.pauseButton = this.button(root, 'PauseButton', 566, top + 82, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.pauseCombat());
-        this.pauseButton.label.string = '暂停';
+        this.panels.titleLabel = this.label(root, 'Title', '星坠幸存者', 58, top + 10, 290, 48, 30, '#0F172A', Label.HorizontalAlign.LEFT);
+        this.panels.timerLabel = this.label(root, 'Timer', '', 440, top + 12, 210, 40, 28, '#0F172A', Label.HorizontalAlign.RIGHT);
+        this.panels.statLabel = this.label(root, 'Stats', '', 58, top + 62, 596, 28, 15, '#475569', Label.HorizontalAlign.LEFT);
+        this.panels.equipmentLabel = this.label(root, 'Equipment', '', 58, top + 92, 210, 28, 16, '#64748B', Label.HorizontalAlign.LEFT);
+        this.panels.switchWeaponButton = this.button(root, 'SwitchWeaponButton', 284, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#B5179E', '#94A3B8', () => this.switchActiveWeapon());
+        this.panels.switchWeaponButton.label.string = '切武器';
+        this.panels.shopButton = this.button(root, 'OpenShopButton', 378, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#4CC9F0', '#94A3B8', () => this.openShop());
+        this.panels.shopButton.label.string = '商店';
+        this.panels.extractButton = this.button(root, 'ExtractButton', 472, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#F8961E', '#94A3B8', () => this.extractBattle());
+        this.panels.extractButton.label.string = '撤离';
+        this.panels.pauseButton = this.button(root, 'PauseButton', 566, top + 82, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.pauseCombat());
+        this.panels.pauseButton.label.string = '暂停';
 
         const hpNode = this.rect(root, 'HpBar', 52, top + 144, 292, 18, '#1E293B', 9);
-        this.hpBar = hpNode.getComponent(Graphics);
+        this.panels.hpBar = hpNode.getComponent(Graphics);
         const xpNode = this.rect(root, 'XpBar', 376, top + 144, 292, 18, '#1E293B', 9);
-        this.xpBar = xpNode.getComponent(Graphics);
+        this.panels.xpBar = xpNode.getComponent(Graphics);
         this.label(root, 'HpLabel', 'HP', 18, top + 139, 34, 28, 15, '#CBD5E1');
         this.label(root, 'XpLabel', 'EXP', 344, top + 139, 38, 28, 15, '#CBD5E1');
-        this.debugLabel = this.label(root, 'DebugHud', '', 54, top + 168, 612, 44, 13, '#94A3B8', Label.HorizontalAlign.LEFT);
-        this.debugLabel.node.active = false;
+        this.panels.debugLabel = this.label(root, 'DebugHud', '', 54, top + 168, 612, 44, 13, '#94A3B8', Label.HorizontalAlign.LEFT);
+        this.panels.debugLabel.node.active = false;
 
         const toastTop = DESIGN_HEIGHT - UI_SAFE_BOTTOM - 76;
         this.rect(root, 'ToastPanelShadow', 46, toastTop + 10, 628, 54, '#020617', 14);
         this.rect(root, 'ToastPanel', 36, toastTop, 648, 58, '#F8FAFC', 14, '#CBD5E1');
-        this.toastLabel = this.label(root, 'Toast', '', 54, toastTop + 6, 612, 46, 19, '#0F172A');
+        this.panels.toastLabel = this.label(root, 'Toast', '', 54, toastTop + 6, 612, 46, 19, '#0F172A');
     }
 
     private buildLevelPanel(root: Node) {
-        this.levelPanelShadow = this.rect(root, 'LevelPanelShadow', 48, 316, 624, 500, '#020617', 22);
-        this.levelPanelShadow.active = false;
+        this.panels.levelPanelShadow = this.rect(root, 'LevelPanelShadow', 48, 316, 624, 500, '#020617', 22);
+        this.panels.levelPanelShadow.active = false;
         const panel = this.rect(root, 'LevelPanel', 36, 302, 648, 500, '#F8FAFC', 22, '#CBD5E1');
         panel.active = false;
-        this.levelPanel = panel;
-        this.levelTitleLabel = this.label(panel, 'LevelTitle', '角色升级', 42, 30, 564, 52, 32, '#0F172A', Label.HorizontalAlign.CENTER, true);
-        this.levelBackButton = this.button(panel, 'LevelBack', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.choosePanelChoice(0), true);
-        this.levelBackButton.label.string = '返回';
-        this.levelHintLabel = this.label(panel, 'LevelHint', '选择一项自身属性成长，战斗会继续。', 42, 86, 564, 42, 20, '#475569', Label.HorizontalAlign.CENTER, true);
+        this.panels.levelPanel = panel;
+        this.panels.levelTitleLabel = this.label(panel, 'LevelTitle', '角色升级', 42, 30, 564, 52, 32, '#0F172A', Label.HorizontalAlign.CENTER, true);
+        this.panels.levelBackButton = this.button(panel, 'LevelBack', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.choosePanelChoice(0), true);
+        this.panels.levelBackButton.label.string = '返回';
+        this.panels.levelHintLabel = this.label(panel, 'LevelHint', '选择一项自身属性成长，战斗会继续。', 42, 86, 564, 42, 20, '#475569', Label.HorizontalAlign.CENTER, true);
 
         for (let i = 0; i < 3; i++) {
             const button = this.button(panel, `LevelChoice_${i}`, 54, 148 + i * 84, 540, 68, '#4CC9F0', '#94A3B8', () => this.choosePanelChoice(i), true);
-            this.levelChoiceButtons.push(button);
+            this.panels.levelChoiceButtons.push(button);
         }
-        this.levelRefreshButton = this.button(panel, 'ChoiceRefresh', 204, 414, 240, 48, '#F8961E', '#94A3B8', () => this.refreshCurrentChoices(), true);
-        this.levelRefreshButton.label.string = `刷新 -${LEVEL_REFRESH_COST}合金`;
+        this.panels.levelRefreshButton = this.button(panel, 'ChoiceRefresh', 204, 414, 240, 48, '#F8961E', '#94A3B8', () => this.refreshCurrentChoices(), true);
+        this.panels.levelRefreshButton.label.string = `刷新 -${LEVEL_REFRESH_COST}合金`;
     }
 
     private buildShopPanel(root: Node) {
-        this.shopPanelShadow = this.rect(root, 'ShopPanelShadow', 36, 172, 648, 940, '#020617', 24);
-        this.shopPanelShadow.active = false;
+        this.panels.shopPanelShadow = this.rect(root, 'ShopPanelShadow', 36, 172, 648, 940, '#020617', 24);
+        this.panels.shopPanelShadow.active = false;
         const panel = this.rect(root, 'ShopPanel', 24, 160, 672, 940, '#F8FAFC', 24, '#CBD5E1');
         panel.active = false;
-        this.shopPanel = panel;
-        this.shopTitleLabel = this.label(panel, 'ShopTitle', '战场商店', 36, 24, 600, 48, 32, '#0F172A', Label.HorizontalAlign.CENTER, true);
-        this.shopTipLabel = this.label(panel, 'ShopTip', '随时打开。每格可购买或消耗少量合金刷新下一件。', 42, 72, 588, 42, 18, '#475569', Label.HorizontalAlign.CENTER, true);
+        this.panels.shopPanel = panel;
+        this.panels.shopTitleLabel = this.label(panel, 'ShopTitle', '战场商店', 36, 24, 600, 48, 32, '#0F172A', Label.HorizontalAlign.CENTER, true);
+        this.panels.shopTipLabel = this.label(panel, 'ShopTip', '随时打开。每格可购买或消耗少量合金刷新下一件。', 42, 72, 588, 42, 18, '#475569', Label.HorizontalAlign.CENTER, true);
 
         for (let i = 0; i < SHOP_ITEM_COUNT; i++) {
             const col = i % 2;
@@ -1054,7 +1000,7 @@ export class RogueShooterGame extends Component {
             );
             button.label.fontSize = 15;
             button.label.lineHeight = 18;
-            this.shopButtons.push(button);
+            this.panels.shopButtons.push(button);
 
             const refreshButton = this.button(
                 panel,
@@ -1070,29 +1016,29 @@ export class RogueShooterGame extends Component {
             );
             refreshButton.label.fontSize = 16;
             refreshButton.label.lineHeight = 18;
-            this.shopSlotRefreshButtons.push(refreshButton);
+            this.panels.shopSlotRefreshButtons.push(refreshButton);
         }
 
-        this.shopCloseButton = this.button(panel, 'ShopClose', 204, 824, 264, 52, '#43AA8B', '#94A3B8', () => this.closeShop(), true);
-        this.shopCloseButton.label.string = '继续战斗';
+        this.panels.shopCloseButton = this.button(panel, 'ShopClose', 204, 824, 264, 52, '#43AA8B', '#94A3B8', () => this.closeShop(), true);
+        this.panels.shopCloseButton.label.string = '继续战斗';
     }
 
     private buildHangarPanel(root: Node) {
-        this.hangarPanelShadow = this.rect(root, 'HangarPanelShadow', 36, 196, 648, 936, '#020617', 24);
-        this.hangarPanelShadow.active = false;
+        this.panels.hangarPanelShadow = this.rect(root, 'HangarPanelShadow', 36, 196, 648, 936, '#020617', 24);
+        this.panels.hangarPanelShadow.active = false;
         const panel = this.rect(root, 'HangarPanel', 24, 184, 672, 936, '#F8FAFC', 24, '#CBD5E1');
         panel.active = false;
-        this.hangarPanel = panel;
+        this.panels.hangarPanel = panel;
 
-        this.hangarTitleLabel = this.label(panel, 'HangarTitle', '', 36, 24, 600, 52, 32, '#0F172A', Label.HorizontalAlign.CENTER, true);
-        this.hangarBackButton = this.button(panel, 'HangarBackHome', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.openMainMenu(), true);
-        this.hangarBackButton.label.string = '首页';
-        this.hangarStatsLabel = this.label(panel, 'HangarStats', '', 46, 78, 580, 98, 20, '#334155', Label.HorizontalAlign.CENTER, true);
-        this.hangarTipLabel = this.label(panel, 'HangarTip', '', 46, 842, 580, 44, 18, '#64748B', Label.HorizontalAlign.CENTER, true);
+        this.panels.hangarTitleLabel = this.label(panel, 'HangarTitle', '', 36, 24, 600, 52, 32, '#0F172A', Label.HorizontalAlign.CENTER, true);
+        this.panels.hangarBackButton = this.button(panel, 'HangarBackHome', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.openMainMenu(), true);
+        this.panels.hangarBackButton.label.string = '首页';
+        this.panels.hangarStatsLabel = this.label(panel, 'HangarStats', '', 46, 78, 580, 98, 20, '#334155', Label.HorizontalAlign.CENTER, true);
+        this.panels.hangarTipLabel = this.label(panel, 'HangarTip', '', 46, 842, 580, 44, 18, '#64748B', Label.HorizontalAlign.CENTER, true);
 
         for (let i = 0; i < 3; i++) {
             const button = this.button(panel, `LootChoice_${i}`, 58, 208 + i * 92, 556, 76, '#F8961E', '#94A3B8', () => this.chooseLoot(i), true);
-            this.lootButtons.push(button);
+            this.panels.lootButtons.push(button);
         }
 
         for (let i = 0; i < EQUIPPED_SLOT_COUNT; i++) {
@@ -1110,10 +1056,10 @@ export class RogueShooterGame extends Component {
                 () => this.selectEquippedSlot(i),
                 true,
             );
-            this.equippedButtons.push(button);
+            this.panels.equippedButtons.push(button);
         }
 
-        this.equipmentDetailLabel = this.label(panel, 'EquipmentDetail', '', 46, 302, 580, 116, 16, '#0F172A', Label.HorizontalAlign.LEFT, true);
+        this.panels.equipmentDetailLabel = this.label(panel, 'EquipmentDetail', '', 46, 302, 580, 116, 16, '#0F172A', Label.HorizontalAlign.LEFT, true);
 
         for (let i = 0; i < HANGAR_EQUIPMENT_SLOTS; i++) {
             const col = i % 2;
@@ -1130,15 +1076,15 @@ export class RogueShooterGame extends Component {
                 () => this.selectVisibleEquipment(i),
                 true,
             );
-            this.equipmentButtons.push(button);
+            this.panels.equipmentButtons.push(button);
         }
 
-        this.prevEquipmentButton = this.button(panel, 'EquipmentPrev', 46, 706, 104, 52, '#64748B', '#94A3B8', () => this.changeEquipmentPage(-1), true);
-        this.equipActionButton = this.button(panel, 'EquipAction', 164, 706, 170, 52, '#4CC9F0', '#94A3B8', () => this.toggleSelectedEquipment(), true);
-        this.upgradeActionButton = this.button(panel, 'UpgradeAction', 348, 706, 170, 52, '#F8961E', '#94A3B8', () => this.upgradeSelectedEquipment(), true);
-        this.nextEquipmentButton = this.button(panel, 'EquipmentNext', 532, 706, 104, 52, '#64748B', '#94A3B8', () => this.changeEquipmentPage(1), true);
+        this.panels.prevEquipmentButton = this.button(panel, 'EquipmentPrev', 46, 706, 104, 52, '#64748B', '#94A3B8', () => this.changeEquipmentPage(-1), true);
+        this.panels.equipActionButton = this.button(panel, 'EquipAction', 164, 706, 170, 52, '#4CC9F0', '#94A3B8', () => this.toggleSelectedEquipment(), true);
+        this.panels.upgradeActionButton = this.button(panel, 'UpgradeAction', 348, 706, 170, 52, '#F8961E', '#94A3B8', () => this.upgradeSelectedEquipment(), true);
+        this.panels.nextEquipmentButton = this.button(panel, 'EquipmentNext', 532, 706, 104, 52, '#64748B', '#94A3B8', () => this.changeEquipmentPage(1), true);
 
-        this.startButton = this.button(panel, 'StartBattle', 174, 776, 324, 58, '#43AA8B', '#94A3B8', () => this.beginBattle(false), true);
+        this.panels.startButton = this.button(panel, 'StartBattle', 174, 776, 324, 58, '#43AA8B', '#94A3B8', () => this.beginBattle(false), true);
     }
 
     private buildJoystick(root: Node) {
@@ -1161,7 +1107,7 @@ export class RogueShooterGame extends Component {
     private buildLoadingPanel(root: Node) {
         const panel = this.rect(root, 'LoadingPanel', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#111827');
         panel.active = true;
-        this.loadingPanel = panel;
+        this.panels.loadingPanel = panel;
         const gfx = panel.getComponent(Graphics);
         if (gfx) {
             gfx.fillColor = this.hex('#172554', 210);
@@ -1175,22 +1121,18 @@ export class RogueShooterGame extends Component {
             gfx.circle(360, 596, 160);
             gfx.stroke();
         }
-        this.loadingTitleLabel = this.label(panel, 'LoadingTitle', '星坠幸存者', 70, 420, 580, 72, 54, '#FFF7ED', Label.HorizontalAlign.CENTER, true);
+        this.panels.loadingTitleLabel = this.label(panel, 'LoadingTitle', '星坠幸存者', 70, 420, 580, 72, 54, '#FFF7ED', Label.HorizontalAlign.CENTER, true);
         this.label(panel, 'LoadingSubTitle', '正在整备星舰与武器', 92, 506, 536, 40, 24, '#FDE68A', Label.HorizontalAlign.CENTER, true);
-        this.loadingProgressLabel = this.label(panel, 'LoadingProgress', '加载中...', 92, 606, 536, 44, 22, '#E2E8F0', Label.HorizontalAlign.CENTER, true);
+        this.panels.loadingProgressLabel = this.label(panel, 'LoadingProgress', '加载中...', 92, 606, 536, 44, 22, '#E2E8F0', Label.HorizontalAlign.CENTER, true);
         this.label(panel, 'LoadingHint', '提示：拾取经验升级，撑不住时可撤离带回资源', 76, 1040, 568, 58, 21, '#CBD5E1', Label.HorizontalAlign.CENTER, true);
     }
 
-    private setLoadingProgress(message: string) {
-        if (this.loadingProgressLabel) this.loadingProgressLabel.string = message;
-    }
-
     private buildMenuPanel(root: Node) {
-        this.menuPanelShadow = this.rect(root, 'MenuPanelShadow', 48, 220, 624, 790, '#020617', 28);
-        this.menuPanelShadow.active = false;
+        this.panels.menuPanelShadow = this.rect(root, 'MenuPanelShadow', 48, 220, 624, 790, '#020617', 28);
+        this.panels.menuPanelShadow.active = false;
         const panel = this.rect(root, 'MenuPanel', 36, 206, 648, 790, '#F8FAFC', 28, '#CBD5E1');
         panel.active = false;
-        this.menuPanel = panel;
+        this.panels.menuPanel = panel;
         this.label(panel, 'MenuTitle', '星坠幸存者', 50, 52, 548, 68, 46, '#0F172A', Label.HorizontalAlign.CENTER, true);
         this.label(panel, 'MenuSubTitle', '卡通科幻肉鸽射击 · 自动开火 · 无尽撤离', 56, 126, 536, 38, 20, '#475569', Label.HorizontalAlign.CENTER, true);
         this.label(panel, 'AgeHint', '适龄提示：12+｜健康游戏，适度娱乐', 56, 176, 536, 32, 18, '#64748B', Label.HorizontalAlign.CENTER, true);
@@ -1209,11 +1151,11 @@ export class RogueShooterGame extends Component {
     }
 
     private buildPausePanel(root: Node) {
-        this.pausePanelShadow = this.rect(root, 'PausePanelShadow', 78, 372, 564, 520, '#020617', 24);
-        this.pausePanelShadow.active = false;
+        this.panels.pausePanelShadow = this.rect(root, 'PausePanelShadow', 78, 372, 564, 520, '#020617', 24);
+        this.panels.pausePanelShadow.active = false;
         const panel = this.rect(root, 'PausePanel', 66, 360, 588, 520, '#F8FAFC', 24, '#CBD5E1');
         panel.active = false;
-        this.pausePanel = panel;
+        this.panels.pausePanel = panel;
         this.label(panel, 'PauseTitle', '暂停', 42, 38, 504, 58, 38, '#0F172A', Label.HorizontalAlign.CENTER, true);
         this.label(panel, 'PauseHint', '战斗已暂停，可继续、调整声音或返回机库。', 50, 104, 488, 44, 20, '#475569', Label.HorizontalAlign.CENTER, true);
         const resume = this.button(panel, 'PauseResume', 124, 178, 340, 60, '#43AA8B', '#94A3B8', () => this.resumeFromPause(), true);
@@ -1227,28 +1169,28 @@ export class RogueShooterGame extends Component {
     }
 
     private buildSettingsPanel(root: Node) {
-        this.settingsPanelShadow = this.rect(root, 'SettingsPanelShadow', 86, 386, 548, 490, '#020617', 24);
-        this.settingsPanelShadow.active = false;
+        this.panels.settingsPanelShadow = this.rect(root, 'SettingsPanelShadow', 86, 386, 548, 490, '#020617', 24);
+        this.panels.settingsPanelShadow.active = false;
         const panel = this.rect(root, 'SettingsPanel', 74, 374, 572, 490, '#F8FAFC', 24, '#CBD5E1');
         panel.active = false;
-        this.settingsPanel = panel;
+        this.panels.settingsPanel = panel;
         this.label(panel, 'SettingsTitle', '设置', 44, 36, 484, 58, 36, '#0F172A', Label.HorizontalAlign.CENTER, true);
-        this.settingsBodyLabel = this.label(panel, 'SettingsBody', '', 54, 104, 464, 80, 20, '#475569', Label.HorizontalAlign.CENTER, true);
-        this.bgmToggleButton = this.button(panel, 'BgmToggle', 116, 204, 340, 58, '#4CC9F0', '#94A3B8', () => this.toggleBgm(), true);
-        this.sfxToggleButton = this.button(panel, 'SfxToggle', 116, 278, 340, 58, '#B5179E', '#94A3B8', () => this.toggleSfx(), true);
+        this.panels.settingsBodyLabel = this.label(panel, 'SettingsBody', '', 54, 104, 464, 80, 20, '#475569', Label.HorizontalAlign.CENTER, true);
+        this.panels.bgmToggleButton = this.button(panel, 'BgmToggle', 116, 204, 340, 58, '#4CC9F0', '#94A3B8', () => this.toggleBgm(), true);
+        this.panels.sfxToggleButton = this.button(panel, 'SfxToggle', 116, 278, 340, 58, '#B5179E', '#94A3B8', () => this.toggleSfx(), true);
         const close = this.button(panel, 'SettingsClose', 116, 366, 340, 58, '#43AA8B', '#94A3B8', () => this.closeSettingsPanel(), true);
         close.label.string = '返回';
         this.refreshSettingsPanel();
     }
 
     private buildInfoPanel(root: Node) {
-        this.infoPanelShadow = this.rect(root, 'InfoPanelShadow', 64, 304, 592, 646, '#020617', 24);
-        this.infoPanelShadow.active = false;
+        this.panels.infoPanelShadow = this.rect(root, 'InfoPanelShadow', 64, 304, 592, 646, '#020617', 24);
+        this.panels.infoPanelShadow.active = false;
         const panel = this.rect(root, 'InfoPanel', 52, 292, 616, 646, '#F8FAFC', 24, '#CBD5E1');
         panel.active = false;
-        this.infoPanel = panel;
-        this.infoTitleLabel = this.label(panel, 'InfoTitle', '', 44, 34, 528, 58, 34, '#0F172A', Label.HorizontalAlign.CENTER, true);
-        this.infoBodyLabel = this.label(panel, 'InfoBody', '', 54, 112, 508, 390, 20, '#334155', Label.HorizontalAlign.LEFT, true);
+        this.panels.infoPanel = panel;
+        this.panels.infoTitleLabel = this.label(panel, 'InfoTitle', '', 44, 34, 528, 58, 34, '#0F172A', Label.HorizontalAlign.CENTER, true);
+        this.panels.infoBodyLabel = this.label(panel, 'InfoBody', '', 54, 112, 508, 390, 20, '#334155', Label.HorizontalAlign.LEFT, true);
         const close = this.button(panel, 'InfoClose', 148, 532, 320, 58, '#43AA8B', '#94A3B8', () => this.closeInfoPanel(), true);
         close.label.string = '返回';
     }
@@ -1261,44 +1203,17 @@ export class RogueShooterGame extends Component {
         this.clearWorld();
         this.phase = 'menu';
         this.requestBgm('bgm_hangar');
-        this.setAllOverlayPanelsActive(false);
-        if (this.loadingPanel) this.loadingPanel.active = false;
-        if (this.menuPanel) this.menuPanel.active = true;
-        if (this.menuPanelShadow) this.menuPanelShadow.active = true;
-        this.setCombatHudControlsActive(false);
+        this.panels.hideAllOverlays();
+        if (this.panels.loadingPanel) this.panels.loadingPanel.active = false;
+        if (this.panels.menuPanel) this.panels.menuPanel.active = true;
+        if (this.panels.menuPanelShadow) this.panels.menuPanelShadow.active = true;
+        this.panels.setCombatHudControlsActive(false);
         this.showToast('');
     }
 
     private openHangarFromMenu() {
-        this.setMenuPanelActive(false);
+        this.panels.setMenuPanelActive(false);
         this.showHangar('选择装备后开始出击。');
-    }
-
-    private setMenuPanelActive(active: boolean) {
-        if (this.menuPanel) this.menuPanel.active = active;
-        if (this.menuPanelShadow) this.menuPanelShadow.active = active;
-    }
-
-    private setAllOverlayPanelsActive(active: boolean) {
-        this.setMenuPanelActive(active);
-        if (this.pausePanel) this.pausePanel.active = active;
-        if (this.pausePanelShadow) this.pausePanelShadow.active = active;
-        if (this.settingsPanel) this.settingsPanel.active = active;
-        if (this.settingsPanelShadow) this.settingsPanelShadow.active = active;
-        if (this.infoPanel) this.infoPanel.active = active;
-        if (this.infoPanelShadow) this.infoPanelShadow.active = active;
-        if (this.levelPanel) this.levelPanel.active = active;
-        if (this.levelPanelShadow) this.levelPanelShadow.active = active;
-        this.setShopPanelActive(active);
-        if (this.hangarPanel) this.hangarPanel.active = active;
-        if (this.hangarPanelShadow) this.hangarPanelShadow.active = active;
-    }
-
-    private setCombatHudControlsActive(active: boolean) {
-        if (this.switchWeaponButton) this.switchWeaponButton.node.active = active;
-        if (this.shopButton) this.shopButton.node.active = active;
-        if (this.extractButton) this.extractButton.node.active = active;
-        if (this.pauseButton) this.pauseButton.node.active = active;
     }
 
     private beginBattle(initial: boolean) {
@@ -1359,10 +1274,10 @@ export class RogueShooterGame extends Component {
         this.touchActive = false;
         this.touchVector.set(0, 0);
 
-        this.setAllOverlayPanelsActive(false);
+        this.panels.hideAllOverlays();
         if (this.joystickBase) this.joystickBase.active = false;
         if (this.joystickKnob) this.joystickKnob.active = false;
-        this.setCombatHudControlsActive(true);
+        this.panels.setCombatHudControlsActive(true);
 
         this.createPlayer();
         this.refreshHud();
@@ -2986,11 +2901,11 @@ export class RogueShooterGame extends Component {
     }
 
     private renderChoicePanel(title: string, hint: string, choices: LevelUpgrade[], refreshCost: number) {
-        if (this.levelPanel) this.levelPanel.active = true;
-        if (this.levelPanelShadow) this.levelPanelShadow.active = true;
-        if (this.levelTitleLabel) this.levelTitleLabel.string = title;
-        if (this.levelHintLabel) this.levelHintLabel.string = hint;
-        this.levelChoiceButtons.forEach((button, index) => {
+        if (this.panels.levelPanel) this.panels.levelPanel.active = true;
+        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = true;
+        if (this.panels.levelTitleLabel) this.panels.levelTitleLabel.string = title;
+        if (this.panels.levelHintLabel) this.panels.levelHintLabel.string = hint;
+        this.panels.levelChoiceButtons.forEach((button, index) => {
             const choice = choices[index];
             button.node.active = !!choice;
             if (!choice) return;
@@ -2998,10 +2913,10 @@ export class RogueShooterGame extends Component {
             button.label.string = `${choice.category}｜${choice.name}\n${choice.desc}`;
             this.drawButton(button, false);
         });
-        if (this.levelRefreshButton) {
-            this.levelRefreshButton.node.active = true;
-            this.levelRefreshButton.label.string = `刷新 -${refreshCost}合金`;
-            this.drawButton(this.levelRefreshButton, this.getSpendableAlloy() < refreshCost);
+        if (this.panels.levelRefreshButton) {
+            this.panels.levelRefreshButton.node.active = true;
+            this.panels.levelRefreshButton.label.string = `刷新 -${refreshCost}合金`;
+            this.drawButton(this.panels.levelRefreshButton, this.getSpendableAlloy() < refreshCost);
         }
     }
 
@@ -3018,8 +2933,8 @@ export class RogueShooterGame extends Component {
         const choice = this.pendingLevelChoices[index];
         if (!choice) return;
         this.applyLevelUpgrade(choice.id);
-        if (this.levelPanel) this.levelPanel.active = false;
-        if (this.levelPanelShadow) this.levelPanelShadow.active = false;
+        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
+        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
         this.resumeCombatAfterChoice();
         this.showToast(`属性成长：${choice.name}`);
     }
@@ -3029,8 +2944,8 @@ export class RogueShooterGame extends Component {
         const choice = this.pendingItemChoices[index];
         if (!choice) return;
         this.applyRunItem(choice.id);
-        if (this.levelPanel) this.levelPanel.active = false;
-        if (this.levelPanelShadow) this.levelPanelShadow.active = false;
+        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
+        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
         this.resumeCombatAfterChoice();
         this.showToast(`获得本局道具：${choice.name}`);
     }
@@ -3118,28 +3033,28 @@ export class RogueShooterGame extends Component {
     private openSettlement(reason: BattleEndReason, reward: ResourceWallet) {
         this.phase = 'hangar';
         this.requestBgm('bgm_hangar');
-        this.setCombatHudControlsActive(false);
-        this.setMenuPanelActive(false);
-        if (this.pausePanel) this.pausePanel.active = false;
-        if (this.pausePanelShadow) this.pausePanelShadow.active = false;
-        if (this.hangarPanel) this.hangarPanel.active = true;
-        if (this.hangarPanelShadow) this.hangarPanelShadow.active = true;
-        this.setShopPanelActive(false);
-        if (this.levelPanel) this.levelPanel.active = false;
-        if (this.levelPanelShadow) this.levelPanelShadow.active = false;
-        if (this.hangarTitleLabel) this.hangarTitleLabel.string = reason === 'extract' ? '撤离成功' : '机体损毁';
-        if (this.hangarStatsLabel) {
-            this.hangarStatsLabel.string = [
+        this.panels.setCombatHudControlsActive(false);
+        this.panels.setMenuPanelActive(false);
+        if (this.panels.pausePanel) this.panels.pausePanel.active = false;
+        if (this.panels.pausePanelShadow) this.panels.pausePanelShadow.active = false;
+        if (this.panels.hangarPanel) this.panels.hangarPanel.active = true;
+        if (this.panels.hangarPanelShadow) this.panels.hangarPanelShadow.active = true;
+        this.panels.setShopPanelActive(false);
+        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
+        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
+        if (this.panels.hangarTitleLabel) this.panels.hangarTitleLabel.string = reason === 'extract' ? '撤离成功' : '机体损毁';
+        if (this.panels.hangarStatsLabel) {
+            this.panels.hangarStatsLabel.string = [
                 `存活 ${this.formatTime(this.combatTime)}  Boss ${this.bossKills}  击杀 ${this.killCount}`,
                 `本次带回：${this.formatWallet(reward)}`,
                 `库存：${this.formatWallet(this.getInventoryWallet())}`,
             ].join('\n');
         }
 
-        this.lootButtons.forEach((button) => button.node.active = false);
-        this.setHangarControlsActive(true);
-        if (this.startButton) this.startButton.node.active = true;
-        if (this.hangarTipLabel) this.hangarTipLabel.string = reason === 'extract'
+        this.panels.lootButtons.forEach((button) => button.node.active = false);
+        this.panels.setHangarControlsActive(true);
+        if (this.panels.startButton) this.panels.startButton.node.active = true;
+        if (this.panels.hangarTipLabel) this.panels.hangarTipLabel.string = reason === 'extract'
             ? '主动撤离保留全部结算奖励。调整装备后可继续无尽出击。'
             : '死亡会折损部分时间奖励。升级装备后再试一次。';
         this.refreshEquipmentButtons();
@@ -3153,9 +3068,9 @@ export class RogueShooterGame extends Component {
         this.touchVector.set(0, 0);
         this.updateJoystickView();
         this.ensureShopOffers();
-        this.setShopPanelActive(true);
-        if (this.levelPanel) this.levelPanel.active = false;
-        if (this.levelPanelShadow) this.levelPanelShadow.active = false;
+        this.panels.setShopPanelActive(true);
+        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
+        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
         this.renderShop();
         this.showToast('战场商店已打开，购买或刷新单个格子。');
     }
@@ -3188,17 +3103,17 @@ export class RogueShooterGame extends Component {
 
     private closeShop() {
         if (this.phase !== 'shop') return;
-        this.setShopPanelActive(false);
+        this.panels.setShopPanelActive(false);
         this.phase = 'combat';
         this.showToast('商店离开，战斗继续。');
     }
 
     private renderShop() {
-        if (this.shopTitleLabel) this.shopTitleLabel.string = `战场商店  ${this.formatTime(this.combatTime)}`;
-        if (this.shopTipLabel) {
-            this.shopTipLabel.string = `可用合金 ${this.getSpendableAlloy()}。购买后自动补货；单格刷新 -${SHOP_REFRESH_COST} 合金。`;
+        if (this.panels.shopTitleLabel) this.panels.shopTitleLabel.string = `战场商店  ${this.formatTime(this.combatTime)}`;
+        if (this.panels.shopTipLabel) {
+            this.panels.shopTipLabel.string = `可用合金 ${this.getSpendableAlloy()}。购买后自动补货；单格刷新 -${SHOP_REFRESH_COST} 合金。`;
         }
-        this.shopButtons.forEach((button, index) => {
+        this.panels.shopButtons.forEach((button, index) => {
             const item = this.shopOffers[index];
             button.node.active = !!item;
             if (!item) return;
@@ -3207,19 +3122,14 @@ export class RogueShooterGame extends Component {
             button.label.string = `${item.category} T${item.tier}  合金${cost}\n${item.name}\n${item.desc}`;
             this.drawButton(button, this.getSpendableAlloy() < cost);
         });
-        this.shopSlotRefreshButtons.forEach((button) => {
+        this.panels.shopSlotRefreshButtons.forEach((button) => {
             button.label.string = `刷新此格 -${SHOP_REFRESH_COST}`;
             this.drawButton(button, this.getSpendableAlloy() < SHOP_REFRESH_COST);
         });
-        if (this.shopCloseButton) {
-            this.shopCloseButton.label.string = '继续战斗';
-            this.drawButton(this.shopCloseButton, false);
+        if (this.panels.shopCloseButton) {
+            this.panels.shopCloseButton.label.string = '继续战斗';
+            this.drawButton(this.panels.shopCloseButton, false);
         }
-    }
-
-    private setShopPanelActive(active: boolean) {
-        if (this.shopPanel) this.shopPanel.active = active;
-        if (this.shopPanelShadow) this.shopPanelShadow.active = active;
     }
 
     private pauseCombat() {
@@ -3229,20 +3139,20 @@ export class RogueShooterGame extends Component {
         this.touchActive = false;
         this.touchVector.set(0, 0);
         this.updateJoystickView();
-        if (this.pausePanel) this.pausePanel.active = true;
-        if (this.pausePanelShadow) this.pausePanelShadow.active = true;
+        if (this.panels.pausePanel) this.panels.pausePanel.active = true;
+        if (this.panels.pausePanelShadow) this.panels.pausePanelShadow.active = true;
         this.showToast('');
     }
 
     private resumeFromPause() {
         if (this.phase !== 'paused') return;
         this.phase = this.phaseBeforePause === 'combat' ? 'combat' : 'combat';
-        if (this.pausePanel) this.pausePanel.active = false;
-        if (this.pausePanelShadow) this.pausePanelShadow.active = false;
-        if (this.settingsPanel) this.settingsPanel.active = false;
-        if (this.settingsPanelShadow) this.settingsPanelShadow.active = false;
-        if (this.infoPanel) this.infoPanel.active = false;
-        if (this.infoPanelShadow) this.infoPanelShadow.active = false;
+        if (this.panels.pausePanel) this.panels.pausePanel.active = false;
+        if (this.panels.pausePanelShadow) this.panels.pausePanelShadow.active = false;
+        if (this.panels.settingsPanel) this.panels.settingsPanel.active = false;
+        if (this.panels.settingsPanelShadow) this.panels.settingsPanelShadow.active = false;
+        if (this.panels.infoPanel) this.panels.infoPanel.active = false;
+        if (this.panels.infoPanelShadow) this.panels.infoPanelShadow.active = false;
         this.requestPhaseBgm();
         this.showToast('战斗继续。');
     }
@@ -3250,20 +3160,20 @@ export class RogueShooterGame extends Component {
     private returnToHangarFromPause() {
         if (this.phase !== 'paused') return;
         this.clearWorld();
-        this.setAllOverlayPanelsActive(false);
+        this.panels.hideAllOverlays();
         this.showHangar('已返回机库，可调整装备后重新出击。');
     }
 
     private openSettingsPanel() {
         if (this.phase === 'combat') this.pauseCombat();
-        if (this.settingsPanel) this.settingsPanel.active = true;
-        if (this.settingsPanelShadow) this.settingsPanelShadow.active = true;
+        if (this.panels.settingsPanel) this.panels.settingsPanel.active = true;
+        if (this.panels.settingsPanelShadow) this.panels.settingsPanelShadow.active = true;
         this.refreshSettingsPanel();
     }
 
     private closeSettingsPanel() {
-        if (this.settingsPanel) this.settingsPanel.active = false;
-        if (this.settingsPanelShadow) this.settingsPanelShadow.active = false;
+        if (this.panels.settingsPanel) this.panels.settingsPanel.active = false;
+        if (this.panels.settingsPanelShadow) this.panels.settingsPanelShadow.active = false;
     }
 
     private toggleBgm() {
@@ -3278,16 +3188,16 @@ export class RogueShooterGame extends Component {
     }
 
     private refreshSettingsPanel() {
-        if (this.settingsBodyLabel) {
-            this.settingsBodyLabel.string = `音乐：${this.bgmVolume > 0 ? '开启' : '关闭'}\n音效：${this.sfxVolume > 0 ? '开启' : '关闭'}`;
+        if (this.panels.settingsBodyLabel) {
+            this.panels.settingsBodyLabel.string = `音乐：${this.bgmVolume > 0 ? '开启' : '关闭'}\n音效：${this.sfxVolume > 0 ? '开启' : '关闭'}`;
         }
-        if (this.bgmToggleButton) {
-            this.bgmToggleButton.label.string = this.bgmVolume > 0 ? '关闭音乐' : '开启音乐';
-            this.drawButton(this.bgmToggleButton, false);
+        if (this.panels.bgmToggleButton) {
+            this.panels.bgmToggleButton.label.string = this.bgmVolume > 0 ? '关闭音乐' : '开启音乐';
+            this.drawButton(this.panels.bgmToggleButton, false);
         }
-        if (this.sfxToggleButton) {
-            this.sfxToggleButton.label.string = this.sfxVolume > 0 ? '关闭音效' : '开启音效';
-            this.drawButton(this.sfxToggleButton, false);
+        if (this.panels.sfxToggleButton) {
+            this.panels.sfxToggleButton.label.string = this.sfxVolume > 0 ? '关闭音效' : '开启音效';
+            this.drawButton(this.panels.sfxToggleButton, false);
         }
     }
 
@@ -3312,15 +3222,15 @@ export class RogueShooterGame extends Component {
 
     private openInfoPanel(title: string, body: string) {
         if (this.phase === 'combat') this.pauseCombat();
-        if (this.infoTitleLabel) this.infoTitleLabel.string = title;
-        if (this.infoBodyLabel) this.infoBodyLabel.string = body;
-        if (this.infoPanel) this.infoPanel.active = true;
-        if (this.infoPanelShadow) this.infoPanelShadow.active = true;
+        if (this.panels.infoTitleLabel) this.panels.infoTitleLabel.string = title;
+        if (this.panels.infoBodyLabel) this.panels.infoBodyLabel.string = body;
+        if (this.panels.infoPanel) this.panels.infoPanel.active = true;
+        if (this.panels.infoPanelShadow) this.panels.infoPanelShadow.active = true;
     }
 
     private closeInfoPanel() {
-        if (this.infoPanel) this.infoPanel.active = false;
-        if (this.infoPanelShadow) this.infoPanelShadow.active = false;
+        if (this.panels.infoPanel) this.panels.infoPanel.active = false;
+        if (this.panels.infoPanelShadow) this.panels.infoPanelShadow.active = false;
     }
 
     private calculateEndlessReward(reason: BattleEndReason): ResourceWallet {
@@ -3453,27 +3363,27 @@ export class RogueShooterGame extends Component {
     private showHangar(message: string) {
         this.phase = 'hangar';
         this.requestBgm('bgm_hangar');
-        this.setMenuPanelActive(false);
-        if (this.pausePanel) this.pausePanel.active = false;
-        if (this.pausePanelShadow) this.pausePanelShadow.active = false;
-        if (this.settingsPanel) this.settingsPanel.active = false;
-        if (this.settingsPanelShadow) this.settingsPanelShadow.active = false;
-        if (this.infoPanel) this.infoPanel.active = false;
-        if (this.infoPanelShadow) this.infoPanelShadow.active = false;
-        if (this.hangarPanel) this.hangarPanel.active = true;
-        if (this.hangarPanelShadow) this.hangarPanelShadow.active = true;
-        if (this.levelPanel) this.levelPanel.active = false;
-        if (this.levelPanelShadow) this.levelPanelShadow.active = false;
-        this.setShopPanelActive(false);
-        this.setCombatHudControlsActive(false);
-        this.lootButtons.forEach((button) => button.node.active = false);
-        this.setHangarControlsActive(true);
-        if (this.startButton) {
-            this.startButton.node.active = true;
-            this.startButton.label.string = `开始第 ${this.battlesWon + 1} 次出击`;
+        this.panels.setMenuPanelActive(false);
+        if (this.panels.pausePanel) this.panels.pausePanel.active = false;
+        if (this.panels.pausePanelShadow) this.panels.pausePanelShadow.active = false;
+        if (this.panels.settingsPanel) this.panels.settingsPanel.active = false;
+        if (this.panels.settingsPanelShadow) this.panels.settingsPanelShadow.active = false;
+        if (this.panels.infoPanel) this.panels.infoPanel.active = false;
+        if (this.panels.infoPanelShadow) this.panels.infoPanelShadow.active = false;
+        if (this.panels.hangarPanel) this.panels.hangarPanel.active = true;
+        if (this.panels.hangarPanelShadow) this.panels.hangarPanelShadow.active = true;
+        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
+        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
+        this.panels.setShopPanelActive(false);
+        this.panels.setCombatHudControlsActive(false);
+        this.panels.lootButtons.forEach((button) => button.node.active = false);
+        this.panels.setHangarControlsActive(true);
+        if (this.panels.startButton) {
+            this.panels.startButton.node.active = true;
+            this.panels.startButton.label.string = `开始第 ${this.battlesWon + 1} 次出击`;
         }
-        if (this.hangarTitleLabel) this.hangarTitleLabel.string = '机库整备';
-        if (this.hangarTipLabel) this.hangarTipLabel.string = message;
+        if (this.panels.hangarTitleLabel) this.panels.hangarTitleLabel.string = '机库整备';
+        if (this.panels.hangarTipLabel) this.panels.hangarTipLabel.string = message;
         this.refreshEquipmentButtons();
         this.refreshHud();
     }
@@ -3536,17 +3446,6 @@ export class RogueShooterGame extends Component {
         }
 
         return this.shuffle(choices).slice(0, 3);
-    }
-
-    private setHangarControlsActive(active: boolean) {
-        this.equippedButtons.forEach((button) => button.node.active = active);
-        this.equipmentButtons.forEach((button) => button.node.active = active);
-        if (this.prevEquipmentButton) this.prevEquipmentButton.node.active = active;
-        if (this.nextEquipmentButton) this.nextEquipmentButton.node.active = active;
-        if (this.equipActionButton) this.equipActionButton.node.active = active;
-        if (this.upgradeActionButton) this.upgradeActionButton.node.active = active;
-        if (this.hangarBackButton) this.hangarBackButton.node.active = active;
-        if (this.equipmentDetailLabel) this.equipmentDetailLabel.node.active = active;
     }
 
     private selectVisibleEquipment(index: number) {
@@ -3674,7 +3573,7 @@ export class RogueShooterGame extends Component {
         this.normalizeEquippedEquipment();
         this.visibleHangarEquipment = this.getVisibleHangarEquipment();
         this.refreshEquippedButtons();
-        this.equipmentButtons.forEach((button, index) => {
+        this.panels.equipmentButtons.forEach((button, index) => {
             const equipment = this.visibleHangarEquipment[index];
             if (!equipment) {
                 button.node.active = false;
@@ -3694,11 +3593,11 @@ export class RogueShooterGame extends Component {
             this.drawButton(button, false);
         });
         this.refreshHangarActions();
-        if (this.hangarStatsLabel && this.phase === 'hangar') {
+        if (this.panels.hangarStatsLabel && this.phase === 'hangar') {
             const gearSummary = GEAR_SLOT_ORDER
                 .map((slot) => `${GEAR_SLOT_LABELS[slot]}${this.getEquippedGearForSlot(slot) ? '1' : '0'}/1`)
                 .join('  ');
-            this.hangarStatsLabel.string = [
+            this.panels.hangarStatsLabel.string = [
                 `已完成出击 ${this.battlesWon} 次  下一次 ${this.battlesWon + 1}`,
                 `库存：${this.formatWallet(this.getInventoryWallet())}`,
                 `出战：武器 ${this.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}（战斗中切换）  ${gearSummary}`,
@@ -3708,7 +3607,7 @@ export class RogueShooterGame extends Component {
     }
 
     private refreshEquippedButtons() {
-        this.equippedButtons.forEach((button, index) => {
+        this.panels.equippedButtons.forEach((button, index) => {
             const equipment = this.getEquipmentForDisplaySlot(index);
             const slotName = this.getEquippedSlotName(index);
             if (!equipment) {
@@ -3741,52 +3640,52 @@ export class RogueShooterGame extends Component {
     private refreshHangarActions() {
         const selected = this.getSelectedEquipment();
         const pageCount = this.getEquipmentPageCount();
-        if (this.prevEquipmentButton) {
-            this.prevEquipmentButton.label.string = '上一页';
-            this.drawButton(this.prevEquipmentButton, this.equipmentPage <= 0);
+        if (this.panels.prevEquipmentButton) {
+            this.panels.prevEquipmentButton.label.string = '上一页';
+            this.drawButton(this.panels.prevEquipmentButton, this.equipmentPage <= 0);
         }
-        if (this.nextEquipmentButton) {
-            this.nextEquipmentButton.label.string = '下一页';
-            this.drawButton(this.nextEquipmentButton, this.equipmentPage >= pageCount - 1);
+        if (this.panels.nextEquipmentButton) {
+            this.panels.nextEquipmentButton.label.string = '下一页';
+            this.drawButton(this.panels.nextEquipmentButton, this.equipmentPage >= pageCount - 1);
         }
 
-        if (this.equipActionButton) {
+        if (this.panels.equipActionButton) {
             if (!selected || !this.ownedEquipment.has(selected.id)) {
-                this.equipActionButton.label.string = selected ? '合成' : '未解锁';
-                this.drawButton(this.equipActionButton, !selected || !this.hasResources(this.getCraftCost(selected)));
+                this.panels.equipActionButton.label.string = selected ? '合成' : '未解锁';
+                this.drawButton(this.panels.equipActionButton, !selected || !this.hasResources(this.getCraftCost(selected)));
             } else {
                 const replacingGear = selected.kind === 'gear'
                     && !!selected.gearSlot
                     && !!this.getEquippedGearForSlot(selected.gearSlot)
                     && !this.isEquipped(selected.id);
-                this.equipActionButton.label.string = this.isEquipped(selected.id) ? '卸下' : replacingGear ? '替换' : '加入出战';
-                this.drawButton(this.equipActionButton, false);
+                this.panels.equipActionButton.label.string = this.isEquipped(selected.id) ? '卸下' : replacingGear ? '替换' : '加入出战';
+                this.drawButton(this.panels.equipActionButton, false);
             }
         }
 
-        if (this.upgradeActionButton) {
+        if (this.panels.upgradeActionButton) {
             if (!selected || !this.ownedEquipment.has(selected.id)) {
-                this.upgradeActionButton.label.string = '升级';
-                this.drawButton(this.upgradeActionButton, true);
+                this.panels.upgradeActionButton.label.string = '升级';
+                this.drawButton(this.panels.upgradeActionButton, true);
             } else {
                 const level = this.getEquipmentLevel(selected.id);
                 const cost = this.getUpgradeCost(selected);
                 const disabled = level >= selected.maxLevel || !this.hasResources(cost);
-                this.upgradeActionButton.label.string = level >= selected.maxLevel
+                this.panels.upgradeActionButton.label.string = level >= selected.maxLevel
                     ? '已满级'
                     : `升级 ${this.formatCost(cost)}`;
-                this.drawButton(this.upgradeActionButton, disabled);
+                this.drawButton(this.panels.upgradeActionButton, disabled);
             }
         }
 
-        if (this.startButton) {
+        if (this.panels.startButton) {
             const canStart = this.getEquippedWeapons().length > 0;
-            this.startButton.label.string = `开始第 ${this.battlesWon + 1} 次出击`;
-            this.drawButton(this.startButton, !canStart);
+            this.panels.startButton.label.string = `开始第 ${this.battlesWon + 1} 次出击`;
+            this.drawButton(this.panels.startButton, !canStart);
         }
 
-        if (this.equipmentDetailLabel) {
-            this.equipmentDetailLabel.string = selected ? this.formatEquipmentDetail(selected) : '仓库为空';
+        if (this.panels.equipmentDetailLabel) {
+            this.panels.equipmentDetailLabel.string = selected ? this.formatEquipmentDetail(selected) : '仓库为空';
         }
     }
 
@@ -3836,70 +3735,70 @@ export class RogueShooterGame extends Component {
     }
 
     private refreshHud() {
-        if (this.titleLabel) this.titleLabel.string = `星坠幸存者  出击 ${this.battlesWon + 1}`;
+        if (this.panels.titleLabel) this.panels.titleLabel.string = `星坠幸存者  出击 ${this.battlesWon + 1}`;
         const inRun = this.phase === 'combat' || this.phase === 'level-up' || this.phase === 'item-choice' || this.phase === 'shop';
-        if (this.timerLabel) {
+        if (this.panels.timerLabel) {
             const waveRemain = Math.max(0, Math.ceil(this.waveDuration - this.waveElapsed));
             const waveText = this.isBossWave()
                 ? `第${Math.max(1, this.waveIndex)}波 Boss${this.bossDefeatedThisWave ? ` ${waveRemain}s` : ''}`
                 : `第${Math.max(1, this.waveIndex || 1)}波 ${waveRemain}s`;
-            this.timerLabel.string = inRun
+            this.panels.timerLabel.string = inRun
                 ? this.phase === 'shop'
                     ? '商店'
                     : waveText
                 : '机库';
         }
-        if (this.statLabel) {
+        if (this.panels.statLabel) {
             const stats = this.getCharacterStats();
             const enemyPoolCount = inRun ? this.getAvailableEnemySpecs().length + BOSS_ENEMY_COUNT : TOTAL_ENEMY_TYPES;
             const droneText = inRun && stats.dronePower > 0
                 ? ` | 机${this.formatStat(stats.dronePower)}×${this.getDroneStrikeCount(stats.dronePower)}`
                 : '';
-            this.statLabel.string = inRun
+            this.panels.statLabel.string = inRun
                 ? `存活 ${this.formatTime(this.combatTime)} | Lv.${this.level} | 合金 ${this.battleAlloy} | HP ${Math.ceil(this.playerHp)}/${Math.ceil(this.playerMaxHp)} 护${Math.ceil(this.playerShield)} | 暴${Math.round(stats.critChance * 100)}%${droneText} | 怪${this.enemies.length} 池${enemyPoolCount}/${TOTAL_ENEMY_TYPES}`
                 : `永久资源：${this.formatWallet(this.getInventoryWallet())}`;
         }
-        if (this.equipmentLabel) {
+        if (this.panels.equipmentLabel) {
             const activeWeapon = this.getActiveWeapon();
             const stats = this.getCharacterStats();
             const weaponText = activeWeapon ? `${activeWeapon.name} Lv.${this.getEquipmentLevel(activeWeapon.id)}` : '无武器';
             const droneHint = inRun && stats.dronePower > 0
                 ? `  无人机 ${this.formatStat(this.getDroneStrikeInterval(stats.dronePower))}s/轮`
                 : '';
-            this.equipmentLabel.string = inRun
+            this.panels.equipmentLabel.string = inRun
                 ? `当前 ${weaponText}${droneHint}  装备 ${this.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}  H调试`
                 : `出战 ${this.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}武  装备 ${this.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}`;
         }
-        if (this.switchWeaponButton) {
+        if (this.panels.switchWeaponButton) {
             const canSwitch = this.phase === 'combat' && this.getEquippedWeapons().length > 1;
-            this.switchWeaponButton.node.active = inRun;
-            this.switchWeaponButton.label.string = '切武器';
-            this.drawButton(this.switchWeaponButton, !canSwitch);
+            this.panels.switchWeaponButton.node.active = inRun;
+            this.panels.switchWeaponButton.label.string = '切武器';
+            this.drawButton(this.panels.switchWeaponButton, !canSwitch);
         }
-        if (this.shopButton) {
-            this.shopButton.node.active = inRun;
-            this.shopButton.label.string = '商店';
-            this.drawButton(this.shopButton, this.phase !== 'combat');
+        if (this.panels.shopButton) {
+            this.panels.shopButton.node.active = inRun;
+            this.panels.shopButton.label.string = '商店';
+            this.drawButton(this.panels.shopButton, this.phase !== 'combat');
         }
-        if (this.extractButton) {
-            this.extractButton.node.active = inRun;
-            this.extractButton.label.string = '撤离';
-            this.drawButton(this.extractButton, this.phase !== 'combat');
+        if (this.panels.extractButton) {
+            this.panels.extractButton.node.active = inRun;
+            this.panels.extractButton.label.string = '撤离';
+            this.drawButton(this.panels.extractButton, this.phase !== 'combat');
         }
         this.refreshDebugHud(inRun);
         this.drawBars();
     }
 
     private refreshDebugHud(inRun: boolean) {
-        if (!this.debugLabel) return;
-        this.debugLabel.node.active = inRun && this.debugHudEnabled;
+        if (!this.panels.debugLabel) return;
+        this.panels.debugLabel.node.active = inRun && this.debugHudEnabled;
         if (!inRun || !this.debugHudEnabled) {
-            this.debugLabel.string = '';
+            this.panels.debugLabel.string = '';
             return;
         }
         const boss = this.enemies.find((enemy) => enemy.boss);
         const bossText = boss ? `Boss ${Math.ceil(boss.hp)}/${Math.ceil(boss.maxHp)}` : 'Boss -';
-        this.debugLabel.string = [
+        this.panels.debugLabel.string = [
             `DBG ${this.phase} W${this.waveIndex} ${Math.round(this.waveElapsed)}/${Math.round(this.waveDuration)}s ${bossText}`,
             `E ${this.enemies.length}/${this.getEnemyCap()}  B ${this.bullets.length}  EP ${this.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickups.length}  FT ${this.floatingTexts.length}`,
             `MS F${this.perfFrameMs.toFixed(1)} pre${this.perfPreMs.toFixed(1)} ply${this.perfPlayerMs.toFixed(1)} wep${this.perfWeaponMs.toFixed(1)} bul${this.perfBulletMs.toFixed(1)} ep${this.perfEnemyProjectileMs.toFixed(1)} ene${this.perfEnemyMs.toFixed(1)} sep${this.perfSeparationMs.toFixed(1)} pk${this.perfPickupMs.toFixed(1)} hud${this.perfHudMs.toFixed(1)}`,
@@ -3908,32 +3807,32 @@ export class RogueShooterGame extends Component {
     }
 
     private drawBars() {
-        if (this.hpBar) {
+        if (this.panels.hpBar) {
             const ratio = this.playerMaxHp > 0 ? this.playerHp / this.playerMaxHp : 0;
             const shieldRatio = this.playerShieldMax > 0 ? this.playerShield / this.playerShieldMax : 0;
-            this.hpBar.clear();
-            this.hpBar.fillColor = this.hex('#1E293B');
-            this.hpBar.roundRect(-146, -9, 292, 18, 9);
-            this.hpBar.fill();
+            this.panels.hpBar.clear();
+            this.panels.hpBar.fillColor = this.hex('#1E293B');
+            this.panels.hpBar.roundRect(-146, -9, 292, 18, 9);
+            this.panels.hpBar.fill();
             if (shieldRatio > 0) {
-                this.hpBar.fillColor = this.hex('#4CC9F0', 185);
-                this.hpBar.roundRect(-146, -9, 292 * this.clamp(shieldRatio, 0, 1), 18, 9);
-                this.hpBar.fill();
+                this.panels.hpBar.fillColor = this.hex('#4CC9F0', 185);
+                this.panels.hpBar.roundRect(-146, -9, 292 * this.clamp(shieldRatio, 0, 1), 18, 9);
+                this.panels.hpBar.fill();
             }
-            this.hpBar.fillColor = this.hex(ratio > 0.45 ? '#43AA8B' : '#F94144');
-            this.hpBar.roundRect(-146, -6, 292 * this.clamp(ratio, 0, 1), 12, 6);
-            this.hpBar.fill();
+            this.panels.hpBar.fillColor = this.hex(ratio > 0.45 ? '#43AA8B' : '#F94144');
+            this.panels.hpBar.roundRect(-146, -6, 292 * this.clamp(ratio, 0, 1), 12, 6);
+            this.panels.hpBar.fill();
         }
 
-        if (this.xpBar) {
+        if (this.panels.xpBar) {
             const ratio = this.xpToNext > 0 ? this.xp / this.xpToNext : 0;
-            this.xpBar.clear();
-            this.xpBar.fillColor = this.hex('#1E293B');
-            this.xpBar.roundRect(-146, -9, 292, 18, 9);
-            this.xpBar.fill();
-            this.xpBar.fillColor = this.hex('#4CC9F0');
-            this.xpBar.roundRect(-146, -9, 292 * this.clamp(ratio, 0, 1), 18, 9);
-            this.xpBar.fill();
+            this.panels.xpBar.clear();
+            this.panels.xpBar.fillColor = this.hex('#1E293B');
+            this.panels.xpBar.roundRect(-146, -9, 292, 18, 9);
+            this.panels.xpBar.fill();
+            this.panels.xpBar.fillColor = this.hex('#4CC9F0');
+            this.panels.xpBar.roundRect(-146, -9, 292 * this.clamp(ratio, 0, 1), 18, 9);
+            this.panels.xpBar.fill();
         }
     }
 
@@ -5097,9 +4996,9 @@ export class RogueShooterGame extends Component {
 
     private toggleDebugHud() {
         this.debugHudEnabled = !this.debugHudEnabled;
-        if (this.debugLabel && !this.debugHudEnabled) {
-            this.debugLabel.node.active = false;
-            this.debugLabel.string = '';
+        if (this.panels.debugLabel && !this.debugHudEnabled) {
+            this.panels.debugLabel.node.active = false;
+            this.panels.debugLabel.string = '';
         }
         this.showToast(this.debugHudEnabled ? '调试 HUD 已开启。' : '调试 HUD 已关闭。');
     }
@@ -5143,14 +5042,14 @@ export class RogueShooterGame extends Component {
     private updateToast(dt: number) {
         if (this.toastTimer <= 0) return;
         this.toastTimer -= dt;
-        if (this.toastTimer <= 0 && this.toastLabel) {
-            this.toastLabel.string = '';
+        if (this.toastTimer <= 0 && this.panels.toastLabel) {
+            this.panels.toastLabel.string = '';
         }
     }
 
     private showToast(message: string) {
-        if (!this.toastLabel) return;
-        this.toastLabel.string = message;
+        if (!this.panels.toastLabel) return;
+        this.panels.toastLabel.string = message;
         this.toastTimer = 2.5;
     }
 
