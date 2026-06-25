@@ -239,7 +239,7 @@ export class RogueShooterGame extends Component {
     start() {
         view.setDesignResolutionSize(DESIGN_WIDTH, DESIGN_HEIGHT, 2);
         this.createCanvas();
-        this.loadProgress();
+        this.shop.loadProgress();
         this.buildScene();
         this.initAudio();
         this.loadPlaceholderArt(() => this.openHome());
@@ -287,7 +287,7 @@ export class RogueShooterGame extends Component {
             this.perfWeaponMs = this.perfNow() - t;
 
             t = this.perfNow();
-            this.updateBullets(combatDt);
+            this.proj.updateBullets(combatDt);
             this.perfBulletMs = this.perfNow() - t;
 
             t = this.perfNow();
@@ -728,7 +728,7 @@ export class RogueShooterGame extends Component {
         this.panels.equipmentLabel = this.label(root, 'Equipment', '', 58, top + 92, 210, 28, 16, '#64748B', Label.HorizontalAlign.LEFT);
         this.panels.switchWeaponButton = this.button(root, 'SwitchWeaponButton', 284, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#B5179E', '#94A3B8', () => this.switchActiveWeapon());
         this.panels.switchWeaponButton.label.string = '切武器';
-        this.panels.shopButton = this.button(root, 'OpenShopButton', 378, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#4CC9F0', '#94A3B8', () => this.openShop());
+        this.panels.shopButton = this.button(root, 'OpenShopButton', 378, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#4CC9F0', '#94A3B8', () => this.shop.openShop());
         this.panels.shopButton.label.string = '商店';
         this.panels.extractButton = this.button(root, 'ExtractButton', 472, top + 82, 86, MIN_TOUCH_BUTTON_HEIGHT, '#F8961E', '#94A3B8', () => this.extractBattle());
         this.panels.extractButton.label.string = '撤离';
@@ -790,7 +790,7 @@ export class RogueShooterGame extends Component {
                 118,
                 '#4CC9F0',
                 '#94A3B8',
-                () => this.buyShopItem(i),
+                () => this.shop.buyShopItem(i),
                 true,
             );
             button.label.fontSize = 15;
@@ -806,7 +806,7 @@ export class RogueShooterGame extends Component {
                 40,
                 '#F8961E',
                 '#94A3B8',
-                () => this.refreshShopSlot(i),
+                () => this.shop.refreshShopSlot(i),
                 true,
             );
             refreshButton.label.fontSize = 16;
@@ -814,7 +814,7 @@ export class RogueShooterGame extends Component {
             this.panels.shopSlotRefreshButtons.push(refreshButton);
         }
 
-        this.panels.shopCloseButton = this.button(panel, 'ShopClose', 204, 824, 264, 52, '#43AA8B', '#94A3B8', () => this.closeShop(), true);
+        this.panels.shopCloseButton = this.button(panel, 'ShopClose', 204, 824, 264, 52, '#43AA8B', '#94A3B8', () => this.shop.closeShop(), true);
         this.panels.shopCloseButton.label.string = '继续战斗';
     }
 
@@ -848,7 +848,7 @@ export class RogueShooterGame extends Component {
                 48,
                 '#1E293B',
                 '#94A3B8',
-                () => this.selectEquippedSlot(i),
+                () => this.shop.selectEquippedSlot(i),
                 true,
             );
             this.panels.equippedButtons.push(button);
@@ -868,16 +868,16 @@ export class RogueShooterGame extends Component {
                 58,
                 '#4CC9F0',
                 '#94A3B8',
-                () => this.selectVisibleEquipment(i),
+                () => this.shop.selectVisibleEquipment(i),
                 true,
             );
             this.panels.equipmentButtons.push(button);
         }
 
-        this.panels.prevEquipmentButton = this.button(panel, 'EquipmentPrev', 46, 706, 104, 52, '#64748B', '#94A3B8', () => this.changeEquipmentPage(-1), true);
-        this.panels.equipActionButton = this.button(panel, 'EquipAction', 164, 706, 170, 52, '#4CC9F0', '#94A3B8', () => this.toggleSelectedEquipment(), true);
-        this.panels.upgradeActionButton = this.button(panel, 'UpgradeAction', 348, 706, 170, 52, '#F8961E', '#94A3B8', () => this.upgradeSelectedEquipment(), true);
-        this.panels.nextEquipmentButton = this.button(panel, 'EquipmentNext', 532, 706, 104, 52, '#64748B', '#94A3B8', () => this.changeEquipmentPage(1), true);
+        this.panels.prevEquipmentButton = this.button(panel, 'EquipmentPrev', 46, 706, 104, 52, '#64748B', '#94A3B8', () => this.shop.changeEquipmentPage(-1), true);
+        this.panels.equipActionButton = this.button(panel, 'EquipAction', 164, 706, 170, 52, '#4CC9F0', '#94A3B8', () => this.shop.toggleSelectedEquipment(), true);
+        this.panels.upgradeActionButton = this.button(panel, 'UpgradeAction', 348, 706, 170, 52, '#F8961E', '#94A3B8', () => this.shop.upgradeSelectedEquipment(), true);
+        this.panels.nextEquipmentButton = this.button(panel, 'EquipmentNext', 532, 706, 104, 52, '#64748B', '#94A3B8', () => this.shop.changeEquipmentPage(1), true);
 
         this.panels.startButton = this.button(panel, 'StartBattle', 174, 776, 324, 58, '#43AA8B', '#94A3B8', () => this.beginBattle(false), true);
     }
@@ -1008,13 +1008,13 @@ export class RogueShooterGame extends Component {
 
     private openHangarFromMenu() {
         this.panels.setMenuPanelActive(false);
-        this.showHangar('选择装备后开始出击。');
+        this.shop.showHangar('选择装备后开始出击。');
     }
 
     private beginBattle(initial: boolean) {
-        if (this.getEquippedWeapons().length <= 0) {
+        if (this.shop.getEquippedWeapons().length <= 0) {
             this.showToast('至少需要携带 1 把武器才能出战。');
-            this.showHangar('先从仓库里选择一把武器加入出战。');
+            this.shop.showHangar('先从仓库里选择一把武器加入出战。');
             return;
         }
 
@@ -1077,7 +1077,7 @@ export class RogueShooterGame extends Component {
     }
 
     private getActiveWeaponIconFrameName() {
-        const weapon = this.getActiveWeapon();
+        const weapon = this.shop.getActiveWeapon();
         return this.getWeaponIconFrameName(weapon?.id || 'storm-rifle');
     }
 
@@ -1141,7 +1141,7 @@ export class RogueShooterGame extends Component {
         const x = Math.cos(angle) * distance;
         const y = Math.sin(angle) * distance - 3;
         const scaleY = Math.cos(angle) < -0.05 ? -1 : 1;
-        const size = this.getWeaponFamilyId(this.getActiveWeapon()?.id || 'storm-rifle') === 'orbital-drone' ? 34 : 42;
+        const size = this.getWeaponFamilyId(this.shop.getActiveWeapon()?.id || 'storm-rifle') === 'orbital-drone' ? 34 : 42;
         this.playerWeaponSprite.node.setPosition(x, y, frontLayer ? 3 : -1);
         this.playerWeaponSprite.node.angle = angle * 180 / Math.PI;
         this.playerWeaponSprite.node.setScale(1, scaleY, 1);
@@ -1253,7 +1253,7 @@ export class RogueShooterGame extends Component {
             const target = this.enemyMgr.findNearestEnemy(this.getAttackRange());
             if (target) {
                 this.fireAt(target);
-                this.cs.shotTimer = this.getFireInterval();
+                this.cs.shotTimer = this.proj.getFireInterval();
             }
         }
 
@@ -1289,8 +1289,8 @@ export class RogueShooterGame extends Component {
         const baseAngle = Math.atan2(dy, dx);
         this.playerWeaponAimAngle = baseAngle;
         this.updatePlayerWeaponVisual();
-        const damage = this.getBulletDamage();
-        const activeWeapon = this.getActiveWeapon();
+        const damage = this.proj.getBulletDamage();
+        const activeWeapon = this.shop.getActiveWeapon();
         const weaponStyle = activeWeapon?.attackStyle || 'rifle';
         const weaponColor = activeWeapon?.color || '#4CC9F0';
         const spreadPower = this.getCharacterStats().multiShot;
@@ -1310,42 +1310,10 @@ export class RogueShooterGame extends Component {
         }
 
         for (const angle of angles) {
-            this.createBullet(angle, damage, this.getBulletPierce(), weaponStyle, weaponColor);
+            this.proj.createBullet(angle, damage, this.proj.getBulletPierce(), weaponStyle, weaponColor);
         }
         this.playShootSfx(weaponStyle);
-        this.spawnMuzzleFlash(baseAngle, weaponStyle, weaponColor, angles.length);
-    }
-
-    private spawnMuzzleFlash(angle: number, style: WeaponAttackStyle, color: string, shotCount: number) {
-        this.proj.spawnMuzzleFlash(angle, style, color, shotCount);
-    }
-
-    private spawnBulletHitSpark(x: number, y: number, style: WeaponAttackStyle, color: string, accent: string) {
-        this.proj.spawnBulletHitSpark(x, y, style, color, accent);
-    }
-
-    private createBullet(angle: number, damage: number, pierce: number, style: WeaponAttackStyle, color: string) {
-        this.proj.createBullet(angle, damage, pierce, style, color);
-    }
-
-    private acquireBullet(): Bullet {
-        return this.proj.acquireBullet();
-    }
-
-    private updateBullets(dt: number) {
-        this.proj.updateBullets(dt);
-    }
-
-    private drawBullet(bullet: Bullet) {
-        this.proj.drawBullet(bullet);
-    }
-
-    private removeBullet(bullet: Bullet) {
-        this.proj.removeBullet(bullet);
-    }
-
-    private recycleBullet(bullet: Bullet, removeFromActive: boolean) {
-        this.proj.recycleBullet(bullet, removeFromActive);
+        this.proj.spawnMuzzleFlash(baseAngle, weaponStyle, weaponColor, angles.length);
     }
 
     private updateRegen(dt: number) {
@@ -1467,7 +1435,7 @@ export class RogueShooterGame extends Component {
         this.cs.battleAlloy = 0;
         this.addWalletToInventory(reward);
         this.cs.battlesWon += 1;
-        this.saveProgress();
+        this.shop.saveProgress();
         this.clearWorld();
         this.openSettlement(reason, reward);
     }
@@ -1499,28 +1467,8 @@ export class RogueShooterGame extends Component {
         if (this.panels.hangarTipLabel) this.panels.hangarTipLabel.string = reason === 'extract'
             ? '主动撤离保留全部结算奖励。调整装备后可继续无尽出击。'
             : '死亡会折损部分时间奖励。升级装备后再试一次。';
-        this.refreshEquipmentButtons();
+        this.shop.refreshEquipmentButtons();
         this.refreshHud();
-    }
-
-    private openShop() {
-        this.shop.openShop();
-    }
-
-    private buyShopItem(index: number) {
-        this.shop.buyShopItem(index);
-    }
-
-    private refreshShopSlot(index: number) {
-        this.shop.refreshShopSlot(index);
-    }
-
-    private closeShop() {
-        this.shop.closeShop();
-    }
-
-    private renderShop() {
-        this.shop.renderShop();
     }
 
     private pauseCombat() {
@@ -1552,7 +1500,7 @@ export class RogueShooterGame extends Component {
         if (this.cs.phase !== 'paused') return;
         this.clearWorld();
         this.panels.hideAllOverlays();
-        this.showHangar('已返回机库，可调整装备后重新出击。');
+        this.shop.showHangar('已返回机库，可调整装备后重新出击。');
     }
 
     private openSettingsPanel() {
@@ -1742,72 +1690,12 @@ export class RogueShooterGame extends Component {
         return `${minutes}:${remain < 10 ? '0' : ''}${remain}`;
     }
 
-    private showHangar(message: string) {
-        this.shop.showHangar(message);
-    }
-
-    private createLootChoices(): LootChoice[] {
-        return this.shop.createLootChoices();
-    }
-
-    private selectVisibleEquipment(index: number) {
-        this.shop.selectVisibleEquipment(index);
-    }
-
-    private selectEquippedSlot(index: number) {
-        this.shop.selectEquippedSlot(index);
-    }
-
-    private changeEquipmentPage(delta: number) {
-        this.shop.changeEquipmentPage(delta);
-    }
-
-    private toggleSelectedEquipment() {
-        this.shop.toggleSelectedEquipment();
-    }
-
-    private upgradeSelectedEquipment() {
-        this.shop.upgradeSelectedEquipment();
-    }
-
-    private upgradeEquipment(equipment: EquipmentDef) {
-        this.shop.upgradeEquipment(equipment);
-    }
-
-    private craftEquipment(equipment: EquipmentDef) {
-        this.shop.craftEquipment(equipment);
-    }
-
-    private refreshEquipmentButtons() {
-        this.shop.refreshEquipmentButtons();
-    }
-
     private refreshEquippedButtons() {
         // Delegated to shop
     }
 
-    private getEquippedSlotName(index: number) {
-        return this.shop.getEquippedSlotName(index);
-    }
-
-    private getEquipmentForDisplaySlot(index: number) {
-        return this.shop.getEquipmentForDisplaySlot(index);
-    }
-
     private refreshHangarActions() {
         // Delegated to shop
-    }
-
-    private formatEquipmentDetail(equipment: EquipmentDef) {
-        return this.shop.formatEquipmentDetail(equipment);
-    }
-
-    private formatGearStats(equipment: EquipmentDef, level: number) {
-        return this.shop.formatGearStats(equipment, level);
-    }
-
-    private formatStat(value: number) {
-        return this.shop.formatStat(value);
     }
 
     private refreshHud() {
@@ -1828,25 +1716,25 @@ export class RogueShooterGame extends Component {
             const stats = this.getCharacterStats();
             const enemyPoolCount = inRun ? this.enemyMgr.getAvailableEnemySpecs().length + BOSS_ENEMY_COUNT : TOTAL_ENEMY_TYPES;
             const droneText = inRun && stats.dronePower > 0
-                ? ` | 机${this.formatStat(stats.dronePower)}×${this.getDroneStrikeCount(stats.dronePower)}`
+                ? ` | 机${this.shop.formatStat(stats.dronePower)}×${this.getDroneStrikeCount(stats.dronePower)}`
                 : '';
             this.panels.statLabel.string = inRun
                 ? `存活 ${this.formatTime(this.cs.combatTime)} | Lv.${this.cs.level} | 合金 ${this.cs.battleAlloy} | HP ${Math.ceil(this.cs.playerHp)}/${Math.ceil(this.cs.playerMaxHp)} 护${Math.ceil(this.cs.playerShield)} | 暴${Math.round(stats.critChance * 100)}%${droneText} | 怪${this.enemyMgr.enemies.length} 池${enemyPoolCount}/${TOTAL_ENEMY_TYPES}`
                 : `永久资源：${this.formatWallet(this.getInventoryWallet())}`;
         }
         if (this.panels.equipmentLabel) {
-            const activeWeapon = this.getActiveWeapon();
+            const activeWeapon = this.shop.getActiveWeapon();
             const stats = this.getCharacterStats();
-            const weaponText = activeWeapon ? `${activeWeapon.name} Lv.${this.getEquipmentLevel(activeWeapon.id)}` : '无武器';
+            const weaponText = activeWeapon ? `${activeWeapon.name} Lv.${this.shop.getEquipmentLevel(activeWeapon.id)}` : '无武器';
             const droneHint = inRun && stats.dronePower > 0
-                ? `  无人机 ${this.formatStat(this.getDroneStrikeInterval(stats.dronePower))}s/轮`
+                ? `  无人机 ${this.shop.formatStat(this.getDroneStrikeInterval(stats.dronePower))}s/轮`
                 : '';
             this.panels.equipmentLabel.string = inRun
-                ? `当前 ${weaponText}${droneHint}  装备 ${this.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}  H调试`
-                : `出战 ${this.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}武  装备 ${this.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}`;
+                ? `当前 ${weaponText}${droneHint}  装备 ${this.shop.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}  H调试`
+                : `出战 ${this.shop.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}武  装备 ${this.shop.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}`;
         }
         if (this.panels.switchWeaponButton) {
-            const canSwitch = this.cs.phase === 'combat' && this.getEquippedWeapons().length > 1;
+            const canSwitch = this.cs.phase === 'combat' && this.shop.getEquippedWeapons().length > 1;
             this.panels.switchWeaponButton.node.active = inRun;
             this.panels.switchWeaponButton.label.string = '切武器';
             this.drawButton(this.panels.switchWeaponButton, !canSwitch);
@@ -2101,7 +1989,7 @@ export class RogueShooterGame extends Component {
     }
 
     private pickItemChoices(quality: ItemChoiceQuality): LevelUpgrade[] {
-        const maxTier = this.getRunItemTierLimit();
+        const maxTier = this.shop.getRunItemTierLimit();
         const minTier = quality === 'rare' ? Math.max(3, Math.min(5, maxTier - 1)) : 1;
         const tierCeiling = quality === 'rare' ? Math.max(3, maxTier) : Math.min(3, maxTier);
         const available = RUN_ITEMS.filter((item) =>
@@ -2110,96 +1998,28 @@ export class RogueShooterGame extends Component {
             && !this.pickupMgr.acquiredRunItemIds.has(item.id),
         );
         const fallback = RUN_ITEMS.filter((item) => item.tier >= minTier && item.tier <= tierCeiling);
-        return this.pickDistinctItems(available.length >= 3 ? available : fallback, 3);
+        return this.shop.pickDistinctItems(available.length >= 3 ? available : fallback, 3);
     }
 
     private pickShopOffers(): LevelUpgrade[] {
-        const maxTier = this.getRunItemTierLimit();
+        const maxTier = this.shop.getRunItemTierLimit();
         const available = RUN_ITEMS.filter((item) => item.tier <= maxTier && !this.pickupMgr.acquiredRunItemIds.has(item.id));
         const fallback = RUN_ITEMS.filter((item) => item.tier <= maxTier);
-        return this.pickDistinctItems(available.length >= SHOP_ITEM_COUNT ? available : fallback, SHOP_ITEM_COUNT);
-    }
-
-    private ensureShopOffers() {
-        this.shop.ensureShopOffers();
-    }
-
-    private pickShopOfferForSlot(index: number) {
-        return this.shop.pickShopOfferForSlot(index);
-    }
-
-    private pickDistinctItems(pool: LevelUpgrade[], count: number): LevelUpgrade[] {
-        return this.shop.pickDistinctItems(pool, count);
-    }
-
-    private getRunItemTierLimit() {
-        return this.shop.getRunItemTierLimit();
-    }
-
-    private getShopItemCost(item: LevelUpgrade) {
-        return this.shop.getShopItemCost(item);
-    }
-
-    private getRunItemShopPriceMultiplier(item: LevelUpgrade) {
-        return this.shop.getRunItemShopPriceMultiplier(item);
-    }
-
-    private getBulletDamage() {
-        return this.proj.getBulletDamage();
-    }
-
-    private getFireInterval() {
-        return this.proj.getFireInterval();
-    }
-
-    private getBulletSpeed() {
-        return this.proj.getBulletSpeed();
-    }
-
-    private getBulletPierce() {
-        return this.proj.getBulletPierce();
-    }
-
-    private getOwnedWeapons() {
-        return this.shop.getOwnedWeapons();
-    }
-
-    private getOwnedWeaponCount() {
-        return this.shop.getOwnedWeaponCount();
-    }
-
-    private getEquippedEquipmentDefs() {
-        return this.shop.getEquippedEquipmentDefs();
-    }
-
-    private getEquippedWeapons() {
-        return this.shop.getEquippedWeapons();
-    }
-
-    private getEquippedGear() {
-        return this.shop.getEquippedGear();
-    }
-
-    private getEquippedGearForSlot(slot: GearSlot) {
-        return this.shop.getEquippedGearForSlot(slot);
-    }
-
-    private getActiveWeapon() {
-        return this.shop.getActiveWeapon();
+        return this.shop.pickDistinctItems(available.length >= SHOP_ITEM_COUNT ? available : fallback, SHOP_ITEM_COUNT);
     }
 
     private switchActiveWeapon() {
         if (this.cs.phase !== 'combat') return;
-        const weapons = this.getEquippedWeapons();
+        const weapons = this.shop.getEquippedWeapons();
         if (weapons.length <= 1) {
             this.showToast('只携带 1 把武器，无法切换。');
             return;
         }
-        const current = this.getActiveWeapon();
+        const current = this.shop.getActiveWeapon();
         if (current) this.weaponCooldowns[current.id] = Math.max(0, this.cs.shotTimer);
         this.cs.activeWeaponIndex = (this.cs.activeWeaponIndex + 1) % weapons.length;
-        const next = this.getActiveWeapon();
-        this.cs.shotTimer = next ? Math.min(this.weaponCooldowns[next.id] ?? 0.18, this.getFireInterval()) : 0.18;
+        const next = this.shop.getActiveWeapon();
+        this.cs.shotTimer = next ? Math.min(this.weaponCooldowns[next.id] ?? 0.18, this.proj.getFireInterval()) : 0.18;
         this.playerWeaponFrameName = '';
         this.updatePlayerWeaponVisual();
         this.playSfx('sfx_ui_click', 0.42, 0.08);
@@ -2212,34 +2032,6 @@ export class RogueShooterGame extends Component {
         return weapon ? (weapon.weaponStats?.[stat] || 0) * this.shop.getEquipmentLevel(weapon.id) : 0;
     }
 
-    private getVisibleHangarEquipment() {
-        return this.shop.getVisibleHangarEquipment();
-    }
-
-    private getWarehouseEquipmentList() {
-        return this.shop.getWarehouseEquipmentList();
-    }
-
-    private getWarehouseSortScore(equipment: EquipmentDef) {
-        return this.shop.getWarehouseSortScore(equipment);
-    }
-
-    private getEquipmentPageCount() {
-        return this.shop.getEquipmentPageCount();
-    }
-
-    private getSelectedEquipment() {
-        return this.shop.getSelectedEquipment();
-    }
-
-    private findEquipment(id: string | undefined) {
-        return this.shop.findEquipment(id);
-    }
-
-    private isEquipped(id: string) {
-        return this.shop.isEquipped(id);
-    }
-
     private getCharacterStats(): CharacterStats {
         const stats = createBaseCharacterStats();
         this.addCharacterStats(stats, this.pickupMgr.runStats);
@@ -2250,8 +2042,8 @@ export class RogueShooterGame extends Component {
         stats.multiShot += this.getWeaponStat('multiShot');
         stats.dronePower += this.getWeaponStat('drone');
 
-        for (const gear of this.getEquippedGear()) {
-            const level = this.getEquipmentLevel(gear.id);
+        for (const gear of this.shop.getEquippedGear()) {
+            const level = this.shop.getEquipmentLevel(gear.id);
             for (const effect of gear.gearStats || []) {
                 stats[effect.stat] += effect.amount * level;
             }
@@ -2300,22 +2092,6 @@ export class RogueShooterGame extends Component {
         return Math.max(220, this.getCharacterStats().attackRange);
     }
 
-    private getEquipmentLevel(id: string) {
-        return this.shop.getEquipmentLevel(id);
-    }
-
-    private getActiveEquipmentLevel(id: string) {
-        return this.shop.getActiveEquipmentLevel(id);
-    }
-
-    private getUpgradeCost(equipment: EquipmentDef) {
-        return this.shop.getUpgradeCost(equipment);
-    }
-
-    private getCraftCost(equipment: EquipmentDef) {
-        return this.shop.getCraftCost(equipment);
-    }
-
     private createEmptyWallet(): ResourceWallet {
         return createResourceWallet();
     }
@@ -2336,18 +2112,6 @@ export class RogueShooterGame extends Component {
 
     private formatCost(cost: ResourceWallet) {
         return this.formatWallet(cost);
-    }
-
-    private loadProgress() {
-        this.shop.loadProgress();
-    }
-
-    private normalizeEquippedEquipment() {
-        this.shop.normalizeEquippedEquipment();
-    }
-
-    private saveProgress() {
-        this.shop.saveProgress();
     }
 
     private clearWorld() {
