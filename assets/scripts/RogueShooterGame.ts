@@ -35,7 +35,30 @@ import {
     hasResources as walletHasResources,
     spendResources as spendWalletResources,
 } from './core/resources';
-import type { ResourceType, ResourceWallet, StatEffect, CharacterStats, StatKey } from './core/types';
+import type {
+    ResourceType,
+    ResourceWallet,
+    StatEffect,
+    CharacterStats,
+    StatKey,
+    GamePhase,
+    BattleEndReason,
+    ChestPickupType,
+    PickupType,
+    DamageType,
+    ItemChoiceQuality,
+    WeaponAttackStyle,
+    EquipmentRarity,
+    WeaponRarity,
+    EquipmentKind,
+    GearSlot,
+    PlayerDirection,
+    EquipmentDef,
+    LevelUpgrade,
+    LootChoice,
+    WeaponStats,
+    EnemySpec,
+} from './core/types';
 import {
     STAT_META,
     createEmptyCharacterStats,
@@ -43,6 +66,25 @@ import {
     addCharacterStats as addStats,
     formatStat as formatStatByKey,
 } from './core/stats';
+import {
+    RUN_ITEMS,
+    RUN_ITEM_COUNT,
+    LEVEL_UPGRADES,
+    STAT_UPGRADE_COUNT,
+    formatRunItemEffect,
+    scaleRunItemEffect as catalogScaleRunItemEffect,
+    scaleRunItemEffects as catalogScaleRunItemEffects,
+    buildRunItemCatalog as catalogBuildRunItemCatalog,
+    buildStatUpgradeCatalog as catalogBuildStatUpgradeCatalog,
+    STAT_UPGRADE_BLUEPRINTS as catalogSTAT_UPGRADE_BLUEPRINTS,
+    RUN_ITEM_BLUEPRINTS as catalogRUN_ITEM_BLUEPRINTS,
+    ITEM_TIER_NAMES as catalogITEM_TIER_NAMES,
+    TRADEOFF_POSITIVE_BONUS as catalogTRADEOFF_POSITIVE_BONUS,
+    scaleStatUpgradeEffect as catalogScaleStatUpgradeEffect,
+} from './catalogs/runItemCatalog';
+import { WEAPON_FAMILIES, WEAPON_VARIANTS, WEAPON_CATALOG, WEAPON_COUNT, buildWeaponCatalog, getWeaponStyleName } from './catalogs/weaponCatalog';
+import { EQUIPMENT, GEAR_BLUEPRINTS, GEAR_RARITIES, GEAR_CATALOG, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from './catalogs/equipmentCatalog';
+import { ENEMY_SPECS, BOSS_ENEMY_COUNT, TOTAL_ENEMY_TYPES, BASE_ENEMY_ARCHETYPES, ENEMY_VARIANTS, buildEnemyCatalog } from './catalogs/enemyCatalog';
 
 const { ccclass } = _decorator;
 
@@ -108,19 +150,6 @@ const ENEMY_CROWD_MAX_NEIGHBORS = 12;
 const ENEMY_CROWD_REPEL_WEIGHT = 1.45;
 const ENEMY_CROWD_ORBIT_WEIGHT = 0.58;
 
-type GamePhase = 'menu' | 'combat' | 'level-up' | 'item-choice' | 'shop' | 'loot' | 'hangar' | 'paused';
-type BattleEndReason = 'death' | 'extract';
-type ChestPickupType = 'chest-common' | 'chest-rare';
-type PickupType = 'xp' | ResourceType | ChestPickupType;
-type EquipmentKind = 'weapon' | 'gear';
-type DamageType = 'physical' | 'magic' | 'fire' | 'lightning' | 'poison' | 'ice';
-type ItemChoiceQuality = 'common' | 'rare';
-type WeaponAttackStyle = 'rifle' | 'shotgun' | 'rail' | 'laser' | 'chain' | 'pulse' | 'drone' | 'disc' | 'spray' | 'meteor' | 'ricochet' | 'scythe';
-type EquipmentRarity = '普通' | '稀有' | '史诗' | '传奇' | '神话';
-type WeaponRarity = EquipmentRarity;
-type GearSlot = 'hat' | 'armor' | 'boots' | 'accessory';
-type PlayerDirection = 'south' | 'south_east' | 'east' | 'north_east' | 'north' | 'north_west' | 'west' | 'south_west';
-
 interface SpriteStripAnimation {
     frames: SpriteFrame[];
     fps: number;
@@ -136,25 +165,6 @@ interface ButtonView {
     color: string;
     disabledColor: string;
     disabled: boolean;
-}
-
-interface EnemySpec {
-    id: string;
-    name: string;
-    family: string;
-    artId: string;
-    variantId?: string;
-    variantIndex?: number;
-    hp: number;
-    speed: number;
-    damage: number;
-    radius: number;
-    xp: number;
-    alloyChance: number;
-    color: string;
-    accent: string;
-    spawnAfter: number;
-    weight: number;
 }
 
 interface Enemy {
@@ -246,47 +256,6 @@ interface DroneVisual {
     phase: number;
 }
 
-interface WeaponStats {
-    damage: number;
-    fireRate: number;
-    pierce: number;
-    multiShot: number;
-    drone: number;
-    bulletSpeed: number;
-}
-
-interface EquipmentDef {
-    id: string;
-    name: string;
-    kind: EquipmentKind;
-    color: string;
-    maxLevel: number;
-    baseCost: number;
-    desc: string;
-    weaponStats?: WeaponStats;
-    gearSlot?: GearSlot;
-    gearStats?: StatEffect[];
-    attackStyle?: WeaponAttackStyle;
-    rarity?: EquipmentRarity;
-}
-
-interface LevelUpgrade {
-    id: string;
-    name: string;
-    desc: string;
-    color: string;
-    category: string;
-    tier: number;
-    effects: StatEffect[];
-}
-
-interface LootChoice {
-    title: string;
-    desc: string;
-    color: string;
-    apply: () => void;
-}
-
 const GEAR_SLOT_ORDER: GearSlot[] = ['hat', 'armor', 'boots', 'accessory'];
 const GEAR_SLOT_LABELS: Record<GearSlot, string> = {
     hat: '帽子',
@@ -295,529 +264,6 @@ const GEAR_SLOT_LABELS: Record<GearSlot, string> = {
     accessory: '首饰',
 };
 
-interface RunItemBlueprint {
-    id: string;
-    name: string;
-    category: string;
-    color: string;
-    effects: StatEffect[];
-}
-
-const ITEM_TIER_NAMES = ['I', 'II', 'III', 'IV', 'V'];
-const TRADEOFF_POSITIVE_BONUS = 1.24;
-
-const RUN_ITEM_BLUEPRINTS: RunItemBlueprint[] = [
-    { id: 'charged-magazine', name: '高能弹匣', category: '攻击', color: '#F94144', effects: [{ stat: 'attackPower', amount: 6 }, { stat: 'attackSpeed', amount: 0.05 }, { stat: 'moveSpeed', amount: -5 }] },
-    { id: 'rapid-trigger', name: '急速扳机', category: '攻击', color: '#4CC9F0', effects: [{ stat: 'attackSpeed', amount: 0.14 }, { stat: 'attackPower', amount: -1.5 }] },
-    { id: 'longscope', name: '远距瞄具', category: '攻击', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 70 }, { stat: 'critChance', amount: 0.02 }, { stat: 'dodgeChance', amount: -0.01 }] },
-    { id: 'crit-lens', name: '暴击透镜', category: '攻击', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.045 }, { stat: 'critDamage', amount: 0.15 }] },
-    { id: 'execution-protocol', name: '处决协议', category: '攻击', color: '#B5179E', effects: [{ stat: 'lethalChance', amount: 0.012 }, { stat: 'lethalDamage', amount: 0.25 }, { stat: 'attackSpeed', amount: -0.02 }] },
-    { id: 'fracture-warhead', name: '裂解弹头', category: '攻击', color: '#C084FC', effects: [{ stat: 'lethalMaxHpPct', amount: 0.01 }, { stat: 'attackPower', amount: 4 }, { stat: 'critChance', amount: -0.015 }] },
-    { id: 'piercing-coil', name: '穿甲线圈', category: '攻击', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 0.5 }, { stat: 'attackPower', amount: 1.5 }, { stat: 'attackSpeed', amount: -0.02 }] },
-    { id: 'barrage-splitter', name: '弹幕分流器', category: '攻击', color: '#E879F9', effects: [{ stat: 'multiShot', amount: 0.75 }, { stat: 'attackSpeed', amount: 0.02 }, { stat: 'attackPower', amount: -2 }] },
-    { id: 'superconductor-round', name: '超导弹体', category: '攻击', color: '#22D3EE', effects: [{ stat: 'bulletSpeed', amount: 40 }, { stat: 'attackRange', amount: 45 }] },
-    { id: 'overload-reactor', name: '过载反应', category: '攻击', color: '#EF4444', effects: [{ stat: 'attackPower', amount: 8 }, { stat: 'maxHp', amount: -18 }, { stat: 'shieldMax', amount: -16 }] },
-    { id: 'drone-uplink', name: '无人机上行链', category: '攻击', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 1.1 }, { stat: 'attackRange', amount: 24 }, { stat: 'magicDefense', amount: -2 }] },
-    { id: 'sniper-heuristic', name: '狙击演算', category: '攻击', color: '#577590', effects: [{ stat: 'critDamage', amount: 0.28 }, { stat: 'attackRange', amount: 95 }, { stat: 'attackSpeed', amount: -0.04 }] },
-    { id: 'composite-armor', name: '复合护甲', category: '防御', color: '#64748B', effects: [{ stat: 'physicalDefense', amount: 9 }, { stat: 'maxHp', amount: 18 }, { stat: 'moveSpeed', amount: -6 }] },
-    { id: 'arcane-film', name: '秘法隔膜', category: '防御', color: '#8B5CF6', effects: [{ stat: 'magicDefense', amount: 10 }, { stat: 'shieldMax', amount: 20 }] },
-    { id: 'flame-coating', name: '火焰涂层', category: '元素防御', color: '#F3722C', effects: [{ stat: 'fireDefense', amount: 14 }, { stat: 'magicDefense', amount: 2 }, { stat: 'attackPower', amount: 3 }, { stat: 'iceDefense', amount: -3 }] },
-    { id: 'grounding-spike', name: '雷击接地桩', category: '元素防御', color: '#4CC9F0', effects: [{ stat: 'lightningDefense', amount: 14 }, { stat: 'magicDefense', amount: 2 }, { stat: 'attackSpeed', amount: 0.03 }, { stat: 'poisonDefense', amount: -2 }] },
-    { id: 'antitoxin-serum', name: '解毒血清', category: '元素防御', color: '#84CC16', effects: [{ stat: 'poisonDefense', amount: 16 }, { stat: 'magicDefense', amount: 2 }, { stat: 'hpRegen', amount: 0.32 }] },
-    { id: 'cryo-insulation', name: '冰霜绝缘层', category: '元素防御', color: '#A7F3D0', effects: [{ stat: 'iceDefense', amount: 14 }, { stat: 'magicDefense', amount: 2 }, { stat: 'moveSpeed', amount: 6 }, { stat: 'fireDefense', amount: -2 }] },
-    { id: 'deflector-shield', name: '偏转护盾', category: '防御', color: '#14B8A6', effects: [{ stat: 'shieldMax', amount: 35 }, { stat: 'shieldRegen', amount: 1 }, { stat: 'maxHp', amount: -8 }] },
-    { id: 'evasion-servo', name: '闪避伺服', category: '机动', color: '#43AA8B', effects: [{ stat: 'dodgeChance', amount: 0.035 }, { stat: 'moveSpeed', amount: 12 }, { stat: 'physicalDefense', amount: -4 }] },
-    { id: 'regen-vat', name: '再生培养仓', category: '生存', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 0.8 }, { stat: 'maxHp', amount: 10 }, { stat: 'attackSpeed', amount: -0.02 }] },
-    { id: 'bulwark-protocol', name: '坚壁协议', category: '防御', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.025 }, { stat: 'physicalDefense', amount: 4 }, { stat: 'moveSpeed', amount: -8 }] },
-    { id: 'lucky-dice', name: '幸运骰', category: '其他', color: '#F9C74F', effects: [{ stat: 'luck', amount: 10 }, { stat: 'critChance', amount: 0.01 }, { stat: 'maxHp', amount: -6 }] },
-    { id: 'scavenger-field', name: '拾荒磁场', category: '资源', color: '#577590', effects: [{ stat: 'pickupRange', amount: 45 }, { stat: 'resourceGain', amount: 0.04 }, { stat: 'attackRange', amount: -20 }] },
-    { id: 'xp-prism', name: '经验棱镜', category: '成长', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.07 }, { stat: 'luck', amount: 2 }, { stat: 'physicalDefense', amount: -2 }] },
-    { id: 'greed-converter', name: '贪婪转换器', category: '资源', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.16 }, { stat: 'attackPower', amount: -1 }, { stat: 'damageReduction', amount: -0.005 }] },
-    { id: 'phase-thruster', name: '相位推进器', category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed', amount: 24 }, { stat: 'dodgeChance', amount: 0.012 }, { stat: 'pickupRange', amount: 12 }] },
-    { id: 'stable-core', name: '稳态核心', category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp', amount: 25 }, { stat: 'shieldMax', amount: 15 }, { stat: 'critChance', amount: -0.015 }] },
-    { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.025 }, { stat: 'attackRange', amount: 40 }, { stat: 'shieldMax', amount: -8 }] },
-    { id: 'frenzy-injector', name: '狂热注射', category: '混合', color: '#DC2626', effects: [{ stat: 'attackSpeed', amount: 0.16 }, { stat: 'hpRegen', amount: -0.3 }, { stat: 'physicalDefense', amount: -2 }] },
-];
-
-function scaleRunItemEffect(effect: StatEffect, tier: number, tradeoffItem = false): StatEffect {
-    const positiveScale = 1 + (tier - 1) * 0.52;
-    const negativeScale = 0.45 + (tier - 1) * 0.24;
-    const scale = effect.amount < 0
-        ? negativeScale
-        : positiveScale * (tradeoffItem ? TRADEOFF_POSITIVE_BONUS : 1);
-    const amount = effect.amount * scale;
-    return {
-        stat: effect.stat,
-        amount: Math.abs(amount) >= 3 ? Math.round(amount) : Number(amount.toFixed(3)),
-    };
-}
-
-function scaleRunItemEffects(effects: StatEffect[], tier: number): StatEffect[] {
-    const tradeoffItem = effects.some((effect) => effect.amount < 0);
-    return effects.map((effect) => scaleRunItemEffect(effect, tier, tradeoffItem));
-}
-
-function formatRunItemEffect(effect: StatEffect): string {
-    const meta = STAT_META[effect.stat];
-    const sign = effect.amount >= 0 ? '+' : '-';
-    const value = Math.abs(effect.amount);
-    if (meta.kind === 'percent') return `${meta.name} ${sign}${Math.round(value * 100)}%`;
-    if (meta.kind === 'multiplier') return `${meta.name} ${sign}${value.toFixed(2)}x`;
-    return `${meta.name} ${sign}${Number(value.toFixed(1))}`;
-}
-
-function buildRunItemCatalog(): LevelUpgrade[] {
-    const items: LevelUpgrade[] = [];
-    for (const blueprint of RUN_ITEM_BLUEPRINTS) {
-        for (let tier = 1; tier <= ITEM_TIER_NAMES.length; tier++) {
-            const effects = scaleRunItemEffects(blueprint.effects, tier);
-            items.push({
-                id: `${blueprint.id}-${tier}`,
-                name: `${blueprint.name} ${ITEM_TIER_NAMES[tier - 1]}`,
-                desc: effects.map(formatRunItemEffect).join(' / '),
-                color: blueprint.color,
-                category: blueprint.category,
-                tier,
-                effects,
-            });
-        }
-    }
-    return items;
-}
-
-const STAT_UPGRADE_BLUEPRINTS: RunItemBlueprint[] = [
-    { id: 'fire-control', name: '火控训练', category: '攻击属性', color: '#F94144', effects: [{ stat: 'attackPower', amount: 16 }] },
-    { id: 'neural-rapid', name: '神经加速', category: '攻击属性', color: '#4CC9F0', effects: [{ stat: 'attackSpeed', amount: 0.14 }] },
-    { id: 'long-lock', name: '远距锁定', category: '攻击属性', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 110 }, { stat: 'bulletSpeed', amount: 38 }] },
-    { id: 'crit-instinct', name: '暴击直觉', category: '攻击属性', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.055 }] },
-    { id: 'weakpoint-study', name: '弱点解析', category: '攻击属性', color: '#C084FC', effects: [{ stat: 'critDamage', amount: 0.28 }, { stat: 'critChance', amount: 0.012 }] },
-    { id: 'lethal-judgement', name: '致命判断', category: '攻击属性', color: '#F59E0B', effects: [{ stat: 'lethalChance', amount: 0.014 }, { stat: 'lethalDamage', amount: 0.2 }] },
-    { id: 'execution-sense', name: '斩杀本能', category: '攻击属性', color: '#B5179E', effects: [{ stat: 'lethalMaxHpPct', amount: 0.012 }, { stat: 'attackPower', amount: 5 }] },
-    { id: 'pierce-drill', name: '穿透训练', category: '攻击属性', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 1.2 }] },
-    { id: 'multi-control', name: '多弹操控', category: '攻击属性', color: '#E879F9', effects: [{ stat: 'multiShot', amount: 0.75 }] },
-    { id: 'drone-command', name: '无人机指挥', category: '攻击属性', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 1.4 }, { stat: 'attackRange', amount: 28 }] },
-    { id: 'armor-body', name: '装甲体魄', category: '防御属性', color: '#64748B', effects: [{ stat: 'physicalDefense', amount: 12 }, { stat: 'maxHp', amount: 22 }] },
-    { id: 'arcane-resolve', name: '秘法抗性', category: '防御属性', color: '#8B5CF6', effects: [{ stat: 'magicDefense', amount: 12 }, { stat: 'shieldMax', amount: 22 }] },
-    { id: 'element-balance', name: '元素调和', category: '防御属性', color: '#14B8A6', effects: [{ stat: 'fireDefense', amount: 9 }, { stat: 'lightningDefense', amount: 9 }, { stat: 'poisonDefense', amount: 9 }, { stat: 'iceDefense', amount: 9 }] },
-    { id: 'life-expansion', name: '生命扩容', category: '防御属性', color: '#43AA8B', effects: [{ stat: 'maxHp', amount: 42 }] },
-    { id: 'shield-expansion', name: '护盾扩容', category: '防御属性', color: '#22D3EE', effects: [{ stat: 'shieldMax', amount: 46 }, { stat: 'shieldRegen', amount: 0.9 }] },
-    { id: 'regen-loop', name: '自愈循环', category: '防御属性', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 1.0 }, { stat: 'maxHp', amount: 10 }] },
-    { id: 'damage-soften', name: '冲击缓释', category: '防御属性', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.028 }, { stat: 'physicalDefense', amount: 4 }] },
-    { id: 'evasion-steps', name: '闪避步伐', category: '其他属性', color: '#2DD4BF', effects: [{ stat: 'dodgeChance', amount: 0.038 }, { stat: 'moveSpeed', amount: 12 }] },
-    { id: 'mobility-drill', name: '移动训练', category: '其他属性', color: '#43AA8B', effects: [{ stat: 'moveSpeed', amount: 34 }] },
-    { id: 'lucky-sense', name: '幸运感知', category: '其他属性', color: '#F9C74F', effects: [{ stat: 'luck', amount: 14 }, { stat: 'pickupRange', amount: 18 }] },
-    { id: 'field-sweep', name: '战场拾取', category: '其他属性', color: '#577590', effects: [{ stat: 'pickupRange', amount: 58 }, { stat: 'xpGain', amount: 0.045 }] },
-    { id: 'combat-learning', name: '战斗学习', category: '其他属性', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.09 }, { stat: 'luck', amount: 3 }] },
-    { id: 'salvage-sense', name: '资源嗅觉', category: '其他属性', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.08 }, { stat: 'luck', amount: 5 }] },
-];
-
-function scaleStatUpgradeEffect(effect: StatEffect, tier: number): StatEffect {
-    const scale = 1 + (tier - 1) * 0.66;
-    const amount = effect.amount * scale;
-    return {
-        stat: effect.stat,
-        amount: Math.abs(amount) >= 3 ? Math.round(amount) : Number(amount.toFixed(3)),
-    };
-}
-
-function buildStatUpgradeCatalog(): LevelUpgrade[] {
-    const upgrades: LevelUpgrade[] = [];
-    for (const blueprint of STAT_UPGRADE_BLUEPRINTS) {
-        for (let tier = 1; tier <= ITEM_TIER_NAMES.length; tier++) {
-            const effects = blueprint.effects.map((effect) => scaleStatUpgradeEffect(effect, tier));
-            upgrades.push({
-                id: `stat-${blueprint.id}-${tier}`,
-                name: `${blueprint.name} ${tier}段`,
-                desc: effects.map(formatRunItemEffect).join(' / '),
-                color: blueprint.color,
-                category: blueprint.category,
-                tier,
-                effects,
-            });
-        }
-    }
-    return upgrades;
-}
-
-const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
-    {
-        id: 'mite',
-        name: '碎壳虫',
-        family: 'mite',
-        artId: 'mite',
-        hp: 18,
-        speed: 126,
-        damage: 4,
-        radius: 13,
-        xp: 2,
-        alloyChance: 0.05,
-        color: '#9BE564',
-        accent: '#31572C',
-        spawnAfter: 0,
-        weight: 7,
-    },
-    {
-        id: 'runner',
-        name: '疾行体',
-        family: 'runner',
-        artId: 'runner',
-        hp: 24,
-        speed: 196,
-        damage: 6,
-        radius: 12,
-        xp: 3,
-        alloyChance: 0.08,
-        color: '#4CC9F0',
-        accent: '#1B4965',
-        spawnAfter: 10,
-        weight: 4,
-    },
-    {
-        id: 'brute',
-        name: '重甲块',
-        family: 'brute',
-        artId: 'brute',
-        hp: 88,
-        speed: 78,
-        damage: 10,
-        radius: 22,
-        xp: 8,
-        alloyChance: 0.22,
-        color: '#F9C74F',
-        accent: '#8A5A00',
-        spawnAfter: 18,
-        weight: 3,
-    },
-    {
-        id: 'splitter',
-        name: '裂变囊',
-        family: 'splitter',
-        artId: 'splitter',
-        hp: 54,
-        speed: 112,
-        damage: 7,
-        radius: 18,
-        xp: 6,
-        alloyChance: 0.16,
-        color: '#F15BB5',
-        accent: '#6A0572',
-        spawnAfter: 28,
-        weight: 3,
-    },
-    {
-        id: 'warden',
-        name: '磁暴卫士',
-        family: 'warden',
-        artId: 'warden',
-        hp: 160,
-        speed: 92,
-        damage: 15,
-        radius: 26,
-        xp: 13,
-        alloyChance: 0.35,
-        color: '#F3722C',
-        accent: '#6B240C',
-        spawnAfter: 46,
-        weight: 2,
-    },
-];
-
-const ENEMY_VARIANTS = [
-    { id: '', prefix: '', hp: 1, speed: 1, damage: 1, radius: 1, xp: 1, alloy: 1, spawn: 0, weight: 1 },
-    { id: 'acid', prefix: '腐蚀', hp: 1.12, speed: 0.96, damage: 1.18, radius: 1, xp: 1.12, alloy: 1.2, spawn: 6, weight: 0.86 },
-    { id: 'crystal', prefix: '晶化', hp: 1.38, speed: 0.88, damage: 1.08, radius: 1.05, xp: 1.24, alloy: 1.35, spawn: 10, weight: 0.78 },
-    { id: 'swift', prefix: '迅捷', hp: 0.82, speed: 1.34, damage: 1.06, radius: 0.94, xp: 1.16, alloy: 1.05, spawn: 14, weight: 0.82 },
-    { id: 'armored', prefix: '装甲', hp: 1.72, speed: 0.78, damage: 1.12, radius: 1.08, xp: 1.42, alloy: 1.55, spawn: 22, weight: 0.58 },
-    { id: 'rage', prefix: '暴怒', hp: 1.18, speed: 1.16, damage: 1.42, radius: 1.02, xp: 1.32, alloy: 1.3, spawn: 30, weight: 0.52 },
-    { id: 'shade', prefix: '幽影', hp: 0.94, speed: 1.22, damage: 1.22, radius: 0.9, xp: 1.28, alloy: 1.24, spawn: 38, weight: 0.48 },
-    { id: 'arc', prefix: '电弧', hp: 1.24, speed: 1.08, damage: 1.32, radius: 1, xp: 1.44, alloy: 1.42, spawn: 48, weight: 0.42 },
-    { id: 'regen', prefix: '再生', hp: 1.58, speed: 0.94, damage: 1.18, radius: 1.04, xp: 1.5, alloy: 1.48, spawn: 58, weight: 0.36 },
-    { id: 'venom', prefix: '剧毒', hp: 1.3, speed: 1.06, damage: 1.58, radius: 1, xp: 1.62, alloy: 1.58, spawn: 68, weight: 0.3 },
-    { id: 'prime', prefix: '原初', hp: 2.1, speed: 1.05, damage: 1.85, radius: 1.16, xp: 2.05, alloy: 2.1, spawn: 78, weight: 0.22 },
-];
-
-function buildEnemyCatalog(): EnemySpec[] {
-    const enemies: EnemySpec[] = [];
-    for (const base of BASE_ENEMY_ARCHETYPES) {
-        for (let variantIndex = 0; variantIndex < ENEMY_VARIANTS.length; variantIndex++) {
-            const variant = ENEMY_VARIANTS[variantIndex];
-            const suffix = variant.id ? `-${variant.id}` : '';
-            enemies.push({
-                ...base,
-                id: `${base.id}${suffix}`,
-                name: `${variant.prefix}${base.name}`,
-                variantId: variant.id || 'base',
-                variantIndex,
-                hp: Math.round(base.hp * variant.hp),
-                speed: Math.round(base.speed * variant.speed),
-                damage: Math.max(2, Math.round(base.damage * variant.damage)),
-                radius: Math.max(9, Math.round(base.radius * variant.radius)),
-                xp: Math.max(1, Math.round(base.xp * variant.xp)),
-                alloyChance: Math.min(0.85, Number((base.alloyChance * variant.alloy).toFixed(3))),
-                spawnAfter: base.spawnAfter + variant.spawn,
-                weight: Number(Math.max(0.12, base.weight * variant.weight).toFixed(2)),
-            });
-        }
-    }
-    return enemies;
-}
-
-const ENEMY_SPECS: EnemySpec[] = buildEnemyCatalog();
-
-const WEAPON_FAMILIES = [
-    { id: 'storm-rifle', name: '风暴步枪', color: '#4CC9F0', damage: 4.2, fireRate: 1.05, pierce: 0, multiShot: 0, drone: 0, bulletSpeed: 1.1, cost: 38, desc: '稳定提升自动射击伤害和射速。' },
-    { id: 'split-barrel', name: '裂变枪管', color: '#F15BB5', damage: 2.6, fireRate: 0.4, pierce: 0.7, multiShot: 1.2, drone: 0, bulletSpeed: 0.2, cost: 52, desc: '追加散射弹、分裂弹和穿透。' },
-    { id: 'orbital-drone', name: '轨道无人机', color: '#90BE6D', damage: 1.7, fireRate: 0.18, pierce: 0, multiShot: 0, drone: 1.35, bulletSpeed: 0, cost: 58, desc: '自动电击附近怪物。' },
-    { id: 'rail-cannon', name: '磁轨炮', color: '#577590', damage: 6.5, fireRate: -0.05, pierce: 1.1, multiShot: 0, drone: 0, bulletSpeed: 1.8, cost: 62, desc: '高伤害、高弹速、偏穿透。' },
-    { id: 'nova-shotgun', name: '新星霰弹', color: '#F8961E', damage: 3.1, fireRate: 0.22, pierce: 0, multiShot: 1.55, drone: 0, bulletSpeed: -0.2, cost: 56, desc: '近距离多弹道爆发。' },
-    { id: 'ion-lance', name: '离子长枪', color: '#43AA8B', damage: 5.1, fireRate: 0.28, pierce: 0.9, multiShot: 0.15, drone: 0, bulletSpeed: 1.4, cost: 60, desc: '稳定穿刺线性火力。' },
-    { id: 'ember-smg', name: '余烬冲锋枪', color: '#F3722C', damage: 2.4, fireRate: 1.45, pierce: 0, multiShot: 0.25, drone: 0, bulletSpeed: 0.5, cost: 44, desc: '高速低伤弹幕。' },
-    { id: 'frost-beamer', name: '霜束发射器', color: '#A7F3D0', damage: 3.7, fireRate: 0.72, pierce: 0.35, multiShot: 0.25, drone: 0.1, bulletSpeed: 0.8, cost: 50, desc: '均衡火力和控场弹速。' },
-    { id: 'void-needle', name: '虚空针', color: '#B5179E', damage: 4.8, fireRate: 0.58, pierce: 1.35, multiShot: 0, drone: 0, bulletSpeed: 1.2, cost: 64, desc: '细小高穿透弹。' },
-    { id: 'sun-disc', name: '日冕飞盘', color: '#F9C74F', damage: 3.8, fireRate: 0.32, pierce: 0.5, multiShot: 0.65, drone: 0.25, bulletSpeed: 0.35, cost: 54, desc: '旋转火力和少量无人支援。' },
-    { id: 'echo-bow', name: '回声弓', color: '#38BDF8', damage: 4.4, fireRate: 0.66, pierce: 0.45, multiShot: 0.55, drone: 0, bulletSpeed: 1.0, cost: 48, desc: '中速多段弹道。' },
-    { id: 'plague-sprayer', name: '瘟疫喷射器', color: '#84CC16', damage: 3.3, fireRate: 1.0, pierce: 0.2, multiShot: 0.75, drone: 0, bulletSpeed: 0.1, cost: 46, desc: '高频散射清群。' },
-    { id: 'gravity-hammer', name: '重力锤', color: '#64748B', damage: 7.2, fireRate: -0.18, pierce: 0.55, multiShot: 0, drone: 0.1, bulletSpeed: -0.35, cost: 70, desc: '重型慢射高伤。' },
-    { id: 'mirror-prism', name: '镜像棱镜', color: '#E879F9', damage: 2.9, fireRate: 0.62, pierce: 0.25, multiShot: 1.1, drone: 0.15, bulletSpeed: 0.55, cost: 56, desc: '镜像弹道数量成长。' },
-    { id: 'meteor-launcher', name: '流星发射器', color: '#EF4444', damage: 6.1, fireRate: 0.08, pierce: 0.2, multiShot: 0.4, drone: 0, bulletSpeed: 0.2, cost: 66, desc: '重火力爆发武器。' },
-    { id: 'pulse-fan', name: '脉冲扇', color: '#22D3EE', damage: 2.7, fireRate: 0.9, pierce: 0.15, multiShot: 0.95, drone: 0, bulletSpeed: 0.7, cost: 44, desc: '扇形覆盖和高速射击。' },
-    { id: 'thorn-chain', name: '荆棘链', color: '#65A30D', damage: 3.9, fireRate: 0.42, pierce: 0.9, multiShot: 0.25, drone: 0.25, bulletSpeed: 0.45, cost: 52, desc: '穿透和链式辅助。' },
-    { id: 'star-scythe', name: '星镰', color: '#C084FC', damage: 5.6, fireRate: 0.36, pierce: 0.75, multiShot: 0.45, drone: 0, bulletSpeed: 0.9, cost: 64, desc: '后期成长型穿刺武器。' },
-    { id: 'quantum-loom', name: '量子织机', color: '#14B8A6', damage: 3.4, fireRate: 0.7, pierce: 0.45, multiShot: 0.7, drone: 0.35, bulletSpeed: 0.6, cost: 58, desc: '均衡弹幕与无人支援。' },
-    { id: 'redline-carbine', name: '红线卡宾', color: '#FB7185', damage: 4.6, fireRate: 0.82, pierce: 0.35, multiShot: 0.25, drone: 0, bulletSpeed: 1.3, cost: 54, desc: '高速精准火力。' },
-];
-
-const WEAPON_VARIANTS = [
-    { id: '', prefix: '', suffix: '', tier: 1, damage: 1, fireRate: 1, pierce: 1, multiShot: 1, drone: 1, speed: 1, cost: 1 },
-    { id: 'light', prefix: '轻型', suffix: '', tier: 2, damage: 0.86, fireRate: 1.22, pierce: 0.8, multiShot: 1.06, drone: 0.9, speed: 1.16, cost: 1.08 },
-    { id: 'pulse', prefix: '脉冲', suffix: '', tier: 3, damage: 1.04, fireRate: 1.12, pierce: 1, multiShot: 1.1, drone: 1, speed: 1.1, cost: 1.18 },
-    { id: 'accurate', prefix: '精准', suffix: '', tier: 4, damage: 1.22, fireRate: 0.92, pierce: 1.12, multiShot: 0.9, drone: 0.9, speed: 1.24, cost: 1.28 },
-    { id: 'heavy', prefix: '重载', suffix: '', tier: 5, damage: 1.48, fireRate: 0.72, pierce: 1.18, multiShot: 0.84, drone: 0.85, speed: 0.92, cost: 1.42 },
-    { id: 'rapid', prefix: '连射', suffix: '', tier: 6, damage: 0.94, fireRate: 1.55, pierce: 0.88, multiShot: 1.16, drone: 0.95, speed: 1.08, cost: 1.55 },
-    { id: 'piercing', prefix: '穿甲', suffix: '', tier: 7, damage: 1.18, fireRate: 0.96, pierce: 1.75, multiShot: 0.95, drone: 0.9, speed: 1.02, cost: 1.72 },
-    { id: 'overclock', prefix: '超频', suffix: '', tier: 8, damage: 1.22, fireRate: 1.36, pierce: 1.1, multiShot: 1.12, drone: 1.18, speed: 1.18, cost: 1.9 },
-    { id: 'resonance', prefix: '共振', suffix: '', tier: 9, damage: 1.36, fireRate: 1.08, pierce: 1.3, multiShot: 1.35, drone: 1.28, speed: 1.04, cost: 2.1 },
-    { id: 'starfall', prefix: '星陨', suffix: '', tier: 10, damage: 1.68, fireRate: 1.18, pierce: 1.55, multiShot: 1.45, drone: 1.42, speed: 1.2, cost: 2.35 },
-];
-
-function getEquipmentRarityForTier(tier: number): EquipmentRarity {
-    if (tier >= 10) return '神话';
-    if (tier >= 8) return '传奇';
-    if (tier >= 5) return '史诗';
-    if (tier >= 3) return '稀有';
-    return '普通';
-}
-
-function getRarityCostMultiplier(rarity: EquipmentRarity) {
-    switch (rarity) {
-        case '神话': return 1.85;
-        case '传奇': return 1.55;
-        case '史诗': return 1.28;
-        case '稀有': return 1.12;
-        default: return 1;
-    }
-}
-
-function getWeaponAttackStyle(familyId: string): WeaponAttackStyle {
-    switch (familyId) {
-        case 'split-barrel':
-        case 'nova-shotgun':
-            return 'shotgun';
-        case 'rail-cannon':
-        case 'ion-lance':
-        case 'void-needle':
-            return 'rail';
-        case 'orbital-drone':
-            return 'drone';
-        case 'frost-beamer':
-            return 'laser';
-        case 'sun-disc':
-            return 'disc';
-        case 'plague-sprayer':
-            return 'spray';
-        case 'meteor-launcher':
-        case 'gravity-hammer':
-            return 'meteor';
-        case 'pulse-fan':
-            return 'pulse';
-        case 'thorn-chain':
-            return 'chain';
-        case 'star-scythe':
-            return 'scythe';
-        case 'echo-bow':
-        case 'mirror-prism':
-            return 'ricochet';
-        default:
-            return 'rifle';
-    }
-}
-
-function getWeaponStyleName(style: WeaponAttackStyle) {
-    switch (style) {
-        case 'shotgun': return '近距宽弹道';
-        case 'rail': return '高速穿透';
-        case 'laser': return '光束锁定';
-        case 'chain': return '链式跳跃';
-        case 'pulse': return '扇形脉冲';
-        case 'drone': return '无人机电击';
-        case 'disc': return '旋转飞盘';
-        case 'spray': return '喷射覆盖';
-        case 'meteor': return '重型爆发';
-        case 'ricochet': return '弹射折返';
-        case 'scythe': return '成长镰刃';
-        default: return '标准弹道';
-    }
-}
-
-function buildWeaponCatalog(): EquipmentDef[] {
-    const weapons: EquipmentDef[] = [];
-    for (const family of WEAPON_FAMILIES) {
-        for (const variant of WEAPON_VARIANTS) {
-            const legacyIds = ['storm-rifle', 'split-barrel', 'orbital-drone'];
-            const legacyId = variant.id === '' && legacyIds.indexOf(family.id) >= 0;
-            const id = legacyId ? family.id : `${family.id}${variant.id ? `-${variant.id}` : '-standard'}`;
-            const name = `${variant.prefix}${family.name}`;
-            const attackStyle = getWeaponAttackStyle(family.id);
-            const rarity = getEquipmentRarityForTier(variant.tier);
-            weapons.push({
-                id,
-                name,
-                kind: 'weapon',
-                color: family.color,
-                maxLevel: 6 + Math.ceil(variant.tier / 2),
-                baseCost: Math.round(family.cost * variant.cost * getRarityCostMultiplier(rarity)),
-                desc: `${family.desc} ${getWeaponStyleName(attackStyle)}，${rarity}品质 T${variant.tier} 型。`,
-                attackStyle,
-                rarity,
-                weaponStats: {
-                    damage: Number((family.damage * variant.damage).toFixed(2)),
-                    fireRate: Number((family.fireRate * variant.fireRate).toFixed(2)),
-                    pierce: Number((family.pierce * variant.pierce).toFixed(2)),
-                    multiShot: Number((family.multiShot * variant.multiShot).toFixed(2)),
-                    drone: Number((family.drone * variant.drone).toFixed(2)),
-                    bulletSpeed: Number((family.bulletSpeed * variant.speed).toFixed(2)),
-                },
-            });
-        }
-    }
-    return weapons;
-}
-
-interface GearBlueprint {
-    id: string;
-    name: string;
-    slot: GearSlot;
-    color: string;
-    baseCost: number;
-    desc: string;
-    effects: StatEffect[];
-}
-
-interface GearRarityDef {
-    id: string;
-    name: EquipmentRarity;
-    prefix: string;
-    scale: number;
-    cost: number;
-    maxLevel: number;
-}
-
-const GEAR_RARITIES: GearRarityDef[] = [
-    { id: 'common', name: '普通', prefix: '', scale: 1, cost: 1, maxLevel: 6 },
-    { id: 'rare', name: '稀有', prefix: '精制', scale: 1.42, cost: 1.72, maxLevel: 8 },
-    { id: 'epic', name: '史诗', prefix: '超导', scale: 2.02, cost: 2.85, maxLevel: 10 },
-    { id: 'legendary', name: '传奇', prefix: '星铸', scale: 2.78, cost: 4.7, maxLevel: 12 },
-    { id: 'mythic', name: '神话', prefix: '神话', scale: 3.66, cost: 7.4, maxLevel: 14 },
-];
-
-const GEAR_BLUEPRINTS: GearBlueprint[] = [
-    { id: 'tactical-visor', name: '战术目镜', slot: 'hat', color: '#38BDF8', baseCost: 28, desc: '稳定强化索敌距离和弱点判断。', effects: [{ stat: 'attackRange', amount: 36 }, { stat: 'critChance', amount: 0.012 }] },
-    { id: 'ember-crown', name: '燃焰头冠', slot: 'hat', color: '#F3722C', baseCost: 34, desc: '适合对抗火焰怪潮的进攻头冠。', effects: [{ stat: 'fireDefense', amount: 8 }, { stat: 'attackPower', amount: 3 }, { stat: 'iceDefense', amount: -1.5 }] },
-    { id: 'storm-hood', name: '雷鸣兜帽', slot: 'hat', color: '#4CC9F0', baseCost: 36, desc: '把雷抗转成更快的武器节奏。', effects: [{ stat: 'lightningDefense', amount: 8 }, { stat: 'attackSpeed', amount: 0.025 }, { stat: 'physicalDefense', amount: -1.5 }] },
-    { id: 'venom-mask', name: '防毒面罩', slot: 'hat', color: '#84CC16', baseCost: 32, desc: '降低毒系持续压制并提供少量续航。', effects: [{ stat: 'poisonDefense', amount: 10 }, { stat: 'hpRegen', amount: 0.12 }] },
-    { id: 'cryo-helm', name: '寒霜头盔', slot: 'hat', color: '#A7F3D0', baseCost: 34, desc: '以冰抗和护盾稳定正面压力。', effects: [{ stat: 'iceDefense', amount: 9 }, { stat: 'shieldMax', amount: 8 }] },
-    { id: 'command-crown', name: '指挥王冠', slot: 'hat', color: '#90BE6D', baseCost: 42, desc: '增强无人机协同和掉落运气。', effects: [{ stat: 'dronePower', amount: 0.55 }, { stat: 'luck', amount: 2 }] },
-    { id: 'execution-visor', name: '处决目镜', slot: 'hat', color: '#F59E0B', baseCost: 44, desc: '提升致命判定，适合处理高血量 Boss。', effects: [{ stat: 'lethalChance', amount: 0.004 }, { stat: 'lethalDamage', amount: 0.08 }] },
-    { id: 'scholar-band', name: '研习额带', slot: 'hat', color: '#38BDF8', baseCost: 38, desc: '牺牲少量生命换取更快角色成长。', effects: [{ stat: 'xpGain', amount: 0.035 }, { stat: 'pickupRange', amount: 12 }, { stat: 'maxHp', amount: -3 }] },
-    { id: 'fortress-helm', name: '堡垒头盔', slot: 'hat', color: '#64748B', baseCost: 40, desc: '重型头盔，提升生存但拖慢移动。', effects: [{ stat: 'physicalDefense', amount: 5 }, { stat: 'maxHp', amount: 8 }, { stat: 'moveSpeed', amount: -3 }] },
-    { id: 'prism-helm', name: '棱光头盔', slot: 'hat', color: '#C084FC', baseCost: 46, desc: '提高魔防和暴击倍率，但节奏略慢。', effects: [{ stat: 'magicDefense', amount: 6 }, { stat: 'critDamage', amount: 0.08 }, { stat: 'attackSpeed', amount: -0.01 }] },
-
-    { id: 'phase-armor', name: '相位护甲', slot: 'armor', color: '#F8961E', baseCost: 46, desc: '均衡生命、物防、魔防和冷热抗性。', effects: [{ stat: 'maxHp', amount: 22 }, { stat: 'physicalDefense', amount: 2.2 }, { stat: 'magicDefense', amount: 1 }, { stat: 'fireDefense', amount: 0.8 }, { stat: 'iceDefense', amount: 0.8 }] },
-    { id: 'bulwark-carapace', name: '壁垒甲壳', slot: 'armor', color: '#64748B', baseCost: 52, desc: '重型减伤护甲，牺牲机动换硬度。', effects: [{ stat: 'maxHp', amount: 34 }, { stat: 'damageReduction', amount: 0.008 }, { stat: 'moveSpeed', amount: -4 }] },
-    { id: 'ember-mail', name: '灼焰胸甲', slot: 'armor', color: '#F3722C', baseCost: 48, desc: '针对火焰远程怪和爆炸怪。', effects: [{ stat: 'fireDefense', amount: 12 }, { stat: 'physicalDefense', amount: 4 }, { stat: 'iceDefense', amount: -2 }] },
-    { id: 'storm-mail', name: '雷纹胸甲', slot: 'armor', color: '#4CC9F0', baseCost: 50, desc: '抵御雷电和电弧怪，并加快护盾恢复。', effects: [{ stat: 'lightningDefense', amount: 12 }, { stat: 'shieldRegen', amount: 0.25 }, { stat: 'poisonDefense', amount: -1.5 }] },
-    { id: 'toxin-weave', name: '抗毒织甲', slot: 'armor', color: '#84CC16', baseCost: 44, desc: '对毒系持续伤害更稳，同时带回复。', effects: [{ stat: 'poisonDefense', amount: 13 }, { stat: 'hpRegen', amount: 0.18 }] },
-    { id: 'frost-plate', name: '寒钢板甲', slot: 'armor', color: '#A7F3D0', baseCost: 50, desc: '强化冰抗和护盾容量。', effects: [{ stat: 'iceDefense', amount: 13 }, { stat: 'shieldMax', amount: 14 }, { stat: 'fireDefense', amount: -2 }] },
-    { id: 'arcane-robe', name: '秘法战袍', slot: 'armor', color: '#8B5CF6', baseCost: 54, desc: '面对魔法和 Boss 技能时更稳定。', effects: [{ stat: 'magicDefense', amount: 10 }, { stat: 'shieldMax', amount: 18 }, { stat: 'physicalDefense', amount: -2 }] },
-    { id: 'kinetic-vest', name: '动能背心', slot: 'armor', color: '#43AA8B', baseCost: 42, desc: '轻甲路线，兼顾闪避和速度。', effects: [{ stat: 'dodgeChance', amount: 0.008 }, { stat: 'moveSpeed', amount: 6 }, { stat: 'maxHp', amount: 6 }] },
-    { id: 'titan-frame', name: '泰坦骨架', slot: 'armor', color: '#475569', baseCost: 60, desc: '极重护甲，大幅抗压但降低节奏。', effects: [{ stat: 'physicalDefense', amount: 9 }, { stat: 'maxHp', amount: 18 }, { stat: 'attackSpeed', amount: -0.015 }, { stat: 'moveSpeed', amount: -5 }] },
-    { id: 'living-armor', name: '活体装甲', slot: 'armor', color: '#90BE6D', baseCost: 56, desc: '偏回复和毒抗的生存护甲。', effects: [{ stat: 'hpRegen', amount: 0.35 }, { stat: 'maxHp', amount: 14 }, { stat: 'poisonDefense', amount: 4 }] },
-
-    { id: 'kinetic-boots', name: '动能靴', slot: 'boots', color: '#43AA8B', baseCost: 42, desc: '提高移动速度和闪避空间。', effects: [{ stat: 'moveSpeed', amount: 17 }, { stat: 'dodgeChance', amount: 0.008 }] },
-    { id: 'phase-greaves', name: '相位胫甲', slot: 'boots', color: '#2DD4BF', baseCost: 48, desc: '高闪避位移装备，牺牲少量护盾。', effects: [{ stat: 'moveSpeed', amount: 12 }, { stat: 'dodgeChance', amount: 0.014 }, { stat: 'shieldMax', amount: -3 }] },
-    { id: 'magnet-treads', name: '磁吸足具', slot: 'boots', color: '#577590', baseCost: 40, desc: '扩大拾取半径并增加资源效率。', effects: [{ stat: 'pickupRange', amount: 28 }, { stat: 'resourceGain', amount: 0.018 }, { stat: 'moveSpeed', amount: -2 }] },
-    { id: 'storm-runners', name: '雷暴跑鞋', slot: 'boots', color: '#4CC9F0', baseCost: 46, desc: '雷抗和射击节奏兼顾。', effects: [{ stat: 'lightningDefense', amount: 8 }, { stat: 'attackSpeed', amount: 0.022 }] },
-    { id: 'frost-skates', name: '霜滑靴', slot: 'boots', color: '#A7F3D0', baseCost: 44, desc: '冰抗型高速移动鞋。', effects: [{ stat: 'iceDefense', amount: 8 }, { stat: 'moveSpeed', amount: 15 }, { stat: 'fireDefense', amount: -1.5 }] },
-    { id: 'ember-spurs', name: '焰刺靴', slot: 'boots', color: '#F3722C', baseCost: 44, desc: '提供火抗和少量进攻属性。', effects: [{ stat: 'fireDefense', amount: 8 }, { stat: 'attackPower', amount: 2.8 }, { stat: 'dodgeChance', amount: -0.002 }] },
-    { id: 'toxic-waders', name: '防毒涉靴', slot: 'boots', color: '#84CC16', baseCost: 42, desc: '毒潮和持续伤害环境下更舒服。', effects: [{ stat: 'poisonDefense', amount: 10 }, { stat: 'hpRegen', amount: 0.08 }, { stat: 'moveSpeed', amount: 4 }] },
-    { id: 'gravity-boots', name: '重力靴', slot: 'boots', color: '#64748B', baseCost: 46, desc: '用速度换取物防和减伤。', effects: [{ stat: 'physicalDefense', amount: 5 }, { stat: 'damageReduction', amount: 0.006 }, { stat: 'moveSpeed', amount: -3 }] },
-    { id: 'scout-sandals', name: '侦察轻履', slot: 'boots', color: '#38BDF8', baseCost: 38, desc: '偏经验和幸运的轻装鞋。', effects: [{ stat: 'xpGain', amount: 0.025 }, { stat: 'luck', amount: 2.5 }, { stat: 'maxHp', amount: -3 }] },
-    { id: 'blink-soles', name: '闪现鞋底', slot: 'boots', color: '#C084FC', baseCost: 52, desc: '高闪避鞋底，但防御略低。', effects: [{ stat: 'dodgeChance', amount: 0.02 }, { stat: 'moveSpeed', amount: 10 }, { stat: 'physicalDefense', amount: -2 }] },
-
-    { id: 'magnet-coil', name: '磁吸线圈', slot: 'accessory', color: '#577590', baseCost: 34, desc: '扩大经验和资源拾取范围。', effects: [{ stat: 'pickupRange', amount: 22 }, { stat: 'luck', amount: 1.2 }] },
-    { id: 'reactor-core', name: '反应堆芯', slot: 'accessory', color: '#F94144', baseCost: 68, desc: '提高弹速、伤害和后期上限。', effects: [{ stat: 'attackPower', amount: 3.4 }, { stat: 'bulletSpeed', amount: 22 }, { stat: 'maxHp', amount: 9 }, { stat: 'lightningDefense', amount: 1.2 }] },
-    { id: 'vampire-chip', name: '汲能芯片', slot: 'accessory', color: '#B5179E', baseCost: 64, desc: '提供回复和毒抗，击杀时仍会少量回血。', effects: [{ stat: 'hpRegen', amount: 0.22 }, { stat: 'poisonDefense', amount: 1.1 }, { stat: 'maxHp', amount: 5 }] },
-    { id: 'crit-lattice', name: '暴击晶格', slot: 'accessory', color: '#F15BB5', baseCost: 52, desc: '强化暴击率和暴击倍率。', effects: [{ stat: 'critChance', amount: 0.018 }, { stat: 'critDamage', amount: 0.08 }] },
-    { id: 'execution-ring', name: '处决指环', slot: 'accessory', color: '#F59E0B', baseCost: 62, desc: '专门处理高血量 Boss 的致命首饰。', effects: [{ stat: 'lethalChance', amount: 0.005 }, { stat: 'lethalMaxHpPct', amount: 0.004 }, { stat: 'lethalDamage', amount: 0.08 }] },
-    { id: 'shield-orb', name: '护盾宝珠', slot: 'accessory', color: '#22D3EE', baseCost: 50, desc: '增加护盾容量和回复。', effects: [{ stat: 'shieldMax', amount: 22 }, { stat: 'shieldRegen', amount: 0.45 }] },
-    { id: 'salvage-charm', name: '拾荒护符', slot: 'accessory', color: '#F8961E', baseCost: 48, desc: '用少量攻击换取资源收益。', effects: [{ stat: 'resourceGain', amount: 0.035 }, { stat: 'luck', amount: 4 }, { stat: 'attackPower', amount: -1.5 }] },
-    { id: 'learning-prism', name: '经验棱镜', slot: 'accessory', color: '#38BDF8', baseCost: 48, desc: '加快升级节奏，防御略低。', effects: [{ stat: 'xpGain', amount: 0.045 }, { stat: 'pickupRange', amount: 10 }, { stat: 'physicalDefense', amount: -1 }] },
-    { id: 'drone-relay', name: '无人机中继', slot: 'accessory', color: '#90BE6D', baseCost: 54, desc: '强化无人机电击和索敌半径。', effects: [{ stat: 'dronePower', amount: 0.7 }, { stat: 'attackRange', amount: 18 }, { stat: 'magicDefense', amount: -1 }] },
-    { id: 'element-signet', name: '元素徽记', slot: 'accessory', color: '#14B8A6', baseCost: 58, desc: '均衡四元素抗性和魔防。', effects: [{ stat: 'fireDefense', amount: 5 }, { stat: 'lightningDefense', amount: 5 }, { stat: 'poisonDefense', amount: 5 }, { stat: 'iceDefense', amount: 5 }, { stat: 'magicDefense', amount: 2 }] },
-];
-
-function scaleGearEffects(effects: StatEffect[], rarity: GearRarityDef): StatEffect[] {
-    const rarityIndex = GEAR_RARITIES.indexOf(rarity);
-    const hasTradeoff = effects.some((effect) => effect.amount < 0);
-    return effects.map((effect) => {
-        const scale = effect.amount < 0
-            ? 0.5 + rarityIndex * 0.15
-            : rarity.scale * (hasTradeoff ? 1.12 : 1);
-        const amount = effect.amount * scale;
-        return {
-            stat: effect.stat,
-            amount: Math.abs(amount) >= 3 ? Number(amount.toFixed(1)) : Number(amount.toFixed(3)),
-        };
-    });
-}
-
-function buildGearCatalog(): EquipmentDef[] {
-    const gear: EquipmentDef[] = [];
-    for (const blueprint of GEAR_BLUEPRINTS) {
-        for (const rarity of GEAR_RARITIES) {
-            const common = rarity.id === 'common';
-            const id = common ? blueprint.id : `${blueprint.id}-${rarity.id}`;
-            gear.push({
-                id,
-                name: `${rarity.prefix}${blueprint.name}`,
-                kind: 'gear',
-                gearSlot: blueprint.slot,
-                rarity: rarity.name,
-                color: blueprint.color,
-                maxLevel: rarity.maxLevel,
-                baseCost: Math.round(blueprint.baseCost * rarity.cost),
-                desc: `${GEAR_SLOT_LABELS[blueprint.slot]}装备。${blueprint.desc}${rarity.name}品质。`,
-                gearStats: scaleGearEffects(blueprint.effects, rarity),
-            });
-        }
-    }
-    return gear;
-}
-
-const WEAPON_CATALOG: EquipmentDef[] = buildWeaponCatalog();
-const GEAR_CATALOG: EquipmentDef[] = buildGearCatalog();
-const EQUIPMENT: EquipmentDef[] = [...WEAPON_CATALOG, ...GEAR_CATALOG];
-const STARTER_EQUIPMENT_IDS = ['storm-rifle', 'tactical-visor', 'phase-armor', 'kinetic-boots', 'magnet-coil'];
 const PLAYER_DIRECTIONS: PlayerDirection[] = ['south', 'south_east', 'east', 'north_east', 'north', 'north_west', 'west', 'south_west'];
 const PLAYER_DIRECTION_ANGLE_OFFSET = Math.PI / 2;
 const PLAYER_RUN_ANIMATION_META: Record<PlayerDirection, { frameName: string; frames: number; cellSize: number; fps: number }> = {
@@ -849,16 +295,6 @@ const ENEMY_STRIP_META: Record<string, { frameName: string; frames: number; cell
     warden: { frameName: 'enemy_warden_idle', frames: 6, cellSize: 192, fps: 8 },
     boss: { frameName: 'enemy_boss_idle', frames: 8, cellSize: 224, fps: 8 },
 };
-const BOSS_ENEMY_COUNT = 1;
-const TOTAL_ENEMY_TYPES = ENEMY_SPECS.length + BOSS_ENEMY_COUNT;
-const WEAPON_COUNT = WEAPON_CATALOG.length;
-const GEAR_COUNT = GEAR_CATALOG.length;
-
-const RUN_ITEMS: LevelUpgrade[] = buildRunItemCatalog();
-const RUN_ITEM_COUNT = RUN_ITEMS.length;
-const LEVEL_UPGRADES: LevelUpgrade[] = buildStatUpgradeCatalog();
-const STAT_UPGRADE_COUNT = LEVEL_UPGRADES.length;
-
 @ccclass('RogueShooterGame')
 export class RogueShooterGame extends Component {
     private canvasNode: Node | null = null;
@@ -1046,15 +482,6 @@ export class RogueShooterGame extends Component {
     private acquiredRunItemIds: Set<string> = new Set();
     private acquiredStatUpgradeIds: Set<string> = new Set();
     private shopOffers: LevelUpgrade[] = [];
-
-    private runDamageBonus = 0;
-    private runFireRateBonus = 0;
-    private runMoveSpeedBonus = 0;
-    private runMaxHpBonus = 0;
-    private runPickupBonus = 0;
-    private runPierceBonus = 0;
-    private runMultiShot = 0;
-    private runRegen = 0;
 
     private pressedKeys = new Set<KeyCode>();
     private touchActive = false;
@@ -1908,14 +1335,6 @@ export class RogueShooterGame extends Component {
         this.level = 1;
         this.xp = 0;
         this.xpToNext = 65;
-        this.runDamageBonus = 0;
-        this.runFireRateBonus = 0;
-        this.runMoveSpeedBonus = 0;
-        this.runMaxHpBonus = 0;
-        this.runPickupBonus = 0;
-        this.runPierceBonus = 0;
-        this.runMultiShot = 0;
-        this.runRegen = 0;
         this.runStats = createEmptyCharacterStats();
         this.acquiredRunItemIds = new Set();
         this.acquiredStatUpgradeIds = new Set();
