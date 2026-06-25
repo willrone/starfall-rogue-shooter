@@ -27,6 +27,16 @@ import {
     view,
 } from 'cc';
 
+import {
+    RESOURCE_DEFS,
+    createEmptyWallet as createResourceWallet,
+    formatWallet as formatResourceWallet,
+    getResourceDef as getResourceDefinition,
+    hasResources as walletHasResources,
+    spendResources as spendWalletResources,
+} from './core/resources';
+import type { ResourceType, ResourceWallet } from './core/types';
+
 const { ccclass } = _decorator;
 
 const DESIGN_WIDTH = 720;
@@ -93,7 +103,6 @@ const ENEMY_CROWD_ORBIT_WEIGHT = 0.58;
 
 type GamePhase = 'menu' | 'combat' | 'level-up' | 'item-choice' | 'shop' | 'loot' | 'hangar' | 'paused';
 type BattleEndReason = 'death' | 'extract';
-type ResourceType = 'alloy' | 'cores' | 'shards' | 'biomass' | 'circuits' | 'crystals';
 type ChestPickupType = 'chest-common' | 'chest-rare';
 type PickupType = 'xp' | ResourceType | ChestPickupType;
 type EquipmentKind = 'weapon' | 'gear';
@@ -110,15 +119,6 @@ interface SpriteStripAnimation {
     fps: number;
     cellSize: number;
 }
-
-interface ResourceDef {
-    id: ResourceType;
-    name: string;
-    shortName: string;
-    color: string;
-}
-
-type ResourceWallet = Record<ResourceType, number>;
 
 interface ButtonView {
     node: Node;
@@ -318,24 +318,6 @@ interface LootChoice {
     color: string;
     apply: () => void;
 }
-
-const RESOURCE_DEFS: ResourceDef[] = [
-    { id: 'alloy', name: '合金', shortName: '合金', color: '#F9C74F' },
-    { id: 'cores', name: '核心', shortName: '核心', color: '#F94144' },
-    { id: 'shards', name: '装备碎片', shortName: '碎片', color: '#C084FC' },
-    { id: 'biomass', name: '生体样本', shortName: '样本', color: '#90BE6D' },
-    { id: 'circuits', name: '电路板', shortName: '电路', color: '#4CC9F0' },
-    { id: 'crystals', name: '虚空晶体', shortName: '晶体', color: '#B5179E' },
-];
-
-const RESOURCE_ZERO: ResourceWallet = {
-    alloy: 0,
-    cores: 0,
-    shards: 0,
-    biomass: 0,
-    circuits: 0,
-    crystals: 0,
-};
 
 const STAT_META: Record<StatKey, { name: string; kind: 'number' | 'percent' | 'multiplier' }> = {
     attackPower: { name: '攻击力', kind: 'number' },
@@ -4146,17 +4128,11 @@ export class RogueShooterGame extends Component {
     }
 
     private getResourceDef(type: ResourceType) {
-        for (const resource of RESOURCE_DEFS) {
-            if (resource.id === type) return resource;
-        }
-        return RESOURCE_DEFS[0];
+        return getResourceDefinition(type);
     }
 
     private formatWallet(wallet: ResourceWallet) {
-        const parts = RESOURCE_DEFS
-            .filter((resource) => wallet[resource.id] > 0)
-            .map((resource) => `${resource.shortName} ${wallet[resource.id]}`);
-        return parts.length > 0 ? parts.join('  ') : '无';
+        return formatResourceWallet(wallet);
     }
 
     private formatTime(seconds: number) {
@@ -5650,23 +5626,21 @@ export class RogueShooterGame extends Component {
     }
 
     private createEmptyWallet(): ResourceWallet {
-        return { ...RESOURCE_ZERO };
+        return createResourceWallet();
     }
 
     private hasResources(cost: ResourceWallet) {
-        return this.cores >= cost.cores
-            && this.shards >= cost.shards
-            && this.biomass >= cost.biomass
-            && this.circuits >= cost.circuits
-            && this.crystals >= cost.crystals;
+        return walletHasResources(this.getInventoryWallet(), cost);
     }
 
     private spendResources(cost: ResourceWallet) {
-        this.cores -= cost.cores;
-        this.shards -= cost.shards;
-        this.biomass -= cost.biomass;
-        this.circuits -= cost.circuits;
-        this.crystals -= cost.crystals;
+        const next = spendWalletResources(this.getInventoryWallet(), cost);
+        if (!next) return;
+        this.cores = next.cores;
+        this.shards = next.shards;
+        this.biomass = next.biomass;
+        this.circuits = next.circuits;
+        this.crystals = next.crystals;
     }
 
     private formatCost(cost: ResourceWallet) {
