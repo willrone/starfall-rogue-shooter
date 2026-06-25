@@ -86,7 +86,9 @@ import {
 } from './catalogs/runItemCatalog';
 import { WEAPON_FAMILIES, WEAPON_VARIANTS, WEAPON_CATALOG, WEAPON_COUNT, buildWeaponCatalog, getWeaponStyleName } from './catalogs/weaponCatalog';
 import { EQUIPMENT, GEAR_BLUEPRINTS, GEAR_RARITIES, GEAR_CATALOG, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from './catalogs/equipmentCatalog';
-import { ENEMY_SPECS, BOSS_ENEMY_COUNT, TOTAL_ENEMY_TYPES, BASE_ENEMY_ARCHETYPES, ENEMY_VARIANTS, buildEnemyCatalog } from './catalogs/enemyCatalog';
+import { ENEMY_SPECS, BOSS_ENEMY_COUNT, TOTAL_ENEMY_TYPES, ENEMY_VARIANTS, buildEnemyCatalog } from './catalogs/enemyCatalog';
+import { EnemyManager, ENEMY_PLAYER_PADDING, ENEMY_PROJECTILE_LIMIT, ENEMY_STRIP_META, MAX_CHESTS_PER_WAVE, type Enemy, type EnemyHostContext, type SpriteStripAnimation } from './enemy/enemyManager';
+import { CombatState, createCombatState, resetCombatSession } from './state/combatState';
 
 const { ccclass } = _decorator;
 
@@ -112,10 +114,6 @@ const EQUIPPED_SLOT_COUNT = 6;
 const MAX_EQUIPPED_WEAPONS = 2;
 const MAX_EQUIPPED_GEAR = 4;
 const FLOATING_TEXT_LIMIT = 90;
-const WAVES_PER_CYCLE = 10;
-const ORDINARY_WAVES_PER_CYCLE = WAVES_PER_CYCLE - 1;
-const WAVE_MIN_DURATION = 50;
-const WAVE_MAX_DURATION = 60;
 const LEVEL_REFRESH_COST = 28;
 const CHEST_REFRESH_COST = 34;
 const SHOP_REFRESH_COST = 18;
@@ -123,40 +121,13 @@ const SHOP_ITEM_COUNT = 6;
 const UI_SAFE_TOP = 56;
 const UI_SAFE_BOTTOM = 32;
 const MIN_TOUCH_BUTTON_HEIGHT = 48;
-const ENEMY_PLAYER_PADDING = 3;
-const ENEMY_SEPARATION_PADDING = 8;
-const ENEMY_SEPARATION_CELL = 86;
-const ENEMY_SEPARATION_BUCKET_SCAN = 6;
-const ENEMY_SEPARATION_MAX_CHECKS = 18;
 const BULLET_HIT_CELL = 160;
-const ENEMY_PROJECTILE_LIMIT = 140;
 const MAX_COMBAT_DT = 1 / 30;
 const PICKUP_MERGE_RADIUS = 78;
 const PICKUP_COMPACT_RADIUS = 240;
 const PICKUP_SOFT_CAP = 190;
 const PICKUP_HARD_CAP = 260;
-const NORMAL_XP_DROP_CHANCE = 0.38;
-const ELITE_XP_DROP_CHANCE = 0.82;
-const NORMAL_ALLOY_DROP_MULTIPLIER = 0.55;
-const NORMAL_MATERIAL_DROP_CHANCE = 0.045;
-const ELITE_MATERIAL_DROP_CHANCE = 0.3;
-const MAX_CHESTS_PER_WAVE = 2;
-const ENEMY_HIT_FLASH_DURATION = 0.14;
-const ENEMY_STATUS_KEY_ARMOR = 'armor';
-const ENEMY_STATUS_KEY_DASH = 'dash';
-const ENEMY_SEP_INTERVAL = 0.045;
-const ENEMY_SEP_PLAYER_DIST = 480;
-const ENEMY_CROWD_MIN_COUNT = 18;
-const ENEMY_CROWD_REPEL_RADIUS = 112;
-const ENEMY_CROWD_MAX_NEIGHBORS = 12;
-const ENEMY_CROWD_REPEL_WEIGHT = 1.45;
-const ENEMY_CROWD_ORBIT_WEIGHT = 0.58;
 
-interface SpriteStripAnimation {
-    frames: SpriteFrame[];
-    fps: number;
-    cellSize: number;
-}
 
 interface ButtonView {
     node: Node;
@@ -167,33 +138,6 @@ interface ButtonView {
     color: string;
     disabledColor: string;
     disabled: boolean;
-}
-
-interface Enemy {
-    id: number;
-    spec: EnemySpec;
-    node: Node;
-    gfx: Graphics;
-    sprite: Sprite | null;
-    hp: number;
-    maxHp: number;
-    speed: number;
-    damage: number;
-    radius: number;
-    visualRadius: number;
-    elite: boolean;
-    boss: boolean;
-    damageType: DamageType;
-    skillTimer: number;
-    dashTimer: number;
-    dashVx: number;
-    dashVy: number;
-    armorTimer: number;
-    animSeed: number;
-    hitFlash: number;
-    visualStateKey: string;
-    animation: SpriteStripAnimation | null;
-    animationFrameIndex: number;
 }
 
 interface EnemyProjectile {
@@ -281,22 +225,6 @@ const PLAYER_RUN_ANIMATION_META: Record<PlayerDirection, { frameName: string; fr
 const PLAYER_IDLE_ANIMATION_META = { frameName: 'player_survivor_idle', frames: 6, cellSize: 160, fps: 8 };
 const PLAYER_VISUAL_SIZE = 96;
 const PLAYER_BODY_ANIMATION_DIRECTION: PlayerDirection = 'south';
-const ENEMY_VISUAL_SIZE_MULTIPLIER: Record<string, number> = {
-    mite: 6.4,
-    runner: 6.3,
-    brute: 5.2,
-    splitter: 5.7,
-    warden: 4.6,
-    boss: 4.8,
-};
-const ENEMY_STRIP_META: Record<string, { frameName: string; frames: number; cellSize: number; fps: number }> = {
-    mite: { frameName: 'enemy_mite_walk', frames: 6, cellSize: 128, fps: 8 },
-    runner: { frameName: 'enemy_runner_walk', frames: 6, cellSize: 128, fps: 10 },
-    brute: { frameName: 'enemy_brute_walk', frames: 4, cellSize: 160, fps: 6 },
-    splitter: { frameName: 'enemy_splitter_idle', frames: 6, cellSize: 160, fps: 7 },
-    warden: { frameName: 'enemy_warden_idle', frames: 6, cellSize: 192, fps: 8 },
-    boss: { frameName: 'enemy_boss_idle', frames: 8, cellSize: 224, fps: 8 },
-};
 @ccclass('RogueShooterGame')
 export class RogueShooterGame extends Component {
     private canvasNode: Node | null = null;
@@ -335,57 +263,16 @@ export class RogueShooterGame extends Component {
     private playerAnimationFrameIndex = -1;
     private playerAnimationKey = '';
 
-    private phase: GamePhase = 'menu';
-    private phaseBeforePause: GamePhase = 'menu';
-    private battleIndex = 1;
-    private battlesWon = 0;
-    private alloy = 0;
-    private cores = 0;
-    private shards = 0;
-    private biomass = 0;
-    private circuits = 0;
-    private crystals = 0;
     private equipmentLevels: Record<string, number> = {};
     private ownedEquipment: Set<string> = new Set();
     private equippedEquipment: string[] = [];
+    private cs: CombatState = createCombatState();
     private selectedEquipmentId = 'storm-rifle';
     private equipmentPage = 0;
 
-    private playerX = 0;
-    private playerY = -170;
-    private cameraX = 0;
-    private cameraY = 0;
-    private playerHp = 180;
-    private playerMaxHp = 180;
-    private playerShield = 0;
-    private playerShieldMax = 0;
-    private shieldRechargeDelay = 0;
-    private playerRadius = 18;
-    private invulnerableTimer = 0;
-    private shotTimer = 0;
-    private droneTimer = 0;
-    private regenTimer = 0;
-    private shotCounter = 0;
-    private activeWeaponIndex = 0;
     private weaponCooldowns: Record<string, number> = {};
 
-    private combatTime = 0;
-    private cycleTime = 0;
-    private endlessCycle = 1;
-    private waveIndex = 0;
-    private waveElapsed = 0;
-    private waveDuration = 55;
-    private waveSpawnTimer = 0.2;
-    private bossSpawned = false;
-    private bossDefeatedThisWave = false;
-    private bossKills = 0;
-    private waveKillCount = 0;
-    private waveChestDrops = 0;
-    private currentWaveSpecs: EnemySpec[] = [];
-    private nextEnemyId = 1;
-    private enemies: Enemy[] = [];
-    private enemySet: Set<Enemy> = new Set();
-    private enemySepTick = 999;
+    private enemyMgr = new EnemyManager(this as unknown as EnemyHostContext);
     private bullets: Bullet[] = [];
     private bulletPool: Bullet[] = [];
     private enemyProjectiles: EnemyProjectile[] = [];
@@ -410,16 +297,6 @@ export class RogueShooterGame extends Component {
     private perfCrowdSteerCalls = 0;
     private perfCrowdChecks = 0;
     private perfSepChecks = 0;
-    private killCount = 0;
-    private battleAlloy = 0;
-    private battleCores = 0;
-    private battleShards = 0;
-    private battleBiomass = 0;
-    private battleCircuits = 0;
-    private battleCrystals = 0;
-    private level = 1;
-    private xp = 0;
-    private xpToNext = 65;
     private pendingLevelChoices: LevelUpgrade[] = [];
     private pendingItemChoices: LevelUpgrade[] = [];
     private currentItemChoiceQuality: ItemChoiceQuality = 'common';
@@ -469,10 +346,10 @@ export class RogueShooterGame extends Component {
         this.updateFloatingTexts(dt);
         this.perfPreMs = this.perfNow() - t;
 
-        if (this.phase === 'combat') {
+        if (this.cs.phase === 'combat') {
             const combatDt = Math.min(dt, MAX_COMBAT_DT);
-            this.combatTime += combatDt;
-            this.invulnerableTimer = Math.max(0, this.invulnerableTimer - combatDt);
+            this.cs.combatTime += combatDt;
+            this.cs.invulnerableTimer = Math.max(0, this.cs.invulnerableTimer - combatDt);
 
             t = this.perfNow();
             this.updatePlayer(combatDt);
@@ -481,7 +358,7 @@ export class RogueShooterGame extends Component {
             this.perfPlayerMs = this.perfNow() - t;
 
             t = this.perfNow();
-            this.updateSpawning(combatDt);
+            this.enemyMgr.updateSpawning(combatDt);
             this.updateWeapons(combatDt);
             this.perfWeaponMs = this.perfNow() - t;
 
@@ -494,7 +371,7 @@ export class RogueShooterGame extends Component {
             this.perfEnemyProjectileMs = this.perfNow() - t;
 
             t = this.perfNow();
-            this.updateEnemies(combatDt);
+            this.enemyMgr.updateEnemies(combatDt);
             this.resolvePlayerAfterEnemyMovement();
             this.updateDroneVisuals(0);
             this.perfEnemyMs = this.perfNow() - t;
@@ -505,7 +382,7 @@ export class RogueShooterGame extends Component {
             this.updateShield(combatDt);
             this.perfPickupMs = this.perfNow() - t;
 
-            if (this.playerHp <= 0) {
+            if (this.cs.playerHp <= 0) {
                 this.finishBattle('death');
             }
         }
@@ -716,8 +593,8 @@ export class RogueShooterGame extends Component {
     }
 
     private requestPhaseBgm() {
-        if (this.phase === 'combat') {
-            this.requestBgm(this.isBossWave() ? 'bgm_boss_loop' : 'bgm_combat_loop');
+        if (this.cs.phase === 'combat') {
+            this.requestBgm(this.enemyMgr.isBossWave() ? 'bgm_boss_loop' : 'bgm_combat_loop');
         } else {
             this.requestBgm('bgm_hangar');
         }
@@ -1201,7 +1078,7 @@ export class RogueShooterGame extends Component {
 
     private openMainMenu() {
         this.clearWorld();
-        this.phase = 'menu';
+        this.cs.phase = 'menu';
         this.requestBgm('bgm_hangar');
         this.panels.hideAllOverlays();
         if (this.panels.loadingPanel) this.panels.loadingPanel.active = false;
@@ -1224,53 +1101,23 @@ export class RogueShooterGame extends Component {
         }
 
         this.clearWorld();
-        this.phase = 'combat';
+        this.cs.phase = 'combat';
         this.requestBgm('bgm_combat_loop');
-        this.battleIndex = this.battlesWon + 1;
-        this.combatTime = 0;
-        this.cycleTime = 0;
-        this.endlessCycle = 1;
-        this.waveIndex = 0;
-        this.waveElapsed = 0;
-        this.waveDuration = 55;
-        this.waveSpawnTimer = 0.15;
-        this.bossSpawned = false;
-        this.bossDefeatedThisWave = false;
-        this.bossKills = 0;
-        this.waveKillCount = 0;
-        this.waveChestDrops = 0;
-        this.currentWaveSpecs = [];
-        this.killCount = 0;
-        this.battleAlloy = 0;
-        this.battleCores = 0;
-        this.battleShards = 0;
-        this.battleBiomass = 0;
-        this.battleCircuits = 0;
-        this.battleCrystals = 0;
-        this.level = 1;
-        this.xp = 0;
-        this.xpToNext = 65;
+        this.cs.battleIndex = this.cs.battlesWon + 1;
+        resetCombatSession(this.cs);
+        this.enemyMgr.currentWaveSpecs = [];
         this.runStats = createEmptyCharacterStats();
         this.acquiredRunItemIds = new Set();
         this.acquiredStatUpgradeIds = new Set();
         this.pendingItemChoices = [];
         this.shopOffers = [];
         this.currentItemChoiceQuality = 'common';
-        this.shotTimer = 0;
-        this.droneTimer = 0.6;
-        this.regenTimer = 0;
-        this.shotCounter = 0;
-        this.activeWeaponIndex = 0;
         this.weaponCooldowns = {};
-        this.playerX = 0;
-        this.playerY = -190;
         this.updateCamera(0, true);
-        this.playerMaxHp = this.getMaxHp();
-        this.playerHp = this.playerMaxHp;
-        this.playerShieldMax = this.getShieldMax();
-        this.playerShield = this.playerShieldMax;
-        this.shieldRechargeDelay = 0;
-        this.invulnerableTimer = 0;
+        this.cs.playerMaxHp = this.getMaxHp();
+        this.cs.playerHp = this.cs.playerMaxHp;
+        this.cs.playerShieldMax = this.getShieldMax();
+        this.cs.playerShield = this.cs.playerShieldMax;
         this.touchActive = false;
         this.touchVector.set(0, 0);
 
@@ -1281,14 +1128,14 @@ export class RogueShooterGame extends Component {
 
         this.createPlayer();
         this.refreshHud();
-        this.showToast(initial ? '无尽出击开始：撑得越久，带回资源越多。' : `第 ${this.battleIndex} 次出击开始，Boss 阶段会循环增强。`);
+        this.showToast(initial ? '无尽出击开始：撑得越久，带回资源越多。' : `第 ${this.cs.battleIndex} 次出击开始，Boss 阶段会循环增强。`);
     }
 
     private createPlayer() {
         const node = new Node('Player');
         node.layer = Layers.Enum.UI_2D;
         this.worldNode!.addChild(node);
-        node.setPosition(this.playerX, this.playerY, 10);
+        node.setPosition(this.cs.playerX, this.cs.playerY, 10);
         node.addComponent(UITransform).setContentSize(PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE);
         this.playerNode = node;
         this.playerSprite = this.addSpriteChild(node, 'PlayerArt', 'player_survivor_idle', PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE) || this.addSpriteChild(node, 'PlayerArt', 'player_ship', 74, 74);
@@ -1335,15 +1182,15 @@ export class RogueShooterGame extends Component {
     private updatePlayer(dt: number) {
         const move = this.getMoveVector();
         const speed = this.getMoveSpeed();
-        let nextX = this.clamp(this.playerX + move.x * speed * dt, WORLD_LEFT + 42, WORLD_RIGHT - 42);
-        let nextY = this.clamp(this.playerY + move.y * speed * dt, WORLD_BOTTOM + 42, WORLD_TOP - 42);
+        let nextX = this.clamp(this.cs.playerX + move.x * speed * dt, WORLD_LEFT + 42, WORLD_RIGHT - 42);
+        let nextY = this.clamp(this.cs.playerY + move.y * speed * dt, WORLD_BOTTOM + 42, WORLD_TOP - 42);
         const resolved = this.resolvePlayerEnemyCollision(nextX, nextY);
         nextX = resolved.x;
         nextY = resolved.y;
-        this.playerX = nextX;
-        this.playerY = nextY;
+        this.cs.playerX = nextX;
+        this.cs.playerY = nextY;
         if (this.playerNode) {
-            this.playerNode.setPosition(this.playerX, this.playerY, 10);
+            this.playerNode.setPosition(this.cs.playerX, this.cs.playerY, 10);
         }
         this.playerMoving = Math.abs(move.x) + Math.abs(move.y) > 0.01;
         if (this.playerMoving) this.playerDirection = this.getPlayerDirectionFromVector(move.x, move.y);
@@ -1367,9 +1214,9 @@ export class RogueShooterGame extends Component {
             this.playerWeaponFrameName = frameName;
         }
 
-        const target = this.phase === 'combat' ? this.findNearestEnemy(Math.min(this.getAttackRange(), 900)) : null;
+        const target = this.cs.phase === 'combat' ? this.enemyMgr.findNearestEnemy(Math.min(this.getAttackRange(), 900)) : null;
         if (target) {
-            this.playerWeaponAimAngle = Math.atan2(target.node.position.y - this.playerY, target.node.position.x - this.playerX);
+            this.playerWeaponAimAngle = Math.atan2(target.node.position.y - this.cs.playerY, target.node.position.x - this.cs.playerX);
         } else if (move && Math.abs(move.x) + Math.abs(move.y) > 0.01) {
             this.playerWeaponAimAngle = Math.atan2(move.y, move.x);
         }
@@ -1409,7 +1256,7 @@ export class RogueShooterGame extends Component {
             this.playerAnimationFrameIndex = -1;
         }
 
-        const frameIndex = Math.floor(this.combatTime * animation.fps) % animation.frames.length;
+        const frameIndex = Math.floor(this.cs.combatTime * animation.fps) % animation.frames.length;
         if (frameIndex !== this.playerAnimationFrameIndex) {
             this.playerAnimationFrameIndex = frameIndex;
             this.playerSprite.spriteFrame = animation.frames[frameIndex];
@@ -1423,10 +1270,10 @@ export class RogueShooterGame extends Component {
         let nextX = x;
         let nextY = y;
         for (let pass = 0; pass < 2; pass++) {
-            for (const enemy of this.enemies) {
+            for (const enemy of this.enemyMgr.enemies) {
                 const ex = enemy.node.position.x;
                 const ey = enemy.node.position.y;
-                const minDist = this.playerRadius + enemy.radius + ENEMY_PLAYER_PADDING;
+                const minDist = this.cs.playerRadius + enemy.radius + ENEMY_PLAYER_PADDING;
                 const dx = nextX - ex;
                 const dy = nextY - ey;
                 if (Math.abs(dx) > minDist || Math.abs(dy) > minDist) continue;
@@ -1445,24 +1292,24 @@ export class RogueShooterGame extends Component {
     }
 
     private resolvePlayerAfterEnemyMovement() {
-        const resolved = this.resolvePlayerEnemyCollision(this.playerX, this.playerY);
-        if (Math.abs(resolved.x - this.playerX) < 0.01 && Math.abs(resolved.y - this.playerY) < 0.01) return;
-        this.playerX = resolved.x;
-        this.playerY = resolved.y;
+        const resolved = this.resolvePlayerEnemyCollision(this.cs.playerX, this.cs.playerY);
+        if (Math.abs(resolved.x - this.cs.playerX) < 0.01 && Math.abs(resolved.y - this.cs.playerY) < 0.01) return;
+        this.cs.playerX = resolved.x;
+        this.cs.playerY = resolved.y;
         if (this.playerNode) {
-            this.playerNode.setPosition(this.playerX, this.playerY, 10);
+            this.playerNode.setPosition(this.cs.playerX, this.cs.playerY, 10);
         }
         this.drawPlayer();
     }
 
     private updateCamera(dt: number, snap = false) {
         if (!this.worldNode) return;
-        const targetX = this.clamp(CAMERA_FOCUS_X - this.playerX, VIEW_RIGHT - WORLD_RIGHT, VIEW_LEFT - WORLD_LEFT);
-        const targetY = this.clamp(CAMERA_FOCUS_Y - this.playerY, VIEW_TOP - WORLD_TOP, VIEW_BOTTOM - WORLD_BOTTOM);
+        const targetX = this.clamp(CAMERA_FOCUS_X - this.cs.playerX, VIEW_RIGHT - WORLD_RIGHT, VIEW_LEFT - WORLD_LEFT);
+        const targetY = this.clamp(CAMERA_FOCUS_Y - this.cs.playerY, VIEW_TOP - WORLD_TOP, VIEW_BOTTOM - WORLD_BOTTOM);
         const follow = snap ? 1 : Math.min(1, dt * 8.5);
-        this.cameraX += (targetX - this.cameraX) * follow;
-        this.cameraY += (targetY - this.cameraY) * follow;
-        this.worldNode.setPosition(this.cameraX, this.cameraY, 0);
+        this.cs.cameraX += (targetX - this.cs.cameraX) * follow;
+        this.cs.cameraY += (targetY - this.cs.cameraY) * follow;
+        this.worldNode.setPosition(this.cs.cameraX, this.cs.cameraY, 0);
     }
 
     private getMoveVector(): Vec2 {
@@ -1485,49 +1332,27 @@ export class RogueShooterGame extends Component {
         return new Vec2(x, y);
     }
 
-    private updateSpawning(dt: number) {
-        if (this.waveIndex <= 0) {
-            this.startNextWave();
-        }
-
-        this.waveElapsed += dt;
-        this.cycleTime = this.waveElapsed;
-        this.waveSpawnTimer -= dt;
-        while (this.waveSpawnTimer <= 0) {
-            if (this.enemies.length < this.getEnemyCap()) {
-                this.spawnCurrentWaveBatch();
-            }
-            this.waveSpawnTimer += this.getWaveSpawnInterval();
-        }
-
-        if (this.waveElapsed < this.waveDuration) return;
-        if (this.isBossWave() && !this.bossDefeatedThisWave) {
-            this.waveSpawnTimer = Math.min(this.waveSpawnTimer, 0.6);
-            return;
-        }
-        this.startNextWave();
-    }
 
     private updateWeapons(dt: number) {
-        this.shotTimer -= dt;
-        if (this.shotTimer <= 0) {
-            const target = this.findNearestEnemy(this.getAttackRange());
+        this.cs.shotTimer -= dt;
+        if (this.cs.shotTimer <= 0) {
+            const target = this.enemyMgr.findNearestEnemy(this.getAttackRange());
             if (target) {
                 this.fireAt(target);
-                this.shotTimer = this.getFireInterval();
+                this.cs.shotTimer = this.getFireInterval();
             }
         }
 
         const dronePower = this.getCharacterStats().dronePower;
         if (dronePower > 0) {
-            this.droneTimer -= dt;
-            if (this.droneTimer <= 0) {
+            this.cs.droneTimer -= dt;
+            if (this.cs.droneTimer <= 0) {
                 const strikes = this.getDroneStrikeCount(dronePower);
                 for (let i = 0; i < strikes; i++) {
-                    const target = this.findNearestEnemy(this.getDroneRange(dronePower));
-                    if (target) this.droneStrike(target, dronePower);
+                    const target = this.enemyMgr.findNearestEnemy(this.getDroneRange(dronePower));
+                    if (target) this.enemyMgr.droneStrike(target, dronePower);
                 }
-                this.droneTimer = this.getDroneStrikeInterval(dronePower);
+                this.cs.droneTimer = this.getDroneStrikeInterval(dronePower);
             }
         }
     }
@@ -1545,8 +1370,8 @@ export class RogueShooterGame extends Component {
     }
 
     private fireAt(target: Enemy) {
-        const dx = target.node.position.x - this.playerX;
-        const dy = target.node.position.y - this.playerY;
+        const dx = target.node.position.x - this.cs.playerX;
+        const dy = target.node.position.y - this.cs.playerY;
         const baseAngle = Math.atan2(dy, dx);
         this.playerWeaponAimAngle = baseAngle;
         this.updatePlayerWeaponVisual();
@@ -1556,7 +1381,7 @@ export class RogueShooterGame extends Component {
         const weaponColor = activeWeapon?.color || '#4CC9F0';
         const spreadPower = this.getCharacterStats().multiShot;
         const angles = [baseAngle];
-        this.shotCounter += 1;
+        this.cs.shotCounter += 1;
 
         const guaranteedExtra = Math.min(3, Math.floor(spreadPower / 2.2));
         if (guaranteedExtra > 0) {
@@ -1564,7 +1389,7 @@ export class RogueShooterGame extends Component {
                 angles.push(baseAngle + i * 0.13, baseAngle - i * 0.13);
             }
         }
-        if (spreadPower > 0 && this.shotCounter % Math.max(2, 6 - Math.floor(spreadPower / 1.7)) === 0) {
+        if (spreadPower > 0 && this.cs.shotCounter % Math.max(2, 6 - Math.floor(spreadPower / 1.7)) === 0) {
             angles.push(baseAngle + 0.24, baseAngle - 0.24);
             if (spreadPower >= 4) angles.push(baseAngle + 0.42, baseAngle - 0.42);
             if (spreadPower >= 9) angles.push(baseAngle + 0.6, baseAngle - 0.6);
@@ -1627,7 +1452,7 @@ export class RogueShooterGame extends Component {
         node.layer = Layers.Enum.UI_2D;
         this.worldNode.addChild(node);
         const distance = 38;
-        node.setPosition(this.playerX + Math.cos(angle) * distance, this.playerY + Math.sin(angle) * distance, 12);
+        node.setPosition(this.cs.playerX + Math.cos(angle) * distance, this.cs.playerY + Math.sin(angle) * distance, 12);
         node.angle = angle * 180 / Math.PI;
         const gfx = node.addComponent(Graphics);
         const length = style === 'rail' ? 58 : style === 'shotgun' ? 42 : style === 'meteor' ? 34 : 30;
@@ -1673,8 +1498,8 @@ export class RogueShooterGame extends Component {
     private createBullet(angle: number, damage: number, pierce: number, style: WeaponAttackStyle, color: string) {
         const speed = this.getBulletSpeed();
         const bullet = this.acquireBullet();
-        bullet.x = this.playerX;
-        bullet.y = this.playerY;
+        bullet.x = this.cs.playerX;
+        bullet.y = this.cs.playerY;
         bullet.vx = Math.cos(angle) * speed;
         bullet.vy = Math.sin(angle) * speed;
         bullet.damage = damage;
@@ -1725,7 +1550,7 @@ export class RogueShooterGame extends Component {
 
     private updateBullets(dt: number) {
         const removing: Bullet[] = [];
-        const enemyGrid = this.buildEnemyGrid(BULLET_HIT_CELL);
+        const enemyGrid = this.enemyMgr.buildEnemyGrid(BULLET_HIT_CELL);
         for (const bullet of this.bullets) {
             bullet.life -= dt;
             bullet.x += bullet.vx * dt;
@@ -1745,14 +1570,14 @@ export class RogueShooterGame extends Component {
                     const bucket = enemyGrid.get(`${cellX + ox},${cellY + oy}`);
                     if (!bucket) continue;
                     for (const enemy of bucket) {
-                        if (!this.enemySet.has(enemy)) continue;
+                        if (!this.enemyMgr.enemySet.has(enemy)) continue;
                         if (bullet.hitIds.has(enemy.id)) continue;
                         const distSq = this.distanceSq(bullet.x, bullet.y, enemy.node.position.x, enemy.node.position.y);
                         const hitRadius = bullet.radius + enemy.radius;
                         if (distSq <= hitRadius * hitRadius) {
                             bullet.hitIds.add(enemy.id);
-                            const roll = this.rollOutgoingDamage(enemy, bullet.damage);
-                            this.damageEnemy(enemy, roll.amount, roll.color, roll.tag);
+                            const roll = this.enemyMgr.rollOutgoingDamage(enemy, bullet.damage);
+                            this.enemyMgr.damageEnemy(enemy, roll.amount, roll.color, roll.tag);
                             this.spawnBulletHitSpark(bullet.x, bullet.y, bullet.style, bullet.color, bullet.accent);
                             bullet.pierce -= 1;
                             if (bullet.pierce < 0) {
@@ -1770,23 +1595,6 @@ export class RogueShooterGame extends Component {
         }
     }
 
-    private enemyShoot(enemy: Enemy, dirX: number, dirY: number) {
-        const type = enemy.damageType;
-        const spread = enemy.boss ? 5 : enemy.elite ? 3 : enemy.spec.variantId === 'prime' ? 3 : 1;
-        const baseAngle = Math.atan2(dirY, dirX);
-        const start = -(spread - 1) / 2;
-        for (let i = 0; i < spread; i++) {
-            const angle = baseAngle + (start + i) * (enemy.boss ? 0.26 : 0.18);
-            this.createEnemyProjectile(
-                enemy.node.position.x,
-                enemy.node.position.y,
-                angle,
-                enemy.damage * (enemy.boss ? 0.8 : 0.62),
-                type,
-                enemy.boss ? 290 : enemy.elite ? 260 : 230,
-            );
-        }
-    }
 
     private createEnemyProjectile(x: number, y: number, angle: number, damage: number, damageType: DamageType, speed: number) {
         if (this.enemyProjectiles.length >= ENEMY_PROJECTILE_LIMIT) {
@@ -1847,9 +1655,9 @@ export class RogueShooterGame extends Component {
                 continue;
             }
 
-            const hitRadius = projectile.radius + this.playerRadius;
-            if (this.distanceSq(projectile.x, projectile.y, this.playerX, this.playerY) <= hitRadius * hitRadius) {
-                if (this.invulnerableTimer <= 0) this.takeDamage(projectile.damage, projectile.damageType);
+            const hitRadius = projectile.radius + this.cs.playerRadius;
+            if (this.distanceSq(projectile.x, projectile.y, this.cs.playerX, this.cs.playerY) <= hitRadius * hitRadius) {
+                if (this.cs.invulnerableTimer <= 0) this.takeDamage(projectile.damage, projectile.damageType);
                 removing.push(projectile);
             }
         }
@@ -1886,318 +1694,14 @@ export class RogueShooterGame extends Component {
         this.enemyProjectilePool.push(projectile);
     }
 
-    private buildEnemyGrid(cellSize: number) {
-        const grid = new Map<string, Enemy[]>();
-        for (const enemy of this.enemies) {
-            const cellX = Math.floor(enemy.node.position.x / cellSize);
-            const cellY = Math.floor(enemy.node.position.y / cellSize);
-            const key = `${cellX},${cellY}`;
-            let bucket = grid.get(key);
-            if (!bucket) {
-                bucket = [];
-                grid.set(key, bucket);
-            }
-            bucket.push(enemy);
-        }
-        return grid;
-    }
 
-    private updateEnemies(dt: number) {
-        const px = this.playerX;
-        const py = this.playerY;
-        this.enemySepTick += dt;
-        const doSeparation = this.enemySepTick >= ENEMY_SEP_INTERVAL && this.enemies.length >= 6;
-        if (doSeparation) this.enemySepTick = 0;
-        const crowdGrid = this.enemies.length >= ENEMY_CROWD_MIN_COUNT ? this.buildEnemyGrid(ENEMY_SEPARATION_CELL) : null;
 
-        for (const enemy of this.enemies) {
-            if (!this.enemySet.has(enemy)) continue;
-            const ex = enemy.node.position.x;
-            const ey = enemy.node.position.y;
-            const dx = px - ex;
-            const dy = py - ey;
-            const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
-            this.updateEnemySkill(enemy, dt, dist, dx / dist, dy / dist);
-            const wobble = Math.sin(this.combatTime * 2.4 + enemy.id * 0.73) * 0.18;
-            let vx = dx / dist + (-dy / dist) * wobble;
-            let vy = dy / dist + (dx / dist) * wobble;
-            let moveSpeed = enemy.speed;
-            if (enemy.dashTimer > 0) {
-                enemy.dashTimer = Math.max(0, enemy.dashTimer - dt);
-                vx = enemy.dashVx;
-                vy = enemy.dashVy;
-                moveSpeed = enemy.speed * (enemy.boss ? 2.15 : 2.9);
-            } else if (crowdGrid) {
-                const steer = this.getEnemyCrowdSteer(enemy, crowdGrid, ex, ey, dx / dist, dy / dist, dist);
-                vx += steer.x;
-                vy += steer.y;
-                const vLen = Math.max(0.001, Math.sqrt(vx * vx + vy * vy));
-                vx /= vLen;
-                vy /= vLen;
-            }
-            let nextX = ex + vx * moveSpeed * dt;
-            let nextY = ey + vy * moveSpeed * dt;
-            const fromPlayerX = nextX - px;
-            const fromPlayerY = nextY - py;
-            const playerDist = Math.max(0.001, Math.sqrt(fromPlayerX * fromPlayerX + fromPlayerY * fromPlayerY));
-            const collideRadius = enemy.radius + this.playerRadius;
-            const attemptedContactDist = Math.min(dist, playerDist);
-            if (attemptedContactDist <= collideRadius + 4 && this.invulnerableTimer <= 0) {
-                this.takeDamage(enemy.damage, enemy.damageType);
-            }
 
-            const playerGap = enemy.radius + this.playerRadius + ENEMY_PLAYER_PADDING;
-            if (playerDist < playerGap) {
-                const angle = enemy.id * 2.39996;
-                const nx = playerDist > 0.01 ? fromPlayerX / playerDist : Math.cos(angle);
-                const ny = playerDist > 0.01 ? fromPlayerY / playerDist : Math.sin(angle);
-                nextX = px + nx * playerGap;
-                nextY = py + ny * playerGap;
-            }
-            nextX = this.clamp(nextX, WORLD_LEFT + enemy.radius, WORLD_RIGHT - enemy.radius);
-            nextY = this.clamp(nextY, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius);
-            enemy.node.setPosition(nextX, nextY, 4);
-            this.updateEnemyVisual(enemy, dt, vx, vy, moveSpeed);
-        }
-        if (doSeparation) {
-            const sepStart = this.perfNow();
-            this.separateEnemies();
-            this.perfSeparationMs = this.perfNow() - sepStart;
-        }
-    }
 
-    private getEnemyCrowdSteer(enemy: Enemy, grid: Map<string, Enemy[]>, ex: number, ey: number, toPlayerX: number, toPlayerY: number, playerDist: number) {
-        let sx = 0;
-        let sy = 0;
-        let checks = 0;
-        const cellX = Math.floor(ex / ENEMY_SEPARATION_CELL);
-        const cellY = Math.floor(ey / ENEMY_SEPARATION_CELL);
-        for (let ox = -1; ox <= 1 && checks < ENEMY_CROWD_MAX_NEIGHBORS; ox++) {
-            for (let oy = -1; oy <= 1 && checks < ENEMY_CROWD_MAX_NEIGHBORS; oy++) {
-                const bucket = grid.get(`${cellX + ox},${cellY + oy}`);
-                if (!bucket) continue;
-                for (let i = 0; i < bucket.length && checks < ENEMY_CROWD_MAX_NEIGHBORS; i++) {
-                    const other = bucket[i];
-                    if (other === enemy || !this.enemySet.has(other)) continue;
-                    checks += 1;
-                    const dx = ex - other.node.position.x;
-                    const dy = ey - other.node.position.y;
-                    const minDist = enemy.radius + other.radius + ENEMY_SEPARATION_PADDING;
-                    const range = Math.max(ENEMY_CROWD_REPEL_RADIUS, minDist * 1.75);
-                    if (Math.abs(dx) > range || Math.abs(dy) > range) continue;
-                    const distSq = dx * dx + dy * dy;
-                    if (distSq <= 0.001 || distSq > range * range) continue;
-                    const dist = Math.sqrt(distSq);
-                    const pressure = (range - dist) / range;
-                    sx += (dx / dist) * pressure * ENEMY_CROWD_REPEL_WEIGHT;
-                    sy += (dy / dist) * pressure * ENEMY_CROWD_REPEL_WEIGHT;
-                }
-            }
-        }
 
-        const preferredRing = this.playerRadius + enemy.radius + 42 + (enemy.id % 9) * 13;
-        if (playerDist < preferredRing) {
-            const outward = (preferredRing - playerDist) / preferredRing;
-            sx -= toPlayerX * outward * 1.6;
-            sy -= toPlayerY * outward * 1.6;
-        }
-        if (playerDist < preferredRing + 150) {
-            const orbitSign = enemy.id % 2 === 0 ? 1 : -1;
-            const orbit = this.clamp((preferredRing + 150 - playerDist) / 150, 0, 1) * ENEMY_CROWD_ORBIT_WEIGHT;
-            sx += -toPlayerY * orbitSign * orbit;
-            sy += toPlayerX * orbitSign * orbit;
-        }
 
-        this.perfCrowdSteerCalls += 1;
-        this.perfCrowdChecks += checks;
-        return { x: sx, y: sy };
-    }
 
-    private updateEnemyVisual(enemy: Enemy, dt: number, vx: number, vy: number, moveSpeed: number) {
-        const wasFlashing = enemy.hitFlash > 0;
-        enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
 
-        const statusKey = [
-            enemy.armorTimer > 0 ? ENEMY_STATUS_KEY_ARMOR : '',
-            enemy.dashTimer > 0 ? ENEMY_STATUS_KEY_DASH : '',
-            enemy.hp < enemy.maxHp ? 'wounded' : '',
-        ].filter(Boolean).join('|');
-        const flashEnded = wasFlashing && enemy.hitFlash <= 0;
-        if (statusKey !== enemy.visualStateKey || flashEnded) {
-            enemy.visualStateKey = statusKey;
-            this.drawEnemy(enemy);
-        }
-
-        const dashPulse = enemy.dashTimer > 0 ? 0.12 : 0;
-        const hitPulse = enemy.hitFlash > 0 ? (enemy.hitFlash / ENEMY_HIT_FLASH_DURATION) * 0.18 : 0;
-        const scaleX = 1 + dashPulse + hitPulse * 0.55;
-        const scaleY = 1 - dashPulse * 0.28 + hitPulse;
-        if (Math.abs(scaleX - (enemy['_lastScaleX'] || 0)) > 0.005 || Math.abs(scaleY - (enemy['_lastScaleY'] || 0)) > 0.005) {
-            enemy.node.setScale(scaleX, Math.max(0.86, scaleY), 1);
-            enemy['_lastScaleX'] = scaleX;
-            enemy['_lastScaleY'] = scaleY;
-        }
-
-        if (enemy.sprite) {
-            if (enemy.animation && enemy.animation.frames.length > 0) {
-                const frameIndex = Math.floor((this.combatTime + enemy.animSeed * 0.07) * enemy.animation.fps) % enemy.animation.frames.length;
-                if (frameIndex !== enemy.animationFrameIndex) {
-                    enemy.animationFrameIndex = frameIndex;
-                    enemy.sprite.spriteFrame = enemy.animation.frames[frameIndex];
-                }
-            }
-            const spriteNode = enemy.sprite.node;
-            const dashAngle = enemy.dashTimer > 0 ? this.clamp(vx, -1, 1) * -8 : 0;
-            if (Math.abs(dashAngle - (enemy['_lastAngle'] || 0)) > 0.5) {
-                spriteNode.angle = dashAngle;
-                spriteNode.setPosition(0, 0, 0);
-                enemy['_lastAngle'] = dashAngle;
-            }
-            const hitColor = enemy.hitFlash > 0;
-            const wasHitColor = enemy['_wasHitColor'] || false;
-            if (hitColor !== wasHitColor) {
-                enemy.sprite.color = hitColor
-                    ? this.hex('#FFFFFF', 255)
-                    : this.getEnemyTint(enemy, enemy.elite ? 255 : 235);
-                enemy['_wasHitColor'] = hitColor;
-            }
-        } else if (enemy.hitFlash > 0) {
-            this.drawEnemy(enemy);
-        }
-    }
-
-    private updateEnemySkill(enemy: Enemy, dt: number, dist: number, dirX: number, dirY: number) {
-        enemy.skillTimer -= dt;
-        enemy.armorTimer = Math.max(0, enemy.armorTimer - dt);
-        if (enemy.spec.variantId === 'regen' && enemy.hp > 0 && enemy.hp < enemy.maxHp) {
-            enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * (enemy.elite ? 0.007 : 0.0035) * dt);
-            if (Math.random() < dt * 0.8) this.drawEnemy(enemy);
-        }
-        if (enemy.skillTimer > 0) return;
-
-        const nextDelay = this.getEnemySkillDelay(enemy);
-        enemy.skillTimer = nextDelay;
-        if (this.shouldEnemyDash(enemy, dist)) {
-            enemy.dashTimer = enemy.boss ? 0.58 : 0.38;
-            enemy.dashVx = dirX;
-            enemy.dashVy = dirY;
-            this.spawnFloatingText('冲刺', enemy.node.position.x, enemy.node.position.y + enemy.radius + 20, '#F59E0B', 18);
-            return;
-        }
-
-        if (this.shouldEnemyShoot(enemy, dist)) {
-            this.enemyShoot(enemy, dirX, dirY);
-            return;
-        }
-
-        if (enemy.spec.variantId === 'armored' || enemy.spec.family === 'brute' || enemy.spec.family === 'warden') {
-            enemy.armorTimer = enemy.elite || enemy.boss ? 2.4 : 1.45;
-            this.spawnFloatingText('霸体', enemy.node.position.x, enemy.node.position.y + enemy.radius + 20, '#CBD5E1', 18);
-            this.drawEnemy(enemy);
-        }
-    }
-
-    private getEnemySkillDelay(enemy: Enemy) {
-        const base = enemy.elite || enemy.boss ? 1.25 : 1.9;
-        if (enemy.spec.family === 'runner' || enemy.spec.variantId === 'swift') return this.randomRange(1.1, base + 0.45);
-        if (enemy.spec.family === 'warden' || enemy.spec.variantId === 'arc') return this.randomRange(1.45, base + 0.75);
-        if (enemy.spec.variantId === 'rage' || enemy.spec.variantId === 'venom' || enemy.spec.variantId === 'crystal') return this.randomRange(1.55, base + 0.85);
-        return this.randomRange(2.0, 3.4);
-    }
-
-    private shouldEnemyDash(enemy: Enemy, dist: number) {
-        if (dist < enemy.radius + this.playerRadius + 12) return false;
-        if (enemy.spec.family === 'runner' || enemy.spec.variantId === 'swift' || enemy.spec.variantId === 'rage') return true;
-        return enemy.elite && Math.random() < 0.34;
-    }
-
-    private shouldEnemyShoot(enemy: Enemy, dist: number) {
-        if (dist < 120 || dist > 760) return false;
-        return enemy.boss
-            || enemy.spec.family === 'warden'
-            || enemy.spec.variantId === 'acid'
-            || enemy.spec.variantId === 'arc'
-            || enemy.spec.variantId === 'crystal'
-            || enemy.spec.variantId === 'venom'
-            || enemy.spec.variantId === 'shade'
-            || enemy.spec.variantId === 'prime';
-    }
-
-    private separateEnemies() {
-        if (this.enemies.length < 6) return;
-        const px = this.playerX;
-        const py = this.playerY;
-        const distSqThreshold = ENEMY_SEP_PLAYER_DIST * ENEMY_SEP_PLAYER_DIST;
-        const buckets = new Map<string, Enemy[]>();
-        for (const enemy of this.enemies) {
-            let ax = enemy.node.position.x;
-            let ay = enemy.node.position.y;
-            if (!enemy.boss) {
-                const edx = ax - px;
-                const edy = ay - py;
-                if (edx * edx + edy * edy > distSqThreshold) {
-                    buckets.delete(`${Math.floor(ax / ENEMY_SEPARATION_CELL)},${Math.floor(ay / ENEMY_SEPARATION_CELL)}`);
-                    continue;
-                }
-            }
-            const cellX = Math.floor(ax / ENEMY_SEPARATION_CELL);
-            const cellY = Math.floor(ay / ENEMY_SEPARATION_CELL);
-            let checks = 0;
-
-            for (let ox = -1; ox <= 1 && checks < ENEMY_SEPARATION_MAX_CHECKS; ox++) {
-                for (let oy = -1; oy <= 1 && checks < ENEMY_SEPARATION_MAX_CHECKS; oy++) {
-                    const bucket = buckets.get(`${cellX + ox},${cellY + oy}`);
-                    if (!bucket) continue;
-                    const start = Math.max(0, bucket.length - ENEMY_SEPARATION_BUCKET_SCAN);
-                    for (let index = bucket.length - 1; index >= start && checks < ENEMY_SEPARATION_MAX_CHECKS; index--) {
-                        checks += 1;
-                        const other = bucket[index];
-                        let bx = other.node.position.x;
-                        let by = other.node.position.y;
-                        const minDist = enemy.radius + other.radius + ENEMY_SEPARATION_PADDING;
-                        const dx = bx - ax;
-                        const dy = by - ay;
-                        if (Math.abs(dx) > minDist || Math.abs(dy) > minDist) continue;
-                        const distSq = dx * dx + dy * dy;
-                        if (distSq >= minDist * minDist) continue;
-
-                        const dist = Math.sqrt(Math.max(0.001, distSq));
-                        const angle = (enemy.id * 13.37 + other.id * 3.11) % (Math.PI * 2);
-                        const nx = dist > 0.01 ? dx / dist : Math.cos(angle);
-                        const ny = dist > 0.01 ? dy / dist : Math.sin(angle);
-                        const overlap = minDist - dist;
-                        const push = Math.min(14, overlap * 0.42);
-                        const enemyInertia = enemy.boss ? 3.2 : enemy.elite ? 1.8 : 1;
-                        const otherInertia = other.boss ? 3.2 : other.elite ? 1.8 : 1;
-                        const enemyPush = push * (otherInertia / (enemyInertia + otherInertia));
-                        const otherPush = push * (enemyInertia / (enemyInertia + otherInertia));
-
-                        ax = this.clamp(ax - nx * enemyPush, WORLD_LEFT + enemy.radius, WORLD_RIGHT - enemy.radius);
-                        ay = this.clamp(ay - ny * enemyPush, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius);
-                        bx = this.clamp(bx + nx * otherPush, WORLD_LEFT + other.radius, WORLD_RIGHT - other.radius);
-                        by = this.clamp(by + ny * otherPush, WORLD_BOTTOM + other.radius, WORLD_TOP - other.radius);
-                        if (Math.abs(bx - other.node.position.x) > 0.5 || Math.abs(by - other.node.position.y) > 0.5) {
-                            other.node.setPosition(bx, by, 4);
-                        }
-                    }
-                }
-            }
-
-            if (Math.abs(ax - enemy.node.position.x) > 0.5 || Math.abs(ay - enemy.node.position.y) > 0.5) {
-                enemy.node.setPosition(ax, ay, 4);
-            }
-            this.perfSepChecks += checks;
-            const finalCellX = Math.floor(ax / ENEMY_SEPARATION_CELL);
-            const finalCellY = Math.floor(ay / ENEMY_SEPARATION_CELL);
-            const key = `${finalCellX},${finalCellY}`;
-            let bucket = buckets.get(key);
-            if (!bucket) {
-                bucket = [];
-                buckets.set(key, bucket);
-            }
-            bucket.push(enemy);
-        }
-    }
 
     private updatePickups(dt: number) {
         if (this.pickups.length > PICKUP_HARD_CAP) {
@@ -2207,8 +1711,8 @@ export class RogueShooterGame extends Component {
         const removing: Pickup[] = [];
         for (const pickup of this.pickups) {
             pickup.age += dt;
-            const dx = this.playerX - pickup.x;
-            const dy = this.playerY - pickup.y;
+            const dx = this.cs.playerX - pickup.x;
+            const dy = this.cs.playerY - pickup.y;
             const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
             if (dist < pickupRadius) {
                 const pull = (pickupRadius - dist) / pickupRadius;
@@ -2217,10 +1721,10 @@ export class RogueShooterGame extends Component {
                 pickup.y += (dy / dist) * speed * dt;
                 pickup.node.setPosition(pickup.x, pickup.y, 5);
             }
-            if (dist < this.playerRadius + pickup.radius + 8) {
+            if (dist < this.cs.playerRadius + pickup.radius + 8) {
                 this.collectPickup(pickup);
                 removing.push(pickup);
-                if (this.phase !== 'combat') break;
+                if (this.cs.phase !== 'combat') break;
             }
         }
         for (const pickup of removing) {
@@ -2230,415 +1734,58 @@ export class RogueShooterGame extends Component {
 
     private updateRegen(dt: number) {
         const regen = this.getCharacterStats().hpRegen;
-        if (regen <= 0 || this.playerHp <= 0 || this.playerHp >= this.playerMaxHp) return;
-        this.regenTimer += dt;
-        if (this.regenTimer >= 1) {
-            this.regenTimer = 0;
+        if (regen <= 0 || this.cs.playerHp <= 0 || this.cs.playerHp >= this.cs.playerMaxHp) return;
+        this.cs.regenTimer += dt;
+        if (this.cs.regenTimer >= 1) {
+            this.cs.regenTimer = 0;
             this.healPlayer(regen);
         }
     }
 
     private updateShield(dt: number) {
         const stats = this.getCharacterStats();
-        this.playerShieldMax = this.getShieldMax();
-        if (this.playerShieldMax <= 0) {
-            this.playerShield = 0;
+        this.cs.playerShieldMax = this.getShieldMax();
+        if (this.cs.playerShieldMax <= 0) {
+            this.cs.playerShield = 0;
             return;
         }
-        this.shieldRechargeDelay = Math.max(0, this.shieldRechargeDelay - dt);
-        if (this.shieldRechargeDelay > 0 || this.playerShield >= this.playerShieldMax) return;
-        this.playerShield = Math.min(this.playerShieldMax, this.playerShield + stats.shieldRegen * dt);
+        this.cs.shieldRechargeDelay = Math.max(0, this.cs.shieldRechargeDelay - dt);
+        if (this.cs.shieldRechargeDelay > 0 || this.cs.playerShield >= this.cs.playerShieldMax) return;
+        this.cs.playerShield = Math.min(this.cs.playerShieldMax, this.cs.playerShield + stats.shieldRegen * dt);
     }
 
-    private startNextWave() {
-        if (this.phase === 'combat' && this.waveIndex > 0 && !this.isBossWave()) {
-            this.grantWaveClearAlloy();
-        }
-        this.waveIndex += 1;
-        this.endlessCycle = Math.floor((this.waveIndex - 1) / WAVES_PER_CYCLE) + 1;
-        this.waveElapsed = 0;
-        this.cycleTime = 0;
-        this.waveDuration = this.randomRange(WAVE_MIN_DURATION, WAVE_MAX_DURATION);
-        this.waveSpawnTimer = 0.15;
-        this.bossDefeatedThisWave = false;
-        this.waveKillCount = 0;
-        this.waveChestDrops = 0;
-        this.currentWaveSpecs = this.getWaveEnemySpecs(this.waveIndex);
 
-        if (this.isBossWave()) {
-            this.bossSpawned = true;
-            this.requestBgm('bgm_boss_loop');
-            this.playSfx('sfx_boss_warning', 0.9, 1.2);
-            this.spawnBoss();
-            this.showToast(`第 ${this.waveIndex} 波：Boss 出现，击杀后才能进入下一波。`);
-            return;
-        }
 
-        this.bossSpawned = false;
-        this.requestBgm('bgm_combat_loop');
-        this.showToast(`第 ${this.waveIndex} 波开始，${Math.round(this.waveDuration)} 秒内怪潮会持续涌入。`);
-    }
 
-    private grantWaveClearAlloy() {
-        const baseReward = 8 + this.waveIndex + (this.endlessCycle - 1) * 4;
-        const pressureBonus = Math.min(8, Math.floor(this.waveKillCount / 80));
-        const reward = Math.round(baseReward + pressureBonus);
-        this.battleAlloy += reward;
-        this.showToast(`第 ${this.waveIndex} 波清算：补给合金 +${reward}`);
-    }
 
-    private spawnCurrentWaveBatch() {
-        const ring = this.isBossWave() || this.waveIndex % 3 === 0;
-        const count = this.getWaveSpawnBatchCount();
-        const fallback = this.isBossWave() ? ENEMY_SPECS : this.getUnlockedEnemySpecs();
-        this.spawnPack(count, ring, this.currentWaveSpecs, fallback);
-    }
 
-    private getWaveSpawnInterval() {
-        const slot = this.getWaveSlot();
-        return Math.max(0.95, 1.55 - slot * 0.035 - (this.endlessCycle - 1) * 0.06 - Math.min(0.12, this.waveElapsed / 420));
-    }
 
-    private getWaveSpawnBatchCount() {
-        const slot = this.getWaveSlot();
-        const pressure = 2 + Math.floor(slot * 0.45) + this.endlessCycle + Math.floor(this.waveElapsed / 24);
-        const bossBonus = this.isBossWave() ? 3 : 0;
-        return Math.min(22, pressure + bossBonus + this.randomInt(0, 2));
-    }
 
-    private getEnemyCap() {
-        return Math.min(420, 110 + this.battleIndex * 3 + this.endlessCycle * 24 + this.waveIndex * 6);
-    }
 
-    private getWaveSlot(wave = this.waveIndex) {
-        if (wave <= 0) return 1;
-        return ((wave - 1) % WAVES_PER_CYCLE) + 1;
-    }
 
-    private isBossWave(wave = this.waveIndex) {
-        return wave > 0 && wave % WAVES_PER_CYCLE === 0;
-    }
 
-    private spawnPack(count: number, ring: boolean, preferredSpecs: EnemySpec[] | null = null, fallbackSpecs: EnemySpec[] | null = null) {
-        const cap = this.getEnemyCap();
-        const room = Math.max(0, cap - this.enemies.length);
-        const guaranteed = preferredSpecs ? preferredSpecs.length : 0;
-        const total = Math.min(Math.max(count, guaranteed), room);
-        const waveSpecs = preferredSpecs && preferredSpecs.length > 0
-            ? preferredSpecs
-            : this.pickEnemyWaveSpecs(total, ring, fallbackSpecs);
-        const pool = fallbackSpecs && fallbackSpecs.length > 0 ? fallbackSpecs : this.getUnlockedEnemySpecs();
-        for (let i = 0; i < total; i++) {
-            const spec = waveSpecs.length > 0 && (i < waveSpecs.length || Math.random() < 0.72)
-                ? waveSpecs[i % waveSpecs.length]
-                : this.pickWeightedEnemySpec(pool);
-            const angle = ring ? (Math.PI * 2 * i) / Math.max(1, total) + Math.random() * 0.16 : Math.random() * Math.PI * 2;
-            const radius = ring ? 720 : this.randomRange(640, 840);
-            const point = this.getSpawnPointAroundPlayer(radius, angle);
-            const eliteChance = Math.min(0.28, 0.025 + this.endlessCycle * 0.018 + this.waveIndex * 0.0035 + this.combatTime * 0.00045);
-            this.createEnemy(spec, point.x, point.y, Math.random() < eliteChance, false);
-        }
-    }
 
-    private spawnBoss() {
-        const spec: EnemySpec = {
-            id: 'boss',
-            name: '星核巨像',
-            family: 'boss',
-            artId: 'boss',
-            hp: 680,
-            speed: 64,
-            damage: 22,
-            radius: 42,
-            xp: 45,
-            alloyChance: 1,
-            color: '#F94144',
-            accent: '#7F1D1D',
-            spawnAfter: 0,
-            weight: 1,
-        };
-        const point = this.getSpawnPointAroundPlayer(760, Math.random() * Math.PI * 2);
-        this.createEnemy(spec, point.x, point.y, true, true);
-    }
 
-    private getSpawnPointAroundPlayer(radius: number, angle: number): Vec2 {
-        const padding = 92;
-        for (let attempt = 0; attempt < 10; attempt++) {
-            const tryAngle = angle + attempt * 0.61;
-            const x = this.playerX + Math.cos(tryAngle) * radius;
-            const y = this.playerY + Math.sin(tryAngle) * radius;
-            if (x > WORLD_LEFT + padding && x < WORLD_RIGHT - padding && y > WORLD_BOTTOM + padding && y < WORLD_TOP - padding) {
-                return new Vec2(x, y);
-            }
-        }
-        return new Vec2(
-            this.clamp(this.playerX + Math.cos(angle) * radius, WORLD_LEFT + padding, WORLD_RIGHT - padding),
-            this.clamp(this.playerY + Math.sin(angle) * radius, WORLD_BOTTOM + padding, WORLD_TOP - padding),
-        );
-    }
 
-    private createEnemy(spec: EnemySpec, x: number, y: number, elite: boolean, boss: boolean) {
-        const scale = 1 + this.battleIndex * 0.06 + (this.endlessCycle - 1) * 0.28 + this.waveIndex * 0.028 + this.combatTime * 0.0018;
-        const eliteScale = boss ? 6.4 + this.endlessCycle * 0.58 : elite ? 2.65 : 1;
-        const hp = Math.round(spec.hp * scale * eliteScale);
-        const enemyRadius = Math.round(spec.radius * (boss ? 1.55 : elite ? 1.32 : 1.18));
-        const node = new Node(`Enemy_${spec.id}_${this.nextEnemyId}`);
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode!.addChild(node);
-        node.setPosition(x, y, 4);
-        const visualMultiplier = ENEMY_VISUAL_SIZE_MULTIPLIER[boss ? 'boss' : spec.family] || 4.35;
-        const enemyVisualSize = enemyRadius * visualMultiplier;
-        const enemyNodeSize = Math.max(enemyRadius * 3.5, enemyVisualSize);
-        node.addComponent(UITransform).setContentSize(enemyNodeSize, enemyNodeSize);
-        const gfx = node.addComponent(Graphics);
-        const animation = this.getEnemyAnimation(spec, boss);
-        const sprite = animation
-            ? this.addSpriteChild(node, 'EnemyArt', this.getEnemyAnimationFrameName(spec, boss), enemyVisualSize, enemyVisualSize)
-            : this.addSpriteChild(node, 'EnemyArt', this.enemyArtName(spec, boss), enemyVisualSize, enemyVisualSize);
-        if (sprite && animation) {
-            sprite.spriteFrame = animation.frames[0];
-            sprite.node.getComponent(UITransform)?.setContentSize(enemyVisualSize, enemyVisualSize);
-        }
-        const enemy: Enemy = {
-            id: this.nextEnemyId++,
-            spec,
-            node,
-            gfx,
-            sprite,
-            hp,
-            maxHp: hp,
-            speed: Math.max(42, spec.speed * (boss ? 0.78 : elite ? 0.9 : 1) + this.endlessCycle * 5 + this.waveIndex * 0.8),
-            damage: spec.damage * (boss ? 1.85 : elite ? 1.42 : 1.05) * (1 + (this.endlessCycle - 1) * 0.16 + this.waveIndex * 0.012 + this.combatTime * 0.0009),
-            radius: enemyRadius,
-            visualRadius: Math.max(enemyRadius + 12, enemyVisualSize * 0.42),
-            elite,
-            boss,
-            damageType: this.getEnemyDamageType(spec, boss),
-            skillTimer: this.randomRange(0.8, 2.6),
-            dashTimer: 0,
-            dashVx: 0,
-            dashVy: 0,
-            armorTimer: 0,
-            animSeed: Math.random() * Math.PI * 2,
-            hitFlash: 0,
-            visualStateKey: '',
-            animation,
-            animationFrameIndex: animation ? 0 : -1,
-        };
-        this.drawEnemy(enemy);
-        this.enemies.push(enemy);
-        this.enemySet.add(enemy);
-    }
 
-    private getEnemyDamageType(spec: EnemySpec, boss: boolean): DamageType {
-        if (boss) return 'magic';
-        if (spec.id.indexOf('venom') >= 0 || spec.id.indexOf('acid') >= 0) return 'poison';
-        if (spec.id.indexOf('arc') >= 0 || spec.family === 'warden') return 'lightning';
-        if (spec.id.indexOf('crystal') >= 0) return 'ice';
-        if (spec.id.indexOf('rage') >= 0) return 'fire';
-        if (spec.id.indexOf('shade') >= 0 || spec.id.indexOf('prime') >= 0) return 'magic';
-        return 'physical';
-    }
 
-    private pickEnemySpec(): EnemySpec {
-        const available = this.getAvailableEnemySpecs();
-        const totalWeight = available.reduce((sum, spec) => sum + spec.weight, 0);
-        let roll = Math.random() * totalWeight;
-        for (const spec of available) {
-            roll -= spec.weight;
-            if (roll <= 0) return spec;
-        }
-        return available[0];
-    }
 
-    private pickEnemyWaveSpecs(count: number, ring: boolean, pool: EnemySpec[] | null = null) {
-        const available = pool && pool.length > 0 ? pool : this.getAvailableEnemySpecs();
-        const waveSize = Math.min(8, Math.max(3, Math.ceil(count / (ring ? 5 : 7))));
-        const specs: EnemySpec[] = [];
-        const families = BASE_ENEMY_ARCHETYPES
-            .map((base) => base.family)
-            .filter((family) => available.some((spec) => spec.family === family));
 
-        for (let i = 0; i < waveSize; i++) {
-            const family = families.length > 0 ? families[(this.killCount + this.endlessCycle + i) % families.length] : '';
-            const familySpecs = available.filter((spec) => !family || spec.family === family);
-            specs.push(this.pickWeightedEnemySpec(familySpecs.length > 0 ? familySpecs : available));
-        }
-        return specs;
-    }
 
-    private pickWeightedEnemySpec(pool: EnemySpec[]) {
-        const totalWeight = pool.reduce((sum, spec) => sum + spec.weight, 0);
-        let roll = Math.random() * totalWeight;
-        for (const spec of pool) {
-            roll -= spec.weight;
-            if (roll <= 0) return spec;
-        }
-        return pool[0];
-    }
 
-    private getAvailableEnemySpecs() {
-        return this.getUnlockedEnemySpecs();
-    }
 
-    private getUnlockedEnemySpecs() {
-        const slot = this.getWaveSlot();
-        const wave = this.clamp(slot >= WAVES_PER_CYCLE ? ORDINARY_WAVES_PER_CYCLE : slot, 1, ORDINARY_WAVES_PER_CYCLE);
-        const end = Math.floor((wave * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
-        return ENEMY_SPECS.slice(0, Math.max(1, end));
-    }
 
-    private getWaveEnemySpecs(wave: number) {
-        const slot = this.getWaveSlot(wave);
-        const ordinaryWave = this.clamp(slot >= WAVES_PER_CYCLE ? ORDINARY_WAVES_PER_CYCLE : slot, 1, ORDINARY_WAVES_PER_CYCLE);
-        const start = Math.floor(((ordinaryWave - 1) * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
-        const end = Math.floor((ordinaryWave * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
-        return ENEMY_SPECS.slice(start, Math.max(start + 1, end));
-    }
 
-    private damageEnemy(enemy: Enemy, amount: number, color = '#F8FAFC', tag = '') {
-        const finalAmount = enemy.armorTimer > 0 ? amount * (enemy.boss ? 0.58 : 0.72) : amount;
-        const finalTag = enemy.armorTimer > 0 ? `${tag}霸体 ` : tag;
-        this.spawnFloatingText(
-            `${finalTag}${Math.ceil(finalAmount)}`,
-            enemy.node.position.x + this.randomRange(-12, 12),
-            enemy.node.position.y + enemy.radius + this.randomRange(8, 20),
-            enemy.armorTimer > 0 ? '#CBD5E1' : color,
-            finalTag ? 23 : 21,
-        );
-        enemy.hitFlash = ENEMY_HIT_FLASH_DURATION;
-        this.playSfx('sfx_hit_enemy', enemy.boss ? 0.46 : 0.32, 0.035);
-        enemy.hp -= finalAmount;
-        if (enemy.hp <= 0) {
-            this.killEnemy(enemy);
-        } else {
-            this.drawEnemy(enemy);
-        }
-    }
 
-    private rollOutgoingDamage(enemy: Enemy, baseDamage: number) {
-        const stats = this.getCharacterStats();
-        const lethalRoll = Math.random() < stats.lethalChance;
-        if (lethalRoll) {
-            const lethalDamage = Math.max(baseDamage * stats.lethalDamage, enemy.maxHp * stats.lethalMaxHpPct);
-            return { amount: lethalDamage, color: '#F59E0B', tag: '致命 ' };
-        }
-        if (Math.random() < stats.critChance) {
-            return { amount: baseDamage * stats.critDamage, color: '#F9C74F', tag: '暴击 ' };
-        }
-        return { amount: baseDamage, color: '#F8FAFC', tag: '' };
-    }
-
-    private droneStrike(enemy: Enemy, dronePower: number) {
-        const damage = 12 + dronePower * 3.4 + this.getActiveEquipmentLevel('reactor-core') * 2;
-        const roll = this.rollOutgoingDamage(enemy, damage);
-        this.droneHitPulse = 0.22;
-        this.damageEnemy(enemy, roll.amount, roll.tag ? roll.color : '#90BE6D', roll.tag ? `无人机 ${roll.tag}` : '无人机 ');
-        const origin = this.getDroneZapOrigin();
-        this.drawZap(origin.x, origin.y, enemy.node.position.x, enemy.node.position.y);
-    }
-
-    private killEnemy(enemy: Enemy) {
-        const index = this.enemies.indexOf(enemy);
-        if (index >= 0) this.enemies.splice(index, 1);
-        this.enemySet.delete(enemy);
-        const x = enemy.node.position.x;
-        const y = enemy.node.position.y;
-        this.playSfx(enemy.boss ? 'sfx_boss_die' : 'sfx_enemy_die', enemy.boss ? 0.82 : 0.45, enemy.boss ? 1.0 : 0.045);
-        this.drawEnemyDeathBurst(x, y, enemy.radius, enemy.spec.color, enemy.elite || enemy.boss);
-        enemy.node.destroy();
-        this.killCount += 1;
-        this.waveKillCount += 1;
-
-        const xpDropChance = enemy.boss ? 1 : enemy.elite ? ELITE_XP_DROP_CHANCE : NORMAL_XP_DROP_CHANCE;
-        if (Math.random() < xpDropChance) {
-            const xpMultiplier = enemy.boss ? 3 : enemy.elite ? 2.4 : 2.1;
-            this.dropPickup('xp', Math.max(1, Math.round(enemy.spec.xp * xpMultiplier)), x, y);
-        }
-
-        const normalAlloyChance = Math.min(0.32, enemy.spec.alloyChance * NORMAL_ALLOY_DROP_MULTIPLIER + this.waveIndex * 0.004);
-        if (enemy.elite || enemy.boss || Math.random() < normalAlloyChance) {
-            const alloyAmount = enemy.boss
-                ? 18 + this.endlessCycle * 3
-                : enemy.elite
-                    ? 6 + Math.floor(this.endlessCycle / 2)
-                    : this.randomInt(1, 2) + Math.floor(this.waveIndex / 10);
-            this.dropPickup('alloy', alloyAmount, x + this.randomRange(-20, 20), y + this.randomRange(-20, 20));
-        }
-        if (Math.random() < (enemy.elite ? ELITE_MATERIAL_DROP_CHANCE : NORMAL_MATERIAL_DROP_CHANCE)) {
-            const material: ResourceType = enemy.spec.family === 'brute' || enemy.spec.family === 'warden' ? 'circuits' : enemy.spec.family === 'runner' ? 'shards' : 'biomass';
-            this.dropPickup(material, enemy.elite ? this.randomInt(2, 4) : 1, x + this.randomRange(-18, 18), y + this.randomRange(-18, 18));
-        }
-        if (enemy.elite && Math.random() < 0.18) {
-            this.dropPickup('cores', 1, x + this.randomRange(-16, 16), y + this.randomRange(-16, 16));
-        }
-        if (!enemy.boss && !this.isBossWave() && enemy.elite && Math.random() < 0.055) {
-            const chestType: ChestPickupType = Math.random() < 0.14 ? 'chest-rare' : 'chest-common';
-            this.tryDropChest(chestType, x + this.randomRange(-14, 14), y + this.randomRange(-14, 14));
-        }
-        if (enemy.boss) {
-            this.dropPickup('cores', 1 + Math.floor(this.endlessCycle / 3), x, y);
-            this.dropPickup('shards', 7 + this.endlessCycle * 2, x + 18, y + 8);
-            this.dropPickup('crystals', 1 + Math.floor(this.endlessCycle / 2), x - 18, y + 8);
-            this.dropPickup('alloy', 18 + this.endlessCycle * 4, x + 4, y + 36);
-            this.tryDropChest('chest-rare', x, y + 32);
-            this.bossKills += 1;
-            this.bossDefeatedThisWave = true;
-            this.bossSpawned = false;
-            this.requestBgm('bgm_combat_loop');
-            this.showToast(`第 ${this.waveIndex} 波 Boss 已击杀，撑到本波结束进入下一波。`);
-        }
-        if (this.shouldEnemyExplodeOnDeath(enemy)) {
-            this.enemyExplode(x, y, enemy.radius * (enemy.boss ? 3.2 : enemy.elite ? 2.45 : 2.15), enemy.damage * (enemy.boss ? 1.5 : 1.05), enemy.damageType);
-        }
-        if (enemy.spec.family === 'splitter' && !enemy.elite && !enemy.boss) {
-            const room = Math.max(0, this.getEnemyCap() - this.enemies.length);
-            const children = Math.min(2, room);
-            for (let i = 0; i < children; i++) {
-                this.createEnemy(ENEMY_SPECS[0], x + this.randomRange(-34, 34), y + this.randomRange(-34, 34), false, false);
-            }
-        }
-
-        const chip = this.getActiveEquipmentLevel('vampire-chip');
-        if (chip > 0) {
-            this.healPlayer(0.8 + chip * 0.35);
-        }
-    }
-
-    private drawEnemyDeathBurst(x: number, y: number, radius: number, color: string, rare: boolean) {
-        const rings = rare ? 3 : 2;
-        for (let i = 0; i < rings; i++) {
-            const ringRadius = radius * (1.15 + i * 0.45);
-            this.scheduleOnce(() => this.drawAreaPulse(x, y, ringRadius, color), i * 0.035);
-        }
-    }
 
     private tryDropChest(type: ChestPickupType, x: number, y: number) {
-        if (this.waveChestDrops >= MAX_CHESTS_PER_WAVE) return false;
-        this.waveChestDrops += 1;
+        if (this.cs.waveChestDrops >= MAX_CHESTS_PER_WAVE) return false;
+        this.cs.waveChestDrops += 1;
         this.dropPickup(type, 1, x, y);
         return true;
     }
 
-    private shouldEnemyExplodeOnDeath(enemy: Enemy) {
-        return enemy.boss
-            || enemy.spec.family === 'splitter'
-            || enemy.spec.variantId === 'rage'
-            || enemy.spec.variantId === 'acid'
-            || enemy.spec.variantId === 'venom'
-            || enemy.spec.variantId === 'prime';
-    }
 
-    private enemyExplode(x: number, y: number, radius: number, damage: number, damageType: DamageType) {
-        this.drawAreaPulse(x, y, radius, this.getDamageTypeColor(damageType));
-        const distSq = this.distanceSq(x, y, this.playerX, this.playerY);
-        const hitRadius = radius + this.playerRadius;
-        if (distSq <= hitRadius * hitRadius && this.invulnerableTimer <= 0) {
-            const dist = Math.sqrt(Math.max(0.001, distSq));
-            const falloff = this.clamp(1 - dist / Math.max(1, hitRadius), 0.28, 1);
-            this.takeDamage(damage * falloff, damageType);
-        }
-    }
 
     private drawAreaPulse(x: number, y: number, radius: number, color: string) {
         if (!this.worldNode) return;
@@ -2660,28 +1807,28 @@ export class RogueShooterGame extends Component {
     private takeDamage(amount: number, type: DamageType = 'physical') {
         const stats = this.getCharacterStats();
         if (Math.random() < stats.dodgeChance) {
-            this.invulnerableTimer = 0.18;
-            this.spawnFloatingText('闪避', this.playerX, this.playerY + this.playerRadius + 28, '#4CC9F0', 24);
+            this.cs.invulnerableTimer = 0.18;
+            this.spawnFloatingText('闪避', this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 28, '#4CC9F0', 24);
             return;
         }
 
         const defense = this.getDefenseAgainst(type, stats);
         const defenseRatio = 100 / (100 + Math.max(-45, defense));
         let damage = Math.max(1, amount * defenseRatio * (1 - stats.damageReduction));
-        const shieldDamage = Math.min(this.playerShield, damage);
+        const shieldDamage = Math.min(this.cs.playerShield, damage);
         if (shieldDamage > 0) {
-            this.playerShield -= shieldDamage;
+            this.cs.playerShield -= shieldDamage;
             damage -= shieldDamage;
-            this.spawnFloatingText(`护盾 -${Math.ceil(shieldDamage)}`, this.playerX, this.playerY + this.playerRadius + 42, '#4CC9F0', 20);
+            this.spawnFloatingText(`护盾 -${Math.ceil(shieldDamage)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 42, '#4CC9F0', 20);
         }
         if (damage > 0) {
-            this.playerHp = Math.max(0, this.playerHp - damage);
+            this.cs.playerHp = Math.max(0, this.cs.playerHp - damage);
             this.playSfx('sfx_player_hit', 0.65, 0.28);
-            this.spawnFloatingText(`-${Math.ceil(damage)}`, this.playerX, this.playerY + this.playerRadius + 28, '#F94144', 25);
+            this.spawnFloatingText(`-${Math.ceil(damage)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 28, '#F94144', 25);
             this.showToast(`受击 -${Math.ceil(damage)}，拉开距离。`);
         }
-        this.invulnerableTimer = 0.42;
-        this.shieldRechargeDelay = 1.6;
+        this.cs.invulnerableTimer = 0.42;
+        this.cs.shieldRechargeDelay = 1.6;
     }
 
     private getDefenseAgainst(type: DamageType, stats: CharacterStats) {
@@ -2716,11 +1863,11 @@ export class RogueShooterGame extends Component {
     }
 
     private healPlayer(amount: number) {
-        const before = this.playerHp;
-        this.playerHp = Math.min(this.playerMaxHp, this.playerHp + amount);
-        const healed = this.playerHp - before;
+        const before = this.cs.playerHp;
+        this.cs.playerHp = Math.min(this.cs.playerMaxHp, this.cs.playerHp + amount);
+        const healed = this.cs.playerHp - before;
         if (healed > 0.05) {
-            this.spawnFloatingText(`+${Math.ceil(healed)}`, this.playerX, this.playerY + this.playerRadius + 34, '#43AA8B', 23);
+            this.spawnFloatingText(`+${Math.ceil(healed)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 34, '#43AA8B', 23);
         }
     }
 
@@ -2853,7 +2000,7 @@ export class RogueShooterGame extends Component {
             this.playSfx('sfx_pickup', 0.22, 0.09);
             this.gainXp(pickup.amount);
         } else if (this.isChestPickup(pickup.type)) {
-            if (this.phase !== 'combat') return;
+            if (this.cs.phase !== 'combat') return;
             this.playSfx('sfx_chest_open', 0.7, 0.35);
             this.openItemChoices(pickup.type === 'chest-rare' ? 'rare' : 'common');
         } else {
@@ -2867,21 +2014,21 @@ export class RogueShooterGame extends Component {
     }
 
     private gainXp(amount: number) {
-        this.xp += amount * (1 + this.getCharacterStats().xpGain);
-        while (this.xp >= this.xpToNext && this.phase === 'combat') {
-            this.xp -= this.xpToNext;
-            this.level += 1;
-            this.xpToNext = Math.round(this.xpToNext * 1.24 + 22 + this.level * 5);
+        this.cs.xp += amount * (1 + this.getCharacterStats().xpGain);
+        while (this.cs.xp >= this.cs.xpToNext && this.cs.phase === 'combat') {
+            this.cs.xp -= this.cs.xpToNext;
+            this.cs.level += 1;
+            this.cs.xpToNext = Math.round(this.cs.xpToNext * 1.24 + 22 + this.cs.level * 5);
             this.playSfx('sfx_level_up', 0.78, 0.45);
             this.openLevelChoices();
         }
     }
 
     private openLevelChoices() {
-        this.phase = 'level-up';
+        this.cs.phase = 'level-up';
         this.pendingLevelChoices = this.pickLevelChoices();
         this.renderChoicePanel(
-            `角色 Lv.${this.level} 属性成长`,
+            `角色 Lv.${this.cs.level} 属性成长`,
             `选择 1 项自身属性成长。刷新消耗 ${LEVEL_REFRESH_COST} 合金。`,
             this.pendingLevelChoices,
             LEVEL_REFRESH_COST,
@@ -2889,7 +2036,7 @@ export class RogueShooterGame extends Component {
     }
 
     private openItemChoices(quality: ItemChoiceQuality, refreshed = false) {
-        this.phase = 'item-choice';
+        this.cs.phase = 'item-choice';
         this.currentItemChoiceQuality = quality;
         this.pendingItemChoices = this.pickItemChoices(quality);
         const title = quality === 'rare' ? '高级宝箱' : '普通宝箱';
@@ -2921,15 +2068,15 @@ export class RogueShooterGame extends Component {
     }
 
     private choosePanelChoice(index: number) {
-        if (this.phase === 'level-up') {
+        if (this.cs.phase === 'level-up') {
             this.chooseLevelUpgrade(index);
-        } else if (this.phase === 'item-choice') {
+        } else if (this.cs.phase === 'item-choice') {
             this.chooseRunItem(index);
         }
     }
 
     private chooseLevelUpgrade(index: number) {
-        if (this.phase !== 'level-up') return;
+        if (this.cs.phase !== 'level-up') return;
         const choice = this.pendingLevelChoices[index];
         if (!choice) return;
         this.applyLevelUpgrade(choice.id);
@@ -2940,7 +2087,7 @@ export class RogueShooterGame extends Component {
     }
 
     private chooseRunItem(index: number) {
-        if (this.phase !== 'item-choice') return;
+        if (this.cs.phase !== 'item-choice') return;
         const choice = this.pendingItemChoices[index];
         if (!choice) return;
         this.applyRunItem(choice.id);
@@ -2951,8 +2098,8 @@ export class RogueShooterGame extends Component {
     }
 
     private resumeCombatAfterChoice() {
-        this.phase = 'combat';
-        if (this.xp >= this.xpToNext) {
+        this.cs.phase = 'combat';
+        if (this.cs.xp >= this.cs.xpToNext) {
             this.openLevelChoices();
         }
     }
@@ -2972,14 +2119,14 @@ export class RogueShooterGame extends Component {
     }
 
     private refreshCurrentChoices() {
-        if (this.phase === 'level-up') {
+        if (this.cs.phase === 'level-up') {
             if (!this.spendRunAlloy(LEVEL_REFRESH_COST)) {
                 this.showToast(`合金不足，刷新需要 ${LEVEL_REFRESH_COST}。`);
                 return;
             }
             this.pendingLevelChoices = this.pickLevelChoices();
             this.renderChoicePanel(
-                `角色 Lv.${this.level} 属性成长`,
+                `角色 Lv.${this.cs.level} 属性成长`,
                 `选择 1 项自身属性成长。刷新消耗 ${LEVEL_REFRESH_COST} 合金。`,
                 this.pendingLevelChoices,
                 LEVEL_REFRESH_COST,
@@ -2988,7 +2135,7 @@ export class RogueShooterGame extends Component {
             return;
         }
 
-        if (this.phase === 'item-choice') {
+        if (this.cs.phase === 'item-choice') {
             if (!this.spendRunAlloy(CHEST_REFRESH_COST)) {
                 this.showToast(`合金不足，刷新需要 ${CHEST_REFRESH_COST}。`);
                 return;
@@ -3004,34 +2151,34 @@ export class RogueShooterGame extends Component {
         for (const effect of effects) {
             this.runStats[effect.stat] += effect.amount;
         }
-        this.playerMaxHp = this.getMaxHp();
-        this.playerShieldMax = this.getShieldMax();
-        const hpDelta = this.playerMaxHp - hpBefore;
-        const shieldDelta = this.playerShieldMax - shieldBefore;
-        if (hpDelta > 0) this.playerHp += hpDelta * 0.65;
-        if (shieldDelta > 0) this.playerShield += shieldDelta * 0.55;
-        this.playerHp = this.clamp(this.playerHp, 1, this.playerMaxHp);
-        this.playerShield = this.clamp(this.playerShield, 0, this.playerShieldMax);
+        this.cs.playerMaxHp = this.getMaxHp();
+        this.cs.playerShieldMax = this.getShieldMax();
+        const hpDelta = this.cs.playerMaxHp - hpBefore;
+        const shieldDelta = this.cs.playerShieldMax - shieldBefore;
+        if (hpDelta > 0) this.cs.playerHp += hpDelta * 0.65;
+        if (shieldDelta > 0) this.cs.playerShield += shieldDelta * 0.55;
+        this.cs.playerHp = this.clamp(this.cs.playerHp, 1, this.cs.playerMaxHp);
+        this.cs.playerShield = this.clamp(this.cs.playerShield, 0, this.cs.playerShieldMax);
     }
 
     private extractBattle() {
-        if (this.phase !== 'combat') return;
+        if (this.cs.phase !== 'combat') return;
         this.finishBattle('extract');
     }
 
     private finishBattle(reason: BattleEndReason) {
-        if (this.phase !== 'combat') return;
+        if (this.cs.phase !== 'combat') return;
         const reward = this.calculateEndlessReward(reason);
-        this.battleAlloy = 0;
+        this.cs.battleAlloy = 0;
         this.addWalletToInventory(reward);
-        this.battlesWon += 1;
+        this.cs.battlesWon += 1;
         this.saveProgress();
         this.clearWorld();
         this.openSettlement(reason, reward);
     }
 
     private openSettlement(reason: BattleEndReason, reward: ResourceWallet) {
-        this.phase = 'hangar';
+        this.cs.phase = 'hangar';
         this.requestBgm('bgm_hangar');
         this.panels.setCombatHudControlsActive(false);
         this.panels.setMenuPanelActive(false);
@@ -3045,7 +2192,7 @@ export class RogueShooterGame extends Component {
         if (this.panels.hangarTitleLabel) this.panels.hangarTitleLabel.string = reason === 'extract' ? '撤离成功' : '机体损毁';
         if (this.panels.hangarStatsLabel) {
             this.panels.hangarStatsLabel.string = [
-                `存活 ${this.formatTime(this.combatTime)}  Boss ${this.bossKills}  击杀 ${this.killCount}`,
+                `存活 ${this.formatTime(this.cs.combatTime)}  Boss ${this.cs.bossKills}  击杀 ${this.cs.killCount}`,
                 `本次带回：${this.formatWallet(reward)}`,
                 `库存：${this.formatWallet(this.getInventoryWallet())}`,
             ].join('\n');
@@ -3062,8 +2209,8 @@ export class RogueShooterGame extends Component {
     }
 
     private openShop() {
-        if (this.phase !== 'combat') return;
-        this.phase = 'shop';
+        if (this.cs.phase !== 'combat') return;
+        this.cs.phase = 'shop';
         this.touchActive = false;
         this.touchVector.set(0, 0);
         this.updateJoystickView();
@@ -3076,7 +2223,7 @@ export class RogueShooterGame extends Component {
     }
 
     private buyShopItem(index: number) {
-        if (this.phase !== 'shop') return;
+        if (this.cs.phase !== 'shop') return;
         const item = this.shopOffers[index];
         if (!item) return;
         const cost = this.getShopItemCost(item);
@@ -3091,7 +2238,7 @@ export class RogueShooterGame extends Component {
     }
 
     private refreshShopSlot(index: number) {
-        if (this.phase !== 'shop') return;
+        if (this.cs.phase !== 'shop') return;
         if (!this.spendRunAlloy(SHOP_REFRESH_COST)) {
             this.showToast(`合金不足，刷新需要 ${SHOP_REFRESH_COST}。`);
             return;
@@ -3102,14 +2249,14 @@ export class RogueShooterGame extends Component {
     }
 
     private closeShop() {
-        if (this.phase !== 'shop') return;
+        if (this.cs.phase !== 'shop') return;
         this.panels.setShopPanelActive(false);
-        this.phase = 'combat';
+        this.cs.phase = 'combat';
         this.showToast('商店离开，战斗继续。');
     }
 
     private renderShop() {
-        if (this.panels.shopTitleLabel) this.panels.shopTitleLabel.string = `战场商店  ${this.formatTime(this.combatTime)}`;
+        if (this.panels.shopTitleLabel) this.panels.shopTitleLabel.string = `战场商店  ${this.formatTime(this.cs.combatTime)}`;
         if (this.panels.shopTipLabel) {
             this.panels.shopTipLabel.string = `可用合金 ${this.getSpendableAlloy()}。购买后自动补货；单格刷新 -${SHOP_REFRESH_COST} 合金。`;
         }
@@ -3133,9 +2280,9 @@ export class RogueShooterGame extends Component {
     }
 
     private pauseCombat() {
-        if (this.phase !== 'combat') return;
-        this.phaseBeforePause = this.phase;
-        this.phase = 'paused';
+        if (this.cs.phase !== 'combat') return;
+        this.cs.phaseBeforePause = this.cs.phase;
+        this.cs.phase = 'paused';
         this.touchActive = false;
         this.touchVector.set(0, 0);
         this.updateJoystickView();
@@ -3145,8 +2292,8 @@ export class RogueShooterGame extends Component {
     }
 
     private resumeFromPause() {
-        if (this.phase !== 'paused') return;
-        this.phase = this.phaseBeforePause === 'combat' ? 'combat' : 'combat';
+        if (this.cs.phase !== 'paused') return;
+        this.cs.phase = this.cs.phaseBeforePause === 'combat' ? 'combat' : 'combat';
         if (this.panels.pausePanel) this.panels.pausePanel.active = false;
         if (this.panels.pausePanelShadow) this.panels.pausePanelShadow.active = false;
         if (this.panels.settingsPanel) this.panels.settingsPanel.active = false;
@@ -3158,14 +2305,14 @@ export class RogueShooterGame extends Component {
     }
 
     private returnToHangarFromPause() {
-        if (this.phase !== 'paused') return;
+        if (this.cs.phase !== 'paused') return;
         this.clearWorld();
         this.panels.hideAllOverlays();
         this.showHangar('已返回机库，可调整装备后重新出击。');
     }
 
     private openSettingsPanel() {
-        if (this.phase === 'combat') this.pauseCombat();
+        if (this.cs.phase === 'combat') this.pauseCombat();
         if (this.panels.settingsPanel) this.panels.settingsPanel.active = true;
         if (this.panels.settingsPanelShadow) this.panels.settingsPanelShadow.active = true;
         this.refreshSettingsPanel();
@@ -3221,7 +2368,7 @@ export class RogueShooterGame extends Component {
     }
 
     private openInfoPanel(title: string, body: string) {
-        if (this.phase === 'combat') this.pauseCombat();
+        if (this.cs.phase === 'combat') this.pauseCombat();
         if (this.panels.infoTitleLabel) this.panels.infoTitleLabel.string = title;
         if (this.panels.infoBodyLabel) this.panels.infoBodyLabel.string = body;
         if (this.panels.infoPanel) this.panels.infoPanel.active = true;
@@ -3236,11 +2383,11 @@ export class RogueShooterGame extends Component {
     private calculateEndlessReward(reason: BattleEndReason): ResourceWallet {
         const reward = this.getBattleWallet();
         reward.alloy = 0;
-        reward.shards += Math.floor(this.combatTime / 48 + this.killCount / 78 + this.bossKills * 5);
-        reward.biomass += Math.floor(this.combatTime / 56 + this.killCount / 66 + this.bossKills * 2);
-        reward.circuits += Math.floor(this.combatTime / 70 + this.killCount / 98 + this.bossKills * 3);
-        reward.cores += this.bossKills;
-        reward.crystals += Math.floor(this.bossKills / 2);
+        reward.shards += Math.floor(this.cs.combatTime / 48 + this.cs.killCount / 78 + this.cs.bossKills * 5);
+        reward.biomass += Math.floor(this.cs.combatTime / 56 + this.cs.killCount / 66 + this.cs.bossKills * 2);
+        reward.circuits += Math.floor(this.cs.combatTime / 70 + this.cs.killCount / 98 + this.cs.bossKills * 3);
+        reward.cores += this.cs.bossKills;
+        reward.crystals += Math.floor(this.cs.bossKills / 2);
 
         const multiplier = this.getResourceMultiplier();
         for (const resource of RESOURCE_DEFS) {
@@ -3269,36 +2416,36 @@ export class RogueShooterGame extends Component {
     }
 
     private getSpendableAlloy() {
-        return Math.max(0, this.battleAlloy);
+        return Math.max(0, this.cs.battleAlloy);
     }
 
     private spendRunAlloy(cost: number) {
         const amount = Math.max(0, Math.floor(cost));
         if (this.getSpendableAlloy() < amount) return false;
-        this.battleAlloy -= amount;
+        this.cs.battleAlloy -= amount;
         this.refreshHud();
         return true;
     }
 
     private getBattleWallet(): ResourceWallet {
         return {
-            alloy: this.battleAlloy,
-            cores: this.battleCores,
-            shards: this.battleShards,
-            biomass: this.battleBiomass,
-            circuits: this.battleCircuits,
-            crystals: this.battleCrystals,
+            alloy: this.cs.battleAlloy,
+            cores: this.cs.battleCores,
+            shards: this.cs.battleShards,
+            biomass: this.cs.battleBiomass,
+            circuits: this.cs.battleCircuits,
+            crystals: this.cs.battleCrystals,
         };
     }
 
     private getInventoryWallet(): ResourceWallet {
         return {
             alloy: 0,
-            cores: this.cores,
-            shards: this.shards,
-            biomass: this.biomass,
-            circuits: this.circuits,
-            crystals: this.crystals,
+            cores: this.cs.cores,
+            shards: this.cs.shards,
+            biomass: this.cs.biomass,
+            circuits: this.cs.circuits,
+            crystals: this.cs.crystals,
         };
     }
 
@@ -3306,22 +2453,22 @@ export class RogueShooterGame extends Component {
         const value = Math.max(0, Math.floor(amount));
         switch (type) {
             case 'alloy':
-                this.battleAlloy += value;
+                this.cs.battleAlloy += value;
                 break;
             case 'cores':
-                this.battleCores += value;
+                this.cs.battleCores += value;
                 break;
             case 'shards':
-                this.battleShards += value;
+                this.cs.battleShards += value;
                 break;
             case 'biomass':
-                this.battleBiomass += value;
+                this.cs.battleBiomass += value;
                 break;
             case 'circuits':
-                this.battleCircuits += value;
+                this.cs.battleCircuits += value;
                 break;
             case 'crystals':
-                this.battleCrystals += value;
+                this.cs.battleCrystals += value;
                 break;
             default:
                 break;
@@ -3329,11 +2476,11 @@ export class RogueShooterGame extends Component {
     }
 
     private addWalletToInventory(wallet: ResourceWallet) {
-        this.cores += wallet.cores;
-        this.shards += wallet.shards;
-        this.biomass += wallet.biomass;
-        this.circuits += wallet.circuits;
-        this.crystals += wallet.crystals;
+        this.cs.cores += wallet.cores;
+        this.cs.shards += wallet.shards;
+        this.cs.biomass += wallet.biomass;
+        this.cs.circuits += wallet.circuits;
+        this.cs.crystals += wallet.crystals;
     }
 
     private getResourceDef(type: ResourceType) {
@@ -3352,7 +2499,7 @@ export class RogueShooterGame extends Component {
     }
 
     private chooseLoot(index: number) {
-        if (this.phase !== 'loot') return;
+        if (this.cs.phase !== 'loot') return;
         const choice = this.pendingLootChoices[index];
         if (!choice) return;
         choice.apply();
@@ -3361,7 +2508,7 @@ export class RogueShooterGame extends Component {
     }
 
     private showHangar(message: string) {
-        this.phase = 'hangar';
+        this.cs.phase = 'hangar';
         this.requestBgm('bgm_hangar');
         this.panels.setMenuPanelActive(false);
         if (this.panels.pausePanel) this.panels.pausePanel.active = false;
@@ -3380,7 +2527,7 @@ export class RogueShooterGame extends Component {
         this.panels.setHangarControlsActive(true);
         if (this.panels.startButton) {
             this.panels.startButton.node.active = true;
-            this.panels.startButton.label.string = `开始第 ${this.battlesWon + 1} 次出击`;
+            this.panels.startButton.label.string = `开始第 ${this.cs.battlesWon + 1} 次出击`;
         }
         if (this.panels.hangarTitleLabel) this.panels.hangarTitleLabel.string = '机库整备';
         if (this.panels.hangarTipLabel) this.panels.hangarTipLabel.string = message;
@@ -3421,10 +2568,10 @@ export class RogueShooterGame extends Component {
             desc: '立刻获得装备碎片、生体样本、电路板和 1 核心。',
             color: '#43AA8B',
             apply: () => {
-                this.shards += 8 + this.battleIndex * 2;
-                this.biomass += 5 + this.battleIndex;
-                this.circuits += 4 + Math.floor(this.battleIndex / 2);
-                this.cores += 1;
+                this.cs.shards += 8 + this.cs.battleIndex * 2;
+                this.cs.biomass += 5 + this.cs.battleIndex;
+                this.cs.circuits += 4 + Math.floor(this.cs.battleIndex / 2);
+                this.cs.cores += 1;
             },
         });
 
@@ -3438,8 +2585,8 @@ export class RogueShooterGame extends Component {
                     if (this.getEquipmentLevel(equipment.id) < equipment.maxLevel) {
                         this.equipmentLevels[equipment.id] = this.getEquipmentLevel(equipment.id) + 1;
                     } else {
-                        this.shards += 10;
-                        this.cores += 1;
+                        this.cs.shards += 10;
+                        this.cs.cores += 1;
                     }
                 },
             });
@@ -3471,7 +2618,7 @@ export class RogueShooterGame extends Component {
     }
 
     private toggleSelectedEquipment() {
-        if (this.phase !== 'hangar') return;
+        if (this.cs.phase !== 'hangar') return;
         const equipment = this.getSelectedEquipment();
         if (!equipment) return;
         if (!this.ownedEquipment.has(equipment.id)) {
@@ -3529,7 +2676,7 @@ export class RogueShooterGame extends Component {
     }
 
     private upgradeEquipment(equipment: EquipmentDef) {
-        if (this.phase !== 'hangar') return;
+        if (this.cs.phase !== 'hangar') return;
         if (!this.ownedEquipment.has(equipment.id)) {
             this.craftEquipment(equipment);
             return;
@@ -3593,12 +2740,12 @@ export class RogueShooterGame extends Component {
             this.drawButton(button, false);
         });
         this.refreshHangarActions();
-        if (this.panels.hangarStatsLabel && this.phase === 'hangar') {
+        if (this.panels.hangarStatsLabel && this.cs.phase === 'hangar') {
             const gearSummary = GEAR_SLOT_ORDER
                 .map((slot) => `${GEAR_SLOT_LABELS[slot]}${this.getEquippedGearForSlot(slot) ? '1' : '0'}/1`)
                 .join('  ');
             this.panels.hangarStatsLabel.string = [
-                `已完成出击 ${this.battlesWon} 次  下一次 ${this.battlesWon + 1}`,
+                `已完成出击 ${this.cs.battlesWon} 次  下一次 ${this.cs.battlesWon + 1}`,
                 `库存：${this.formatWallet(this.getInventoryWallet())}`,
                 `出战：武器 ${this.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}（战斗中切换）  ${gearSummary}`,
                 `仓库：武器 ${this.getOwnedWeaponCount()}/${WEAPON_COUNT}  装备 ${GEAR_COUNT}  道具 ${RUN_ITEM_COUNT}  成长 ${STAT_UPGRADE_COUNT}  图鉴 ${TOTAL_ENEMY_TYPES}`,
@@ -3680,7 +2827,7 @@ export class RogueShooterGame extends Component {
 
         if (this.panels.startButton) {
             const canStart = this.getEquippedWeapons().length > 0;
-            this.panels.startButton.label.string = `开始第 ${this.battlesWon + 1} 次出击`;
+            this.panels.startButton.label.string = `开始第 ${this.cs.battlesWon + 1} 次出击`;
             this.drawButton(this.panels.startButton, !canStart);
         }
 
@@ -3735,27 +2882,27 @@ export class RogueShooterGame extends Component {
     }
 
     private refreshHud() {
-        if (this.panels.titleLabel) this.panels.titleLabel.string = `星坠幸存者  出击 ${this.battlesWon + 1}`;
-        const inRun = this.phase === 'combat' || this.phase === 'level-up' || this.phase === 'item-choice' || this.phase === 'shop';
+        if (this.panels.titleLabel) this.panels.titleLabel.string = `星坠幸存者  出击 ${this.cs.battlesWon + 1}`;
+        const inRun = this.cs.phase === 'combat' || this.cs.phase === 'level-up' || this.cs.phase === 'item-choice' || this.cs.phase === 'shop';
         if (this.panels.timerLabel) {
-            const waveRemain = Math.max(0, Math.ceil(this.waveDuration - this.waveElapsed));
-            const waveText = this.isBossWave()
-                ? `第${Math.max(1, this.waveIndex)}波 Boss${this.bossDefeatedThisWave ? ` ${waveRemain}s` : ''}`
-                : `第${Math.max(1, this.waveIndex || 1)}波 ${waveRemain}s`;
+            const waveRemain = Math.max(0, Math.ceil(this.cs.waveDuration - this.cs.waveElapsed));
+            const waveText = this.enemyMgr.isBossWave()
+                ? `第${Math.max(1, this.cs.waveIndex)}波 Boss${this.cs.bossDefeatedThisWave ? ` ${waveRemain}s` : ''}`
+                : `第${Math.max(1, this.cs.waveIndex || 1)}波 ${waveRemain}s`;
             this.panels.timerLabel.string = inRun
-                ? this.phase === 'shop'
+                ? this.cs.phase === 'shop'
                     ? '商店'
                     : waveText
                 : '机库';
         }
         if (this.panels.statLabel) {
             const stats = this.getCharacterStats();
-            const enemyPoolCount = inRun ? this.getAvailableEnemySpecs().length + BOSS_ENEMY_COUNT : TOTAL_ENEMY_TYPES;
+            const enemyPoolCount = inRun ? this.enemyMgr.getAvailableEnemySpecs().length + BOSS_ENEMY_COUNT : TOTAL_ENEMY_TYPES;
             const droneText = inRun && stats.dronePower > 0
                 ? ` | 机${this.formatStat(stats.dronePower)}×${this.getDroneStrikeCount(stats.dronePower)}`
                 : '';
             this.panels.statLabel.string = inRun
-                ? `存活 ${this.formatTime(this.combatTime)} | Lv.${this.level} | 合金 ${this.battleAlloy} | HP ${Math.ceil(this.playerHp)}/${Math.ceil(this.playerMaxHp)} 护${Math.ceil(this.playerShield)} | 暴${Math.round(stats.critChance * 100)}%${droneText} | 怪${this.enemies.length} 池${enemyPoolCount}/${TOTAL_ENEMY_TYPES}`
+                ? `存活 ${this.formatTime(this.cs.combatTime)} | Lv.${this.cs.level} | 合金 ${this.cs.battleAlloy} | HP ${Math.ceil(this.cs.playerHp)}/${Math.ceil(this.cs.playerMaxHp)} 护${Math.ceil(this.cs.playerShield)} | 暴${Math.round(stats.critChance * 100)}%${droneText} | 怪${this.enemyMgr.enemies.length} 池${enemyPoolCount}/${TOTAL_ENEMY_TYPES}`
                 : `永久资源：${this.formatWallet(this.getInventoryWallet())}`;
         }
         if (this.panels.equipmentLabel) {
@@ -3770,7 +2917,7 @@ export class RogueShooterGame extends Component {
                 : `出战 ${this.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}武  装备 ${this.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}`;
         }
         if (this.panels.switchWeaponButton) {
-            const canSwitch = this.phase === 'combat' && this.getEquippedWeapons().length > 1;
+            const canSwitch = this.cs.phase === 'combat' && this.getEquippedWeapons().length > 1;
             this.panels.switchWeaponButton.node.active = inRun;
             this.panels.switchWeaponButton.label.string = '切武器';
             this.drawButton(this.panels.switchWeaponButton, !canSwitch);
@@ -3778,12 +2925,12 @@ export class RogueShooterGame extends Component {
         if (this.panels.shopButton) {
             this.panels.shopButton.node.active = inRun;
             this.panels.shopButton.label.string = '商店';
-            this.drawButton(this.panels.shopButton, this.phase !== 'combat');
+            this.drawButton(this.panels.shopButton, this.cs.phase !== 'combat');
         }
         if (this.panels.extractButton) {
             this.panels.extractButton.node.active = inRun;
             this.panels.extractButton.label.string = '撤离';
-            this.drawButton(this.panels.extractButton, this.phase !== 'combat');
+            this.drawButton(this.panels.extractButton, this.cs.phase !== 'combat');
         }
         this.refreshDebugHud(inRun);
         this.drawBars();
@@ -3796,11 +2943,11 @@ export class RogueShooterGame extends Component {
             this.panels.debugLabel.string = '';
             return;
         }
-        const boss = this.enemies.find((enemy) => enemy.boss);
+        const boss = this.enemyMgr.enemies.find((enemy) => enemy.boss);
         const bossText = boss ? `Boss ${Math.ceil(boss.hp)}/${Math.ceil(boss.maxHp)}` : 'Boss -';
         this.panels.debugLabel.string = [
-            `DBG ${this.phase} W${this.waveIndex} ${Math.round(this.waveElapsed)}/${Math.round(this.waveDuration)}s ${bossText}`,
-            `E ${this.enemies.length}/${this.getEnemyCap()}  B ${this.bullets.length}  EP ${this.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickups.length}  FT ${this.floatingTexts.length}`,
+            `DBG ${this.cs.phase} W${this.cs.waveIndex} ${Math.round(this.cs.waveElapsed)}/${Math.round(this.cs.waveDuration)}s ${bossText}`,
+            `E ${this.enemyMgr.enemies.length}/${this.enemyMgr.getEnemyCap()}  B ${this.bullets.length}  EP ${this.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickups.length}  FT ${this.floatingTexts.length}`,
             `MS F${this.perfFrameMs.toFixed(1)} pre${this.perfPreMs.toFixed(1)} ply${this.perfPlayerMs.toFixed(1)} wep${this.perfWeaponMs.toFixed(1)} bul${this.perfBulletMs.toFixed(1)} ep${this.perfEnemyProjectileMs.toFixed(1)} ene${this.perfEnemyMs.toFixed(1)} sep${this.perfSeparationMs.toFixed(1)} pk${this.perfPickupMs.toFixed(1)} hud${this.perfHudMs.toFixed(1)}`,
             `DRAW enemy${this.perfDrawEnemy} bullet${this.perfDrawBullet} drone${this.perfDrawDrone}  STEER ${this.perfCrowdSteerCalls}/${this.perfCrowdChecks}  SEPCHK ${this.perfSepChecks}`,
         ].join('\n');
@@ -3808,8 +2955,8 @@ export class RogueShooterGame extends Component {
 
     private drawBars() {
         if (this.panels.hpBar) {
-            const ratio = this.playerMaxHp > 0 ? this.playerHp / this.playerMaxHp : 0;
-            const shieldRatio = this.playerShieldMax > 0 ? this.playerShield / this.playerShieldMax : 0;
+            const ratio = this.cs.playerMaxHp > 0 ? this.cs.playerHp / this.cs.playerMaxHp : 0;
+            const shieldRatio = this.cs.playerShieldMax > 0 ? this.cs.playerShield / this.cs.playerShieldMax : 0;
             this.panels.hpBar.clear();
             this.panels.hpBar.fillColor = this.hex('#1E293B');
             this.panels.hpBar.roundRect(-146, -9, 292, 18, 9);
@@ -3825,7 +2972,7 @@ export class RogueShooterGame extends Component {
         }
 
         if (this.panels.xpBar) {
-            const ratio = this.xpToNext > 0 ? this.xp / this.xpToNext : 0;
+            const ratio = this.cs.xpToNext > 0 ? this.cs.xp / this.cs.xpToNext : 0;
             this.panels.xpBar.clear();
             this.panels.xpBar.fillColor = this.hex('#1E293B');
             this.panels.xpBar.roundRect(-146, -9, 292, 18, 9);
@@ -3838,7 +2985,7 @@ export class RogueShooterGame extends Component {
 
     private updateDroneVisuals(dt: number) {
         this.droneHitPulse = Math.max(0, this.droneHitPulse - dt);
-        if (!this.worldNode || this.phase !== 'combat' || !this.playerNode) {
+        if (!this.worldNode || this.cs.phase !== 'combat' || !this.playerNode) {
             this.clearDroneVisuals();
             return;
         }
@@ -3859,9 +3006,9 @@ export class RogueShooterGame extends Component {
         const pulse = this.droneHitPulse > 0 ? 1 + this.droneHitPulse * 3.8 : 1;
         for (let i = 0; i < this.droneVisuals.length; i++) {
             const visual = this.droneVisuals[i];
-            const angle = this.combatTime * orbitSpeed + visual.phase;
-            const x = this.playerX + Math.cos(angle) * orbitRadius;
-            const y = this.playerY + Math.sin(angle) * orbitRadius * 0.74 + 8;
+            const angle = this.cs.combatTime * orbitSpeed + visual.phase;
+            const x = this.cs.playerX + Math.cos(angle) * orbitRadius;
+            const y = this.cs.playerY + Math.sin(angle) * orbitRadius * 0.74 + 8;
             visual.node.setPosition(x, y, 9);
             this.drawDroneVisual(visual, dronePower, pulse);
         }
@@ -3906,7 +3053,7 @@ export class RogueShooterGame extends Component {
             const position = this.droneVisuals[index].node.position;
             return { x: position.x, y: position.y };
         }
-        return { x: this.playerX, y: this.playerY };
+        return { x: this.cs.playerX, y: this.cs.playerY };
     }
 
     private clearDroneVisuals() {
@@ -3919,14 +3066,14 @@ export class RogueShooterGame extends Component {
 
     private drawPlayer() {
         if (!this.playerGfx) return;
-        const pulse = this.invulnerableTimer > 0 ? 120 : 255;
+        const pulse = this.cs.invulnerableTimer > 0 ? 120 : 255;
         this.playerGfx.clear();
         if (this.playerSprite) {
             this.playerSprite.color = this.hex('#FFFFFF', pulse);
             this.playerGfx.fillColor = this.hex('#020617', 95);
             this.playerGfx.circle(3, -6, 27);
             this.playerGfx.fill();
-            this.playerGfx.strokeColor = this.hex(this.invulnerableTimer > 0 ? '#F8FAFC' : '#4CC9F0', pulse);
+            this.playerGfx.strokeColor = this.hex(this.cs.invulnerableTimer > 0 ? '#F8FAFC' : '#4CC9F0', pulse);
             this.playerGfx.lineWidth = 3;
             this.playerGfx.circle(0, 0, 29);
             this.playerGfx.stroke();
@@ -3951,189 +3098,8 @@ export class RogueShooterGame extends Component {
         this.playerGfx.stroke();
     }
 
-    private drawEnemy(enemy: Enemy) {
-        this.perfDrawEnemy += 1;
-        enemy.gfx.clear();
-        if (enemy.sprite) {
-            const visualRadius = enemy.visualRadius || enemy.radius + 8;
-            const tint = this.getEnemyTint(enemy, 255);
-            enemy.sprite.color = enemy.hitFlash > 0
-                ? this.hex('#FFFFFF', 255)
-                : tint;
-            enemy.gfx.fillColor = this.hex('#020617', 145);
-            enemy.gfx.ellipse(4, -8, visualRadius + 8, visualRadius * 0.72 + 5);
-            enemy.gfx.fill();
-            enemy.gfx.fillColor = this.hex(enemy.spec.color, enemy.boss ? 72 : 58);
-            enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 12 : 7));
-            enemy.gfx.fill();
-            enemy.gfx.strokeColor = this.hex(enemy.hitFlash > 0 ? '#FFFFFF' : enemy.spec.accent, enemy.boss ? 245 : 225);
-            enemy.gfx.lineWidth = enemy.boss ? 6 : enemy.elite ? 5 : 4;
-            enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 8 : 5));
-            enemy.gfx.stroke();
-            this.drawEnemyVariantMark(enemy);
-            if (enemy.elite || enemy.boss) {
-                enemy.gfx.strokeColor = this.hex(enemy.boss ? '#F94144' : '#F8FAFC', enemy.boss ? 245 : 215);
-                enemy.gfx.lineWidth = enemy.boss ? 6 : 4;
-                enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 18 : 11));
-                enemy.gfx.stroke();
-            }
-            if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
-                enemy.gfx.strokeColor = this.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 230);
-                enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 5 : 4;
-                enemy.gfx.circle(0, 0, visualRadius + (enemy.armorTimer > 0 ? 15 : 10));
-                enemy.gfx.stroke();
-            }
-            if (enemy.hp < enemy.maxHp) {
-                const ratio = this.clamp(enemy.hp / enemy.maxHp, 0, 1);
-                const barWidth = Math.max(enemy.radius * 2, visualRadius * 1.45);
-                enemy.gfx.fillColor = this.hex('#0F172A');
-                enemy.gfx.roundRect(-barWidth / 2, visualRadius + 10, barWidth, 7, 3);
-                enemy.gfx.fill();
-                enemy.gfx.fillColor = this.hex('#F94144');
-                enemy.gfx.roundRect(-barWidth / 2, visualRadius + 10, barWidth * ratio, 7, 3);
-                enemy.gfx.fill();
-            }
-            return;
-        }
-        enemy.gfx.fillColor = this.hex('#020617', 90);
-        enemy.gfx.circle(3, -4, enemy.radius + 3);
-        enemy.gfx.fill();
-        enemy.gfx.fillColor = enemy.hitFlash > 0
-            ? this.hex('#FFFFFF', 255)
-            : this.getEnemyTint(enemy, enemy.elite ? 255 : 230);
-        enemy.gfx.circle(0, 0, enemy.radius);
-        enemy.gfx.fill();
-        enemy.gfx.fillColor = this.hex(enemy.spec.accent, 210);
-        enemy.gfx.circle(-enemy.radius * 0.3, enemy.radius * 0.12, enemy.radius * 0.35);
-        enemy.gfx.fill();
-        this.drawEnemyVariantMark(enemy);
-        enemy.gfx.strokeColor = this.hex(enemy.elite ? '#F8FAFC' : '#0F172A', enemy.boss ? 255 : 190);
-        enemy.gfx.lineWidth = enemy.boss ? 5 : enemy.elite ? 4 : 2;
-        enemy.gfx.circle(0, 0, enemy.radius);
-        enemy.gfx.stroke();
-        if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
-            enemy.gfx.strokeColor = this.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 210);
-            enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 4 : 3;
-            enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 9 : 5));
-            enemy.gfx.stroke();
-        }
 
-        if (enemy.hp < enemy.maxHp) {
-            const ratio = this.clamp(enemy.hp / enemy.maxHp, 0, 1);
-            enemy.gfx.fillColor = this.hex('#0F172A');
-            enemy.gfx.roundRect(-enemy.radius, enemy.radius + 6, enemy.radius * 2, 5, 3);
-            enemy.gfx.fill();
-            enemy.gfx.fillColor = this.hex('#F94144');
-            enemy.gfx.roundRect(-enemy.radius, enemy.radius + 6, enemy.radius * 2 * ratio, 5, 3);
-            enemy.gfx.fill();
-        }
-    }
 
-    private getEnemyTint(enemy: Enemy, alpha = 255) {
-        if (enemy.boss) return this.hex(enemy.spec.color, alpha);
-        const palette = [
-            enemy.spec.color,
-            '#9BE564',
-            '#43AA8B',
-            '#4CC9F0',
-            '#577590',
-            '#F9C74F',
-            '#F3722C',
-            '#B5179E',
-            '#A7F3D0',
-            '#90BE6D',
-            '#F94144',
-        ];
-        const color = palette[(enemy.spec.variantIndex || 0) % palette.length] || enemy.spec.color;
-        return this.hex(color, alpha);
-    }
-
-    private drawEnemyVariantMark(enemy: Enemy) {
-        if (enemy.boss) return;
-        const variantIndex = enemy.spec.variantIndex || 0;
-        if (variantIndex <= 0) return;
-
-        const markColor = this.getEnemyTint(enemy, 235);
-        const accentColor = this.hex(enemy.spec.accent, 220);
-        const r = enemy.radius;
-        enemy.gfx.strokeColor = markColor;
-        enemy.gfx.lineWidth = enemy.elite ? 4 : 3;
-
-        switch (enemy.spec.variantId) {
-            case 'acid':
-                enemy.gfx.circle(-r * 0.36, -r * 0.16, Math.max(3, r * 0.16));
-                enemy.gfx.stroke();
-                enemy.gfx.circle(r * 0.28, r * 0.18, Math.max(3, r * 0.13));
-                enemy.gfx.stroke();
-                break;
-            case 'crystal':
-                enemy.gfx.moveTo(0, r * 0.72);
-                enemy.gfx.lineTo(r * 0.28, 0);
-                enemy.gfx.lineTo(0, -r * 0.72);
-                enemy.gfx.lineTo(-r * 0.28, 0);
-                enemy.gfx.close();
-                enemy.gfx.stroke();
-                break;
-            case 'swift':
-                enemy.gfx.moveTo(-r * 0.72, -r * 0.36);
-                enemy.gfx.lineTo(r * 0.62, 0);
-                enemy.gfx.lineTo(-r * 0.72, r * 0.36);
-                enemy.gfx.stroke();
-                break;
-            case 'armored':
-                enemy.gfx.roundRect(-r * 0.62, -r * 0.48, r * 1.24, r * 0.96, Math.max(4, r * 0.12));
-                enemy.gfx.stroke();
-                break;
-            case 'rage':
-                enemy.gfx.moveTo(-r * 0.42, r * 0.58);
-                enemy.gfx.lineTo(-r * 0.16, r * 0.12);
-                enemy.gfx.lineTo(0, r * 0.66);
-                enemy.gfx.lineTo(r * 0.18, r * 0.12);
-                enemy.gfx.lineTo(r * 0.44, r * 0.58);
-                enemy.gfx.stroke();
-                break;
-            case 'shade':
-                enemy.gfx.fillColor = this.hex('#020617', 90);
-                enemy.gfx.circle(0, 0, r * 0.72);
-                enemy.gfx.fill();
-                enemy.gfx.strokeColor = markColor;
-                enemy.gfx.circle(0, 0, r * 0.5);
-                enemy.gfx.stroke();
-                break;
-            case 'arc':
-                enemy.gfx.moveTo(-r * 0.32, r * 0.62);
-                enemy.gfx.lineTo(r * 0.08, r * 0.08);
-                enemy.gfx.lineTo(-r * 0.08, r * 0.08);
-                enemy.gfx.lineTo(r * 0.36, -r * 0.62);
-                enemy.gfx.stroke();
-                break;
-            case 'regen':
-                enemy.gfx.moveTo(0, r * 0.58);
-                enemy.gfx.lineTo(0, -r * 0.58);
-                enemy.gfx.moveTo(-r * 0.58, 0);
-                enemy.gfx.lineTo(r * 0.58, 0);
-                enemy.gfx.stroke();
-                break;
-            case 'venom':
-                enemy.gfx.fillColor = markColor;
-                enemy.gfx.circle(0, -r * 0.12, Math.max(4, r * 0.2));
-                enemy.gfx.fill();
-                enemy.gfx.fillColor = accentColor;
-                enemy.gfx.circle(0, -r * 0.12, Math.max(2, r * 0.08));
-                enemy.gfx.fill();
-                break;
-            case 'prime':
-                enemy.gfx.circle(0, 0, r * 0.78);
-                enemy.gfx.stroke();
-                enemy.gfx.circle(0, 0, r * 0.42);
-                enemy.gfx.stroke();
-                break;
-            default:
-                enemy.gfx.circle(0, 0, r * 0.62);
-                enemy.gfx.stroke();
-                break;
-        }
-    }
 
     private drawBullet(bullet: Bullet) {
         this.perfDrawBullet += 1;
@@ -4331,7 +3297,7 @@ export class RogueShooterGame extends Component {
 
     private updateJoystickView() {
         if (!this.joystickBase || !this.joystickKnob) return;
-        if (!this.touchActive || this.phase !== 'combat') {
+        if (!this.touchActive || this.cs.phase !== 'combat') {
             this.joystickBase.active = false;
             this.joystickKnob.active = false;
             return;
@@ -4344,21 +3310,9 @@ export class RogueShooterGame extends Component {
         this.joystickKnob.setPosition(baseX + this.touchVector.x * 52, baseY + this.touchVector.y * 52, 21);
     }
 
-    private findNearestEnemy(range: number): Enemy | null {
-        let best: Enemy | null = null;
-        let bestDist = range * range;
-        for (const enemy of this.enemies) {
-            const dist = this.distanceSq(this.playerX, this.playerY, enemy.node.position.x, enemy.node.position.y);
-            if (dist < bestDist) {
-                best = enemy;
-                bestDist = dist;
-            }
-        }
-        return best;
-    }
 
     private pickLevelChoices(): LevelUpgrade[] {
-        const maxTier = this.level < 4 ? 2 : this.level < 8 ? 3 : this.level < 13 ? 4 : 5;
+        const maxTier = this.cs.level < 4 ? 2 : this.cs.level < 8 ? 3 : this.cs.level < 13 ? 4 : 5;
         const available = LEVEL_UPGRADES.filter((item) => item.tier <= maxTier && !this.acquiredStatUpgradeIds.has(item.id));
         const pool = this.shuffle(available.length >= 3 ? available : LEVEL_UPGRADES.filter((item) => item.tier <= maxTier));
         const picked: LevelUpgrade[] = [];
@@ -4440,13 +3394,13 @@ export class RogueShooterGame extends Component {
     }
 
     private getRunItemTierLimit() {
-        const minutes = Math.floor(this.combatTime / 150);
-        return this.clamp(2 + Math.floor(this.endlessCycle / 2) + minutes, 2, 5);
+        const minutes = Math.floor(this.cs.combatTime / 150);
+        return this.clamp(2 + Math.floor(this.cs.endlessCycle / 2) + minutes, 2, 5);
     }
 
     private getShopItemCost(item: LevelUpgrade) {
-        const waveFee = Math.floor(this.waveIndex / 4) * 5;
-        const cycleFee = (this.endlessCycle - 1) * 10;
+        const waveFee = Math.floor(this.cs.waveIndex / 4) * 5;
+        const cycleFee = (this.cs.endlessCycle - 1) * 10;
         const baseCost = 44 + item.tier * 18 + waveFee + cycleFee;
         return Math.max(46, Math.round(baseCost * this.getRunItemShopPriceMultiplier(item)));
     }
@@ -4623,22 +3577,22 @@ export class RogueShooterGame extends Component {
     private getActiveWeapon() {
         const weapons = this.getEquippedWeapons();
         if (weapons.length <= 0) return null;
-        this.activeWeaponIndex = this.clamp(this.activeWeaponIndex, 0, weapons.length - 1);
-        return weapons[this.activeWeaponIndex] || weapons[0] || null;
+        this.cs.activeWeaponIndex = this.clamp(this.cs.activeWeaponIndex, 0, weapons.length - 1);
+        return weapons[this.cs.activeWeaponIndex] || weapons[0] || null;
     }
 
     private switchActiveWeapon() {
-        if (this.phase !== 'combat') return;
+        if (this.cs.phase !== 'combat') return;
         const weapons = this.getEquippedWeapons();
         if (weapons.length <= 1) {
             this.showToast('只携带 1 把武器，无法切换。');
             return;
         }
         const current = this.getActiveWeapon();
-        if (current) this.weaponCooldowns[current.id] = Math.max(0, this.shotTimer);
-        this.activeWeaponIndex = (this.activeWeaponIndex + 1) % weapons.length;
+        if (current) this.weaponCooldowns[current.id] = Math.max(0, this.cs.shotTimer);
+        this.cs.activeWeaponIndex = (this.cs.activeWeaponIndex + 1) % weapons.length;
         const next = this.getActiveWeapon();
-        this.shotTimer = next ? Math.min(this.weaponCooldowns[next.id] ?? 0.18, this.getFireInterval()) : 0.18;
+        this.cs.shotTimer = next ? Math.min(this.weaponCooldowns[next.id] ?? 0.18, this.getFireInterval()) : 0.18;
         this.playerWeaponFrameName = '';
         this.updatePlayerWeaponVisual();
         this.playSfx('sfx_ui_click', 0.42, 0.08);
@@ -4835,11 +3789,11 @@ export class RogueShooterGame extends Component {
     private spendResources(cost: ResourceWallet) {
         const next = spendWalletResources(this.getInventoryWallet(), cost);
         if (!next) return;
-        this.cores = next.cores;
-        this.shards = next.shards;
-        this.biomass = next.biomass;
-        this.circuits = next.circuits;
-        this.crystals = next.crystals;
+        this.cs.cores = next.cores;
+        this.cs.shards = next.shards;
+        this.cs.biomass = next.biomass;
+        this.cs.circuits = next.circuits;
+        this.cs.crystals = next.crystals;
     }
 
     private formatCost(cost: ResourceWallet) {
@@ -4849,23 +3803,23 @@ export class RogueShooterGame extends Component {
     private loadProgress() {
         this.ownedEquipment = new Set(STARTER_EQUIPMENT_IDS);
         this.equippedEquipment = [...STARTER_EQUIPMENT_IDS];
-        this.shards = 24;
-        this.biomass = 12;
-        this.circuits = 10;
-        this.crystals = 0;
+        this.cs.shards = 24;
+        this.cs.biomass = 12;
+        this.cs.circuits = 10;
+        this.cs.crystals = 0;
         this.equipmentLevels = {};
         for (const id of STARTER_EQUIPMENT_IDS) this.equipmentLevels[id] = 1;
         try {
             const raw = sys.localStorage.getItem(SAVE_KEY);
             if (!raw) return;
             const data = JSON.parse(raw);
-            this.battlesWon = Math.max(0, Number(data.battlesWon) || 0);
-            this.alloy = 0;
-            this.cores = Math.max(0, Number(data.cores) || 0);
-            this.shards = Math.max(0, Number(data.shards) || this.shards);
-            this.biomass = Math.max(0, Number(data.biomass) || this.biomass);
-            this.circuits = Math.max(0, Number(data.circuits) || this.circuits);
-            this.crystals = Math.max(0, Number(data.crystals) || 0);
+            this.cs.battlesWon = Math.max(0, Number(data.battlesWon) || 0);
+            this.cs.alloy = 0;
+            this.cs.cores = Math.max(0, Number(data.cores) || 0);
+            this.cs.shards = Math.max(0, Number(data.shards) || this.cs.shards);
+            this.cs.biomass = Math.max(0, Number(data.biomass) || this.cs.biomass);
+            this.cs.circuits = Math.max(0, Number(data.circuits) || this.cs.circuits);
+            this.cs.crystals = Math.max(0, Number(data.crystals) || 0);
             if (Array.isArray(data.ownedEquipment)) {
                 this.ownedEquipment = new Set(data.ownedEquipment);
             }
@@ -4912,7 +3866,7 @@ export class RogueShooterGame extends Component {
                 .map((slot) => gearBySlot[slot])
                 .filter((id): id is string => !!id),
         ].slice(0, EQUIPPED_SLOT_COUNT);
-        this.activeWeaponIndex = this.clamp(this.activeWeaponIndex, 0, Math.max(0, weapons.length - 1));
+        this.cs.activeWeaponIndex = this.clamp(this.cs.activeWeaponIndex, 0, Math.max(0, weapons.length - 1));
         if (!this.findEquipment(this.selectedEquipmentId)) {
             this.selectedEquipmentId = this.equippedEquipment[0] || 'storm-rifle';
         }
@@ -4921,12 +3875,12 @@ export class RogueShooterGame extends Component {
     private saveProgress() {
         try {
             sys.localStorage.setItem(SAVE_KEY, JSON.stringify({
-                battlesWon: this.battlesWon,
-                cores: this.cores,
-                shards: this.shards,
-                biomass: this.biomass,
-                circuits: this.circuits,
-                crystals: this.crystals,
+                battlesWon: this.cs.battlesWon,
+                cores: this.cs.cores,
+                shards: this.cs.shards,
+                biomass: this.cs.biomass,
+                circuits: this.cs.circuits,
+                crystals: this.cs.crystals,
                 ownedEquipment: [...this.ownedEquipment],
                 equippedEquipment: this.equippedEquipment,
                 equipmentLevels: this.equipmentLevels,
@@ -4937,14 +3891,17 @@ export class RogueShooterGame extends Component {
     }
 
     private clearWorld() {
-        for (const enemy of this.enemies) enemy.node.destroy();
+        for (const enemy of this.enemyMgr.enemies) enemy.node.destroy();
         for (const bullet of [...this.bullets]) this.recycleBullet(bullet, true);
         for (const projectile of [...this.enemyProjectiles]) this.recycleEnemyProjectile(projectile, true);
         for (const pickup of this.pickups) pickup.node.destroy();
         for (const floatingText of [...this.floatingTexts]) this.recycleFloatingText(floatingText, true);
         this.clearDroneVisuals();
         if (this.playerNode) this.playerNode.destroy();
-        this.enemies = [];
+        this.enemyMgr.enemies = [];
+        this.enemyMgr.enemySet.clear();
+        this.enemyMgr.currentWaveSpecs = [];
+        this.enemyMgr.enemySepTick = 999;
         this.bullets = [];
         this.enemyProjectiles = [];
         this.pickups = [];
@@ -4954,8 +3911,8 @@ export class RogueShooterGame extends Component {
         this.playerSprite = null;
         this.playerWeaponSprite = null;
         this.playerWeaponFrameName = '';
-        this.cameraX = 0;
-        this.cameraY = 0;
+        this.cs.cameraX = 0;
+        this.cs.cameraY = 0;
         if (this.worldNode) this.worldNode.setPosition(0, 0, 0);
     }
 
@@ -4984,9 +3941,9 @@ export class RogueShooterGame extends Component {
         this.unlockAudio();
         this.pressedKeys.add(event.keyCode);
         if (event.keyCode === KeyCode.ESCAPE) {
-            if (this.phase === 'combat') this.pauseCombat();
-            else if (this.phase === 'paused') this.resumeFromPause();
-            else if (this.phase === 'hangar') this.openMainMenu();
+            if (this.cs.phase === 'combat') this.pauseCombat();
+            else if (this.cs.phase === 'paused') this.resumeFromPause();
+            else if (this.cs.phase === 'hangar') this.openMainMenu();
             return;
         }
         if (event.keyCode === KeyCode.KEY_Q || event.keyCode === KeyCode.KEY_E) {
@@ -5009,7 +3966,7 @@ export class RogueShooterGame extends Component {
 
     private onTouchStart(event: EventTouch) {
         this.unlockAudio();
-        if (this.phase !== 'combat') return;
+        if (this.cs.phase !== 'combat') return;
         const location = event.getUILocation();
         this.touchActive = true;
         this.touchOrigin.set(location.x, location.y);
@@ -5017,7 +3974,7 @@ export class RogueShooterGame extends Component {
     }
 
     private onTouchMove(event: EventTouch) {
-        if (!this.touchActive || this.phase !== 'combat') return;
+        if (!this.touchActive || this.cs.phase !== 'combat') return;
         this.updateTouchVector(event.getUILocation());
     }
 
