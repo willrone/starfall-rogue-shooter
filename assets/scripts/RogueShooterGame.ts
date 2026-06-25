@@ -298,6 +298,7 @@ export class RogueShooterGame extends Component {
             this.perfPickupMs = this.perfNow() - t;
 
             this.proj.updateEffectPools(combatDt);
+            this.enemyMgr.drawAllBars();
 
             if (this.cs.playerHp <= 0) {
                 this.finishBattle('death');
@@ -362,6 +363,7 @@ export class RogueShooterGame extends Component {
         this.worldNode.layer = Layers.Enum.UI_2D;
         root.addChild(this.worldNode);
         this.proj.initEffectPools(this.worldNode);
+        this.enemyMgr.initBarLayer(this.worldNode);
         this.worldNode.setPosition(0, 0, 0);
         this.drawWorldArena(this.worldNode);
 

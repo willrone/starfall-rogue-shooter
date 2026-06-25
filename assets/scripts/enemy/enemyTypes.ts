@@ -40,4 +40,5 @@ export interface Enemy {
     _lastAngle?: number;
     _wasHitColor?: boolean;
     visualSkip?: number;
+    lastBarDrawTime?: number;
 }

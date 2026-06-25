@@ -91,7 +91,41 @@ export class EnemyManager {
     public enemySepTick = 999;
     public currentWaveSpecs: EnemySpec[] = [];
 
+    // ── Shared health bar layer ────────────────────────────────────
+    private barLayer: Node | null = null;
+    private barGfx: Graphics | null = null;
+
     constructor(public ctx: EnemyHostContext) {}
+
+    public initBarLayer(worldNode: Node): void {
+        this.barLayer = new Node('BarLayer');
+        worldNode.addChild(this.barLayer);
+        this.barGfx = this.barLayer.addComponent(Graphics);
+    }
+
+    public drawAllBars(): void {
+        if (!this.barGfx) return;
+        this.barGfx.clear();
+        const now = this.ctx.combatTime;
+        for (const enemy of this.enemies) {
+            if (!this.enemySet.has(enemy)) continue;
+            if (enemy.hp >= enemy.maxHp) continue;
+            if (now - enemy.lastBarDrawTime < 0.15) continue;
+            enemy.lastBarDrawTime = now;
+            const pos = enemy.node.position;
+            const ratio = this.ctx.clamp(enemy.hp / enemy.maxHp, 0, 1);
+            const r = enemy.radius || 14;
+            const barW = r * 2;
+            const barH = 5;
+            const barY = pos.y + r + 8;
+            this.barGfx.fillColor = this.ctx.hex('#0F172A');
+            this.barGfx.roundRect(pos.x - barW / 2, barY, barW, barH, 3);
+            this.barGfx.fill();
+            this.barGfx.fillColor = this.ctx.hex('#F94144');
+            this.barGfx.roundRect(pos.x - barW / 2, barY, barW * ratio, barH, 3);
+            this.barGfx.fill();
+        }
+    }
 
     private get cs(): EnemyHostContext {
         return this.ctx;
@@ -836,16 +870,7 @@ export class EnemyManager {
                 enemy.gfx.circle(0, 0, visualRadius + (enemy.armorTimer > 0 ? 15 : 10));
                 enemy.gfx.stroke();
             }
-            if (enemy.hp < enemy.maxHp) {
-                const ratio = this.ctx.clamp(enemy.hp / enemy.maxHp, 0, 1);
-                const barWidth = Math.max(enemy.radius * 2, visualRadius * 1.45);
-                enemy.gfx.fillColor = this.ctx.hex('#0F172A');
-                enemy.gfx.roundRect(-barWidth / 2, visualRadius + 10, barWidth, 7, 3);
-                enemy.gfx.fill();
-                enemy.gfx.fillColor = this.ctx.hex('#F94144');
-                enemy.gfx.roundRect(-barWidth / 2, visualRadius + 10, barWidth * ratio, 7, 3);
-                enemy.gfx.fill();
-            }
+            // Health bar drawn by shared barLayer — skip here
             return;
         }
         enemy.gfx.fillColor = this.ctx.hex('#020617', 90);
@@ -870,16 +895,7 @@ export class EnemyManager {
             enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 9 : 5));
             enemy.gfx.stroke();
         }
-
-        if (enemy.hp < enemy.maxHp) {
-            const ratio = this.ctx.clamp(enemy.hp / enemy.maxHp, 0, 1);
-            enemy.gfx.fillColor = this.ctx.hex('#0F172A');
-            enemy.gfx.roundRect(-enemy.radius, enemy.radius + 6, enemy.radius * 2, 5, 3);
-            enemy.gfx.fill();
-            enemy.gfx.fillColor = this.ctx.hex('#F94144');
-            enemy.gfx.roundRect(-enemy.radius, enemy.radius + 6, enemy.radius * 2 * ratio, 5, 3);
-            enemy.gfx.fill();
-        }
+        // Health bar drawn by shared barLayer — skip here
     }
     public getEnemyTint(enemy: Enemy, alpha = 255) {
         if (enemy.boss) return this.ctx.hex(enemy.spec.color, alpha);
