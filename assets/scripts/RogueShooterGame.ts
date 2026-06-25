@@ -1,7 +1,5 @@
 import {
     _decorator,
-    AudioClip,
-    AudioSource,
     Camera,
     Canvas,
     Color,
@@ -28,6 +26,7 @@ import {
 } from 'cc';
 
 import { PanelManager } from './ui/panels';
+import { AudioManager, type AudioHostContext } from './audio/audioManager';
 
 import {
     RESOURCE_DEFS,
@@ -112,7 +111,6 @@ const CAMERA_FOCUS_X = 0;
 const CAMERA_FOCUS_Y = -96;
 const ART_DIRS = ['art/placeholder', 'art/characters', 'art/enemies', 'art/weapons'] as const;
 const ART_LOAD_TIMEOUT_SECONDS = 4;
-const AUDIO_DIR = 'audio';
 const PLACEHOLDER_ART_DIR = 'art/placeholder';
 const HANGAR_EQUIPMENT_SLOTS = 8;
 const EQUIPPED_SLOT_COUNT = 6;
@@ -187,16 +185,7 @@ export class RogueShooterGame extends Component {
     private panels = new PanelManager();
     private artFrames = new Map<string, SpriteFrame>();
     private spriteStripCache = new Map<string, SpriteStripAnimation>();
-    private sfxSource: AudioSource | null = null;
-    private bgmSource: AudioSource | null = null;
-    private sfxClips = new Map<string, AudioClip>();
-    private bgmClips = new Map<string, AudioClip>();
-    private sfxCooldowns: Record<string, number> = {};
-    private audioReady = false;
-    private audioUnlocked = false;
-    private currentBgmName = '';
-    private sfxVolume = 0.72;
-    private bgmVolume = 0.34;
+    private audio = new AudioManager(this as unknown as AudioHostContext);
     private playerIdleAnimation: SpriteStripAnimation | null = null;
     private playerRunAnimations = new Map<PlayerDirection, SpriteStripAnimation>();
     private playerDirection: PlayerDirection = 'south';
@@ -241,7 +230,7 @@ export class RogueShooterGame extends Component {
         this.createCanvas();
         this.shop.loadProgress();
         this.buildScene();
-        this.initAudio();
+        this.audio.initAudio();
         this.loadPlaceholderArt(() => this.openHome());
         input.on(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         input.on(Input.EventType.KEY_UP, this.onKeyUp, this);
@@ -266,7 +255,7 @@ export class RogueShooterGame extends Component {
 
         let t = this.perfNow();
         this.updateToast(dt);
-        this.updateSfxCooldowns(dt);
+        this.audio.updateSfxCooldowns(dt);
         this.pickupMgr.updateFloatingTexts(dt);
         this.perfPreMs = this.perfNow() - t;
 
@@ -434,93 +423,48 @@ export class RogueShooterGame extends Component {
     }
 
     private initAudio() {
-        this.sfxSource = this.node.addComponent(AudioSource);
-        this.bgmSource = this.node.addComponent(AudioSource);
-        this.bgmSource.loop = true;
-        this.bgmSource.volume = this.bgmVolume;
-
-        resources.loadDir(AUDIO_DIR, AudioClip, (error, clips) => {
-            if (error) {
-                console.warn('Failed to load audio assets; game will continue muted.', error);
-                return;
-            }
-
-            for (const clip of clips) {
-                if (clip.name.startsWith('bgm_')) {
-                    this.bgmClips.set(clip.name, clip);
-                } else if (clip.name.startsWith('sfx_')) {
-                    this.sfxClips.set(clip.name, clip);
-                }
-            }
-            this.audioReady = true;
-            this.syncBgmForPhase();
-        });
+        this.audio.initAudio();
     }
 
     private unlockAudio() {
-        if (this.audioUnlocked) return;
-        this.audioUnlocked = true;
-        this.syncBgmForPhase(true);
+        this.audio.unlockAudio();
     }
 
     private updateSfxCooldowns(dt: number) {
-        for (const name of Object.keys(this.sfxCooldowns)) {
-            this.sfxCooldowns[name] -= dt;
-            if (this.sfxCooldowns[name] <= 0) delete this.sfxCooldowns[name];
-        }
+        this.audio.updateSfxCooldowns(dt);
     }
 
     private playSfx(name: string, volume = 1, cooldown = 0.035) {
-        if (!this.audioReady || !this.audioUnlocked || !this.sfxSource) return;
-        if (this.sfxCooldowns[name] && this.sfxCooldowns[name] > 0) return;
-        const clip = this.sfxClips.get(name);
-        if (!clip) return;
-        this.sfxSource.playOneShot(clip, this.sfxVolume * volume);
-        if (cooldown > 0) this.sfxCooldowns[name] = cooldown;
+        this.audio.playSfx(name, volume, cooldown);
     }
 
     private playShootSfx(style: WeaponAttackStyle) {
-        switch (style) {
-            case 'shotgun':
-                this.playSfx('sfx_shoot_shotgun', 0.78, 0.09);
-                break;
-            case 'rail':
-                this.playSfx('sfx_shoot_rail', 0.78, 0.12);
-                break;
-            case 'laser':
-            case 'pulse':
-            case 'disc':
-            case 'scythe':
-                this.playSfx('sfx_shoot_laser', 0.68, 0.08);
-                break;
-            default:
-                this.playSfx('sfx_shoot_rifle', 0.64, 0.055);
-                break;
-        }
+        this.audio.playShootSfx(style);
     }
 
     private requestBgm(name: string) {
-        this.currentBgmName = name;
-        this.syncBgmForPhase();
+        this.audio.requestBgm(name);
     }
 
     private syncBgmForPhase(forceRestart = false) {
-        if (!this.audioReady || !this.audioUnlocked || !this.bgmSource || !this.currentBgmName) return;
-        const clip = this.bgmClips.get(this.currentBgmName);
-        if (!clip) return;
-        if (!forceRestart && this.bgmSource.clip === clip && this.bgmSource.playing) return;
-        this.bgmSource.stop();
-        this.bgmSource.clip = clip;
-        this.bgmSource.loop = true;
-        this.bgmSource.volume = this.bgmVolume;
-        this.bgmSource.play();
+        this.audio.syncBgmForPhase(forceRestart);
     }
 
     private requestPhaseBgm() {
-        if (this.cs.phase === 'combat') {
-            this.requestBgm(this.enemyMgr.isBossWave() ? 'bgm_boss_loop' : 'bgm_combat_loop');
-        } else {
-            this.requestBgm('bgm_hangar');
+        this.audio.requestPhaseBgm();
+    }
+
+    private refreshSettingsPanel() {
+        if (this.panels.settingsBodyLabel) {
+            this.panels.settingsBodyLabel.string = `音乐：${this.audio.bgmVolume > 0 ? '开启' : '关闭'}\n音效：${this.audio.sfxVolume > 0 ? '开启' : '关闭'}`;
+        }
+        if (this.panels.bgmToggleButton) {
+            this.panels.bgmToggleButton.label.string = this.audio.bgmVolume > 0 ? '关闭音乐' : '开启音乐';
+            this.drawButton(this.panels.bgmToggleButton, false);
+        }
+        if (this.panels.sfxToggleButton) {
+            this.panels.sfxToggleButton.label.string = this.audio.sfxVolume > 0 ? '关闭音效' : '开启音效';
+            this.drawButton(this.panels.sfxToggleButton, false);
         }
     }
 
@@ -971,8 +915,8 @@ export class RogueShooterGame extends Component {
         this.panels.settingsPanel = panel;
         this.label(panel, 'SettingsTitle', '设置', 44, 36, 484, 58, 36, '#0F172A', Label.HorizontalAlign.CENTER, true);
         this.panels.settingsBodyLabel = this.label(panel, 'SettingsBody', '', 54, 104, 464, 80, 20, '#475569', Label.HorizontalAlign.CENTER, true);
-        this.panels.bgmToggleButton = this.button(panel, 'BgmToggle', 116, 204, 340, 58, '#4CC9F0', '#94A3B8', () => this.toggleBgm(), true);
-        this.panels.sfxToggleButton = this.button(panel, 'SfxToggle', 116, 278, 340, 58, '#B5179E', '#94A3B8', () => this.toggleSfx(), true);
+        this.panels.bgmToggleButton = this.button(panel, 'BgmToggle', 116, 204, 340, 58, '#4CC9F0', '#94A3B8', () => this.audio.toggleBgm(), true);
+        this.panels.sfxToggleButton = this.button(panel, 'SfxToggle', 116, 278, 340, 58, '#B5179E', '#94A3B8', () => this.audio.toggleSfx(), true);
         const close = this.button(panel, 'SettingsClose', 116, 366, 340, 58, '#43AA8B', '#94A3B8', () => this.closeSettingsPanel(), true);
         close.label.string = '返回';
         this.refreshSettingsPanel();
@@ -1312,7 +1256,7 @@ export class RogueShooterGame extends Component {
         for (const angle of angles) {
             this.proj.createBullet(angle, damage, this.proj.getBulletPierce(), weaponStyle, weaponColor);
         }
-        this.playShootSfx(weaponStyle);
+        this.audio.playShootSfx(weaponStyle);
         this.proj.spawnMuzzleFlash(baseAngle, weaponStyle, weaponColor, angles.length);
     }
 
@@ -1492,7 +1436,7 @@ export class RogueShooterGame extends Component {
         if (this.panels.settingsPanelShadow) this.panels.settingsPanelShadow.active = false;
         if (this.panels.infoPanel) this.panels.infoPanel.active = false;
         if (this.panels.infoPanelShadow) this.panels.infoPanelShadow.active = false;
-        this.requestPhaseBgm();
+        this.audio.requestPhaseBgm();
         this.showToast('战斗继续。');
     }
 
@@ -1513,31 +1457,6 @@ export class RogueShooterGame extends Component {
     private closeSettingsPanel() {
         if (this.panels.settingsPanel) this.panels.settingsPanel.active = false;
         if (this.panels.settingsPanelShadow) this.panels.settingsPanelShadow.active = false;
-    }
-
-    private toggleBgm() {
-        this.bgmVolume = this.bgmVolume > 0 ? 0 : 0.34;
-        if (this.bgmSource) this.bgmSource.volume = this.bgmVolume;
-        this.refreshSettingsPanel();
-    }
-
-    private toggleSfx() {
-        this.sfxVolume = this.sfxVolume > 0 ? 0 : 0.72;
-        this.refreshSettingsPanel();
-    }
-
-    private refreshSettingsPanel() {
-        if (this.panels.settingsBodyLabel) {
-            this.panels.settingsBodyLabel.string = `音乐：${this.bgmVolume > 0 ? '开启' : '关闭'}\n音效：${this.sfxVolume > 0 ? '开启' : '关闭'}`;
-        }
-        if (this.panels.bgmToggleButton) {
-            this.panels.bgmToggleButton.label.string = this.bgmVolume > 0 ? '关闭音乐' : '开启音乐';
-            this.drawButton(this.panels.bgmToggleButton, false);
-        }
-        if (this.panels.sfxToggleButton) {
-            this.panels.sfxToggleButton.label.string = this.sfxVolume > 0 ? '关闭音效' : '开启音效';
-            this.drawButton(this.panels.sfxToggleButton, false);
-        }
     }
 
     private openHowToPanel() {
