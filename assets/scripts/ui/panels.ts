@@ -4,7 +4,7 @@ import {
     Graphics,
 } from 'cc';
 
-interface ButtonView {
+export interface ButtonView {
     node: Node;
     gfx: Graphics;
     label: Label;

@@ -90,6 +90,7 @@ import { ENEMY_SPECS, BOSS_ENEMY_COUNT, TOTAL_ENEMY_TYPES, ENEMY_VARIANTS, build
 import { EnemyManager, ENEMY_PLAYER_PADDING, ENEMY_STRIP_META, MAX_CHESTS_PER_WAVE, type Enemy, type EnemyHostContext, type SpriteStripAnimation } from './enemy/enemyManager';
 import { CombatState, createCombatState, resetCombatSession } from './state/combatState';
 import { ProjectileManager, BULLET_HIT_CELL, type Bullet, type EnemyProjectile, type ProjectileHostContext } from './projectile/projectileManager';
+import { PickupManager, type Pickup, type PickupHostContext } from './pickup/pickupManager';
 
 const ENEMY_PROJECTILE_LIMIT = 140;
 
@@ -116,19 +117,13 @@ const HANGAR_EQUIPMENT_SLOTS = 8;
 const EQUIPPED_SLOT_COUNT = 6;
 const MAX_EQUIPPED_WEAPONS = 2;
 const MAX_EQUIPPED_GEAR = 4;
-const FLOATING_TEXT_LIMIT = 90;
-const LEVEL_REFRESH_COST = 28;
-const CHEST_REFRESH_COST = 34;
+const MAX_COMBAT_DT = 1 / 30;
+
 const SHOP_REFRESH_COST = 18;
 const SHOP_ITEM_COUNT = 6;
 const UI_SAFE_TOP = 56;
 const UI_SAFE_BOTTOM = 32;
 const MIN_TOUCH_BUTTON_HEIGHT = 48;
-const MAX_COMBAT_DT = 1 / 30;
-const PICKUP_MERGE_RADIUS = 78;
-const PICKUP_COMPACT_RADIUS = 240;
-const PICKUP_SOFT_CAP = 190;
-const PICKUP_HARD_CAP = 260;
 
 
 interface ButtonView {
@@ -140,29 +135,6 @@ interface ButtonView {
     color: string;
     disabledColor: string;
     disabled: boolean;
-}
-
-interface Pickup {
-    node: Node;
-    gfx: Graphics;
-    sprite: Sprite | null;
-    type: PickupType;
-    amount: number;
-    x: number;
-    y: number;
-    radius: number;
-    age: number;
-}
-
-interface FloatingText {
-    node: Node;
-    label: Label;
-    x: number;
-    y: number;
-    vy: number;
-    life: number;
-    maxLife: number;
-    color: string;
 }
 
 interface DroneVisual {
@@ -243,9 +215,7 @@ export class RogueShooterGame extends Component {
 
     private enemyMgr = new EnemyManager(this as unknown as EnemyHostContext);
     private proj = new ProjectileManager(this as unknown as ProjectileHostContext);
-    private pickups: Pickup[] = [];
-    private floatingTexts: FloatingText[] = [];
-    private floatingTextPool: FloatingText[] = [];
+    private pickupMgr = new PickupManager(this as unknown as PickupHostContext);
     private debugHudEnabled = false;
     private perfFrameMs = 0;
     private perfPreMs = 0;
@@ -262,13 +232,6 @@ export class RogueShooterGame extends Component {
     private perfCrowdSteerCalls = 0;
     private perfCrowdChecks = 0;
     private perfSepChecks = 0;
-    private pendingLevelChoices: LevelUpgrade[] = [];
-    private pendingItemChoices: LevelUpgrade[] = [];
-    private currentItemChoiceQuality: ItemChoiceQuality = 'common';
-    private pendingLootChoices: LootChoice[] = [];
-    private runStats: CharacterStats = createEmptyCharacterStats();
-    private acquiredRunItemIds: Set<string> = new Set();
-    private acquiredStatUpgradeIds: Set<string> = new Set();
     private shopOffers: LevelUpgrade[] = [];
 
     private pressedKeys = new Set<KeyCode>();
@@ -308,7 +271,7 @@ export class RogueShooterGame extends Component {
         let t = this.perfNow();
         this.updateToast(dt);
         this.updateSfxCooldowns(dt);
-        this.updateFloatingTexts(dt);
+        this.pickupMgr.updateFloatingTexts(dt);
         this.perfPreMs = this.perfNow() - t;
 
         if (this.cs.phase === 'combat') {
@@ -342,7 +305,7 @@ export class RogueShooterGame extends Component {
             this.perfEnemyMs = this.perfNow() - t;
 
             t = this.perfNow();
-            this.updatePickups(combatDt);
+            this.pickupMgr.updatePickups(combatDt);
             this.updateRegen(combatDt);
             this.updateShield(combatDt);
             this.perfPickupMs = this.perfNow() - t;
@@ -634,12 +597,6 @@ export class RogueShooterGame extends Component {
         return this.spriteStripCache.get(meta.frameName) || this.createSpriteStrip(meta.frameName, meta.frames, meta.cellSize, meta.fps);
     }
 
-    private pickupArtName(type: PickupType) {
-        if (this.isChestPickup(type)) return '';
-        if (type === 'cores') return 'pickup_core';
-        return `pickup_${type}`;
-    }
-
     private isChestPickup(type: PickupType): type is ChestPickupType {
         return type === 'chest-common' || type === 'chest-rare';
     }
@@ -804,16 +761,16 @@ export class RogueShooterGame extends Component {
         panel.active = false;
         this.panels.levelPanel = panel;
         this.panels.levelTitleLabel = this.label(panel, 'LevelTitle', '角色升级', 42, 30, 564, 52, 32, '#0F172A', Label.HorizontalAlign.CENTER, true);
-        this.panels.levelBackButton = this.button(panel, 'LevelBack', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.choosePanelChoice(0), true);
+        this.panels.levelBackButton = this.button(panel, 'LevelBack', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.pickupMgr.choosePanelChoice(0), true);
         this.panels.levelBackButton.label.string = '返回';
         this.panels.levelHintLabel = this.label(panel, 'LevelHint', '选择一项自身属性成长，战斗会继续。', 42, 86, 564, 42, 20, '#475569', Label.HorizontalAlign.CENTER, true);
 
         for (let i = 0; i < 3; i++) {
-            const button = this.button(panel, `LevelChoice_${i}`, 54, 148 + i * 84, 540, 68, '#4CC9F0', '#94A3B8', () => this.choosePanelChoice(i), true);
+            const button = this.button(panel, `LevelChoice_${i}`, 54, 148 + i * 84, 540, 68, '#4CC9F0', '#94A3B8', () => this.pickupMgr.choosePanelChoice(i), true);
             this.panels.levelChoiceButtons.push(button);
         }
-        this.panels.levelRefreshButton = this.button(panel, 'ChoiceRefresh', 204, 414, 240, 48, '#F8961E', '#94A3B8', () => this.refreshCurrentChoices(), true);
-        this.panels.levelRefreshButton.label.string = `刷新 -${LEVEL_REFRESH_COST}合金`;
+        this.panels.levelRefreshButton = this.button(panel, 'ChoiceRefresh', 204, 414, 240, 48, '#F8961E', '#94A3B8', () => this.pickupMgr.refreshCurrentChoices(), true);
+        this.panels.levelRefreshButton.label.string = '刷新 -28合金';
     }
 
     private buildShopPanel(root: Node) {
@@ -879,7 +836,7 @@ export class RogueShooterGame extends Component {
         this.panels.hangarTipLabel = this.label(panel, 'HangarTip', '', 46, 842, 580, 44, 18, '#64748B', Label.HorizontalAlign.CENTER, true);
 
         for (let i = 0; i < 3; i++) {
-            const button = this.button(panel, `LootChoice_${i}`, 58, 208 + i * 92, 556, 76, '#F8961E', '#94A3B8', () => this.chooseLoot(i), true);
+            const button = this.button(panel, `LootChoice_${i}`, 58, 208 + i * 92, 556, 76, '#F8961E', '#94A3B8', () => this.pickupMgr.chooseLoot(i), true);
             this.panels.lootButtons.push(button);
         }
 
@@ -1071,12 +1028,8 @@ export class RogueShooterGame extends Component {
         this.cs.battleIndex = this.cs.battlesWon + 1;
         resetCombatSession(this.cs);
         this.enemyMgr.currentWaveSpecs = [];
-        this.runStats = createEmptyCharacterStats();
-        this.acquiredRunItemIds = new Set();
-        this.acquiredStatUpgradeIds = new Set();
-        this.pendingItemChoices = [];
+        this.pickupMgr.resetRun();
         this.shopOffers = [];
-        this.currentItemChoiceQuality = 'common';
         this.weaponCooldowns = {};
         this.updateCamera(0, true);
         this.cs.playerMaxHp = this.getMaxHp();
@@ -1399,46 +1352,6 @@ export class RogueShooterGame extends Component {
         this.proj.recycleBullet(bullet, removeFromActive);
     }
 
-
-
-
-
-
-
-
-
-
-
-
-    private updatePickups(dt: number) {
-        if (this.pickups.length > PICKUP_HARD_CAP) {
-            this.compactPickupOverflow();
-        }
-        const pickupRadius = this.getPickupRadius();
-        const removing: Pickup[] = [];
-        for (const pickup of this.pickups) {
-            pickup.age += dt;
-            const dx = this.cs.playerX - pickup.x;
-            const dy = this.cs.playerY - pickup.y;
-            const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
-            if (dist < pickupRadius) {
-                const pull = (pickupRadius - dist) / pickupRadius;
-                const speed = 180 + Math.max(0, pull) * 520;
-                pickup.x += (dx / dist) * speed * dt;
-                pickup.y += (dy / dist) * speed * dt;
-                pickup.node.setPosition(pickup.x, pickup.y, 5);
-            }
-            if (dist < this.cs.playerRadius + pickup.radius + 8) {
-                this.collectPickup(pickup);
-                removing.push(pickup);
-                if (this.cs.phase !== 'combat') break;
-            }
-        }
-        for (const pickup of removing) {
-            this.removePickup(pickup);
-        }
-    }
-
     private updateRegen(dt: number) {
         const regen = this.getCharacterStats().hpRegen;
         if (regen <= 0 || this.cs.playerHp <= 0 || this.cs.playerHp >= this.cs.playerMaxHp) return;
@@ -1459,37 +1372,6 @@ export class RogueShooterGame extends Component {
         this.cs.shieldRechargeDelay = Math.max(0, this.cs.shieldRechargeDelay - dt);
         if (this.cs.shieldRechargeDelay > 0 || this.cs.playerShield >= this.cs.playerShieldMax) return;
         this.cs.playerShield = Math.min(this.cs.playerShieldMax, this.cs.playerShield + stats.shieldRegen * dt);
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    private tryDropChest(type: ChestPickupType, x: number, y: number) {
-        if (this.cs.waveChestDrops >= MAX_CHESTS_PER_WAVE) return false;
-        this.cs.waveChestDrops += 1;
-        this.dropPickup(type, 1, x, y);
-        return true;
     }
 
 
@@ -1515,7 +1397,7 @@ export class RogueShooterGame extends Component {
         const stats = this.getCharacterStats();
         if (Math.random() < stats.dodgeChance) {
             this.cs.invulnerableTimer = 0.18;
-            this.spawnFloatingText('闪避', this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 28, '#4CC9F0', 24);
+            this.pickupMgr.spawnFloatingText('闪避', this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 28, '#4CC9F0', 24);
             return;
         }
 
@@ -1526,12 +1408,12 @@ export class RogueShooterGame extends Component {
         if (shieldDamage > 0) {
             this.cs.playerShield -= shieldDamage;
             damage -= shieldDamage;
-            this.spawnFloatingText(`护盾 -${Math.ceil(shieldDamage)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 42, '#4CC9F0', 20);
+            this.pickupMgr.spawnFloatingText(`护盾 -${Math.ceil(shieldDamage)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 42, '#4CC9F0', 20);
         }
         if (damage > 0) {
             this.cs.playerHp = Math.max(0, this.cs.playerHp - damage);
             this.playSfx('sfx_player_hit', 0.65, 0.28);
-            this.spawnFloatingText(`-${Math.ceil(damage)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 28, '#F94144', 25);
+            this.pickupMgr.spawnFloatingText(`-${Math.ceil(damage)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 28, '#F94144', 25);
             this.showToast(`受击 -${Math.ceil(damage)}，拉开距离。`);
         }
         this.cs.invulnerableTimer = 0.42;
@@ -1574,298 +1456,8 @@ export class RogueShooterGame extends Component {
         this.cs.playerHp = Math.min(this.cs.playerMaxHp, this.cs.playerHp + amount);
         const healed = this.cs.playerHp - before;
         if (healed > 0.05) {
-            this.spawnFloatingText(`+${Math.ceil(healed)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 34, '#43AA8B', 23);
+            this.pickupMgr.spawnFloatingText(`+${Math.ceil(healed)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 34, '#43AA8B', 23);
         }
-    }
-
-    private dropPickup(type: PickupType, amount: number, x: number, y: number) {
-        const chest = this.isChestPickup(type);
-        const pickupAmount = type === 'xp' || chest ? amount : this.scaleResourceAmount(amount);
-        if (!chest) {
-            const nearbyPickup = this.findMergeablePickup(type, x, y, PICKUP_MERGE_RADIUS);
-            if (nearbyPickup) {
-                this.addAmountToPickup(nearbyPickup, pickupAmount, x, y);
-                return;
-            }
-            if (this.pickups.length >= PICKUP_SOFT_CAP) {
-                this.compactPickupOverflow();
-                const widerPickup = this.findMergeablePickup(type, x, y, PICKUP_COMPACT_RADIUS);
-                if (widerPickup) {
-                    this.addAmountToPickup(widerPickup, pickupAmount, x, y);
-                    return;
-                }
-            }
-        }
-
-        const node = new Node(`Pickup_${type}`);
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode!.addChild(node);
-        node.setPosition(x, y, 5);
-        node.addComponent(UITransform).setContentSize(chest ? 38 : 28, chest ? 34 : 28);
-        const gfx = node.addComponent(Graphics);
-        const sprite = this.addSpriteChild(node, 'PickupArt', this.pickupArtName(type), type === 'xp' ? 30 : 34, type === 'xp' ? 30 : 34);
-        const pickup: Pickup = {
-            node,
-            gfx,
-            sprite,
-            type,
-            amount: pickupAmount,
-            x,
-            y,
-            radius: this.getPickupVisualRadius(type, pickupAmount),
-            age: 0,
-        };
-        this.drawPickup(pickup);
-        this.pickups.push(pickup);
-        if (this.pickups.length > PICKUP_HARD_CAP) {
-            this.compactPickupOverflow();
-        }
-    }
-
-    private findMergeablePickup(type: PickupType, x: number, y: number, radius: number, exclude: Pickup | null = null) {
-        if (this.isChestPickup(type)) return null;
-        let bestPickup: Pickup | null = null;
-        let bestDistSq = radius * radius;
-        for (const pickup of this.pickups) {
-            if (pickup === exclude || pickup.type !== type || this.isChestPickup(pickup.type)) continue;
-            const dx = pickup.x - x;
-            const dy = pickup.y - y;
-            const distSq = dx * dx + dy * dy;
-            if (distSq <= bestDistSq) {
-                bestDistSq = distSq;
-                bestPickup = pickup;
-            }
-        }
-        return bestPickup;
-    }
-
-    private addAmountToPickup(pickup: Pickup, amount: number, x: number, y: number) {
-        const nextAmount = pickup.amount + amount;
-        const weight = this.clamp(amount / Math.max(1, nextAmount), 0.08, 0.42);
-        pickup.x = pickup.x * (1 - weight) + x * weight;
-        pickup.y = pickup.y * (1 - weight) + y * weight;
-        pickup.amount = nextAmount;
-        pickup.radius = this.getPickupVisualRadius(pickup.type, nextAmount);
-        pickup.age = Math.min(pickup.age, 18);
-        pickup.node.setPosition(pickup.x, pickup.y, 5);
-        const transform = pickup.node.getComponent(UITransform);
-        if (transform) {
-            const size = pickup.radius * 2 + 16;
-            transform.setContentSize(size, size);
-        }
-        this.drawPickup(pickup);
-    }
-
-    private absorbPickupInto(source: Pickup, target: Pickup) {
-        if (source === target) return;
-        this.addAmountToPickup(target, source.amount, source.x, source.y);
-        const index = this.pickups.indexOf(source);
-        if (index >= 0) this.pickups.splice(index, 1);
-        source.node.destroy();
-    }
-
-    private compactPickupOverflow() {
-        if (this.pickups.length <= PICKUP_SOFT_CAP) return;
-
-        let overflow = this.pickups.length - PICKUP_SOFT_CAP;
-        const ordinaryPickups = this.pickups
-            .filter((pickup) => !this.isChestPickup(pickup.type))
-            .sort((a, b) => b.age - a.age);
-
-        for (const source of ordinaryPickups) {
-            if (overflow <= 0) break;
-            if (this.pickups.indexOf(source) < 0) continue;
-            const target = this.findMergeablePickup(source.type, source.x, source.y, PICKUP_COMPACT_RADIUS, source);
-            if (!target) continue;
-            this.absorbPickupInto(source, target);
-            overflow -= 1;
-        }
-
-        if (this.pickups.length <= PICKUP_HARD_CAP) return;
-
-        const forcedPickups = this.pickups
-            .filter((pickup) => !this.isChestPickup(pickup.type))
-            .sort((a, b) => b.age - a.age);
-        for (const source of forcedPickups) {
-            if (this.pickups.length <= PICKUP_HARD_CAP) break;
-            if (this.pickups.indexOf(source) < 0) continue;
-            const target = this.findMergeablePickup(source.type, source.x, source.y, 99999, source);
-            if (target) this.absorbPickupInto(source, target);
-        }
-    }
-
-    private getPickupVisualRadius(type: PickupType, amount: number) {
-        if (this.isChestPickup(type)) return 14;
-        const stackBonus = Math.log2(Math.max(1, Math.abs(amount))) * (type === 'xp' ? 0.65 : 1);
-        return type === 'xp'
-            ? Math.min(16, 8 + stackBonus)
-            : Math.min(20, 10 + stackBonus);
-    }
-
-    private collectPickup(pickup: Pickup) {
-        if (pickup.type === 'xp') {
-            this.playSfx('sfx_pickup', 0.22, 0.09);
-            this.gainXp(pickup.amount);
-        } else if (this.isChestPickup(pickup.type)) {
-            if (this.cs.phase !== 'combat') return;
-            this.playSfx('sfx_chest_open', 0.7, 0.35);
-            this.openItemChoices(pickup.type === 'chest-rare' ? 'rare' : 'common');
-        } else {
-            this.playSfx('sfx_pickup', pickup.type === 'cores' || pickup.type === 'crystals' ? 0.52 : 0.32, 0.08);
-            this.addBattleResource(pickup.type, pickup.amount);
-            if (pickup.type === 'cores' || pickup.type === 'crystals') {
-                const resource = this.getResourceDef(pickup.type);
-                this.showToast(`获得${resource.name}，撤离后可用于高阶升级。`);
-            }
-        }
-    }
-
-    private gainXp(amount: number) {
-        this.cs.xp += amount * (1 + this.getCharacterStats().xpGain);
-        while (this.cs.xp >= this.cs.xpToNext && this.cs.phase === 'combat') {
-            this.cs.xp -= this.cs.xpToNext;
-            this.cs.level += 1;
-            this.cs.xpToNext = Math.round(this.cs.xpToNext * 1.24 + 22 + this.cs.level * 5);
-            this.playSfx('sfx_level_up', 0.78, 0.45);
-            this.openLevelChoices();
-        }
-    }
-
-    private openLevelChoices() {
-        this.cs.phase = 'level-up';
-        this.pendingLevelChoices = this.pickLevelChoices();
-        this.renderChoicePanel(
-            `角色 Lv.${this.cs.level} 属性成长`,
-            `选择 1 项自身属性成长。刷新消耗 ${LEVEL_REFRESH_COST} 合金。`,
-            this.pendingLevelChoices,
-            LEVEL_REFRESH_COST,
-        );
-    }
-
-    private openItemChoices(quality: ItemChoiceQuality, refreshed = false) {
-        this.cs.phase = 'item-choice';
-        this.currentItemChoiceQuality = quality;
-        this.pendingItemChoices = this.pickItemChoices(quality);
-        const title = quality === 'rare' ? '高级宝箱' : '普通宝箱';
-        const hint = quality === 'rare'
-            ? `选择 1 件高级本局道具。刷新消耗 ${CHEST_REFRESH_COST} 合金。`
-            : `选择 1 件普通本局道具。刷新消耗 ${CHEST_REFRESH_COST} 合金。`;
-        this.renderChoicePanel(title, hint, this.pendingItemChoices, CHEST_REFRESH_COST);
-        if (!refreshed) this.showToast(`${title}开启，选择一件道具。`);
-    }
-
-    private renderChoicePanel(title: string, hint: string, choices: LevelUpgrade[], refreshCost: number) {
-        if (this.panels.levelPanel) this.panels.levelPanel.active = true;
-        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = true;
-        if (this.panels.levelTitleLabel) this.panels.levelTitleLabel.string = title;
-        if (this.panels.levelHintLabel) this.panels.levelHintLabel.string = hint;
-        this.panels.levelChoiceButtons.forEach((button, index) => {
-            const choice = choices[index];
-            button.node.active = !!choice;
-            if (!choice) return;
-            button.color = choice.color;
-            button.label.string = `${choice.category}｜${choice.name}\n${choice.desc}`;
-            this.drawButton(button, false);
-        });
-        if (this.panels.levelRefreshButton) {
-            this.panels.levelRefreshButton.node.active = true;
-            this.panels.levelRefreshButton.label.string = `刷新 -${refreshCost}合金`;
-            this.drawButton(this.panels.levelRefreshButton, this.getSpendableAlloy() < refreshCost);
-        }
-    }
-
-    private choosePanelChoice(index: number) {
-        if (this.cs.phase === 'level-up') {
-            this.chooseLevelUpgrade(index);
-        } else if (this.cs.phase === 'item-choice') {
-            this.chooseRunItem(index);
-        }
-    }
-
-    private chooseLevelUpgrade(index: number) {
-        if (this.cs.phase !== 'level-up') return;
-        const choice = this.pendingLevelChoices[index];
-        if (!choice) return;
-        this.applyLevelUpgrade(choice.id);
-        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
-        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
-        this.resumeCombatAfterChoice();
-        this.showToast(`属性成长：${choice.name}`);
-    }
-
-    private chooseRunItem(index: number) {
-        if (this.cs.phase !== 'item-choice') return;
-        const choice = this.pendingItemChoices[index];
-        if (!choice) return;
-        this.applyRunItem(choice.id);
-        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
-        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
-        this.resumeCombatAfterChoice();
-        this.showToast(`获得本局道具：${choice.name}`);
-    }
-
-    private resumeCombatAfterChoice() {
-        this.cs.phase = 'combat';
-        if (this.cs.xp >= this.cs.xpToNext) {
-            this.openLevelChoices();
-        }
-    }
-
-    private applyLevelUpgrade(id: string) {
-        const upgrade = LEVEL_UPGRADES.find((item) => item.id === id);
-        if (!upgrade) return;
-        this.acquiredStatUpgradeIds.add(id);
-        this.applyStatEffects(upgrade.effects);
-    }
-
-    private applyRunItem(id: string) {
-        const item = RUN_ITEMS.find((upgrade) => upgrade.id === id);
-        if (!item) return;
-        this.acquiredRunItemIds.add(id);
-        this.applyStatEffects(item.effects);
-    }
-
-    private refreshCurrentChoices() {
-        if (this.cs.phase === 'level-up') {
-            if (!this.spendRunAlloy(LEVEL_REFRESH_COST)) {
-                this.showToast(`合金不足，刷新需要 ${LEVEL_REFRESH_COST}。`);
-                return;
-            }
-            this.pendingLevelChoices = this.pickLevelChoices();
-            this.renderChoicePanel(
-                `角色 Lv.${this.cs.level} 属性成长`,
-                `选择 1 项自身属性成长。刷新消耗 ${LEVEL_REFRESH_COST} 合金。`,
-                this.pendingLevelChoices,
-                LEVEL_REFRESH_COST,
-            );
-            this.showToast('属性成长选项已刷新。');
-            return;
-        }
-
-        if (this.cs.phase === 'item-choice') {
-            if (!this.spendRunAlloy(CHEST_REFRESH_COST)) {
-                this.showToast(`合金不足，刷新需要 ${CHEST_REFRESH_COST}。`);
-                return;
-            }
-            this.openItemChoices(this.currentItemChoiceQuality, true);
-            this.showToast('宝箱选项已刷新。');
-        }
-    }
-
-    private applyStatEffects(effects: StatEffect[]) {
-        const hpBefore = this.getMaxHp();
-        const shieldBefore = this.getShieldMax();
-        for (const effect of effects) {
-            this.runStats[effect.stat] += effect.amount;
-        }
-        this.cs.playerMaxHp = this.getMaxHp();
-        this.cs.playerShieldMax = this.getShieldMax();
-        const hpDelta = this.cs.playerMaxHp - hpBefore;
-        const shieldDelta = this.cs.playerShieldMax - shieldBefore;
-        if (hpDelta > 0) this.cs.playerHp += hpDelta * 0.65;
-        if (shieldDelta > 0) this.cs.playerShield += shieldDelta * 0.55;
-        this.cs.playerHp = this.clamp(this.cs.playerHp, 1, this.cs.playerMaxHp);
-        this.cs.playerShield = this.clamp(this.cs.playerShield, 0, this.cs.playerShieldMax);
     }
 
     private extractBattle() {
@@ -1938,7 +1530,7 @@ export class RogueShooterGame extends Component {
             this.showToast(`合金不足，需要 ${cost}。`);
             return;
         }
-        this.applyRunItem(item.id);
+        this.pickupMgr.applyRunItem(item.id);
         this.shopOffers[index] = this.pickShopOfferForSlot(index);
         this.renderShop();
         this.showToast(`购买本局道具：${item.name}，该格已补货。`);
@@ -2203,15 +1795,6 @@ export class RogueShooterGame extends Component {
         const minutes = Math.floor(whole / 60);
         const remain = whole % 60;
         return `${minutes}:${remain < 10 ? '0' : ''}${remain}`;
-    }
-
-    private chooseLoot(index: number) {
-        if (this.cs.phase !== 'loot') return;
-        const choice = this.pendingLootChoices[index];
-        if (!choice) return;
-        choice.apply();
-        this.saveProgress();
-        this.showHangar(`战利品已获取：${choice.title}`);
     }
 
     private showHangar(message: string) {
@@ -2654,7 +2237,7 @@ export class RogueShooterGame extends Component {
         const bossText = boss ? `Boss ${Math.ceil(boss.hp)}/${Math.ceil(boss.maxHp)}` : 'Boss -';
         this.panels.debugLabel.string = [
             `DBG ${this.cs.phase} W${this.cs.waveIndex} ${Math.round(this.cs.waveElapsed)}/${Math.round(this.cs.waveDuration)}s ${bossText}`,
-            `E ${this.enemyMgr.enemies.length}/${this.enemyMgr.getEnemyCap()}  B ${this.proj.bullets.length}  EP ${this.proj.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickups.length}  FT ${this.floatingTexts.length}`,
+            `E ${this.enemyMgr.enemies.length}/${this.enemyMgr.getEnemyCap()}  B ${this.proj.bullets.length}  EP ${this.proj.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickupMgr.pickups.length}  FT ${this.pickupMgr.floatingTexts.length}`,
             `MS F${this.perfFrameMs.toFixed(1)} pre${this.perfPreMs.toFixed(1)} ply${this.perfPlayerMs.toFixed(1)} wep${this.perfWeaponMs.toFixed(1)} bul${this.perfBulletMs.toFixed(1)} ep${this.perfEnemyProjectileMs.toFixed(1)} ene${this.perfEnemyMs.toFixed(1)} sep${this.perfSeparationMs.toFixed(1)} pk${this.perfPickupMs.toFixed(1)} hud${this.perfHudMs.toFixed(1)}`,
             `DRAW enemy${this.perfDrawEnemy} bullet${this.proj.perfDrawBullet} drone${this.perfDrawDrone}  STEER ${this.perfCrowdSteerCalls}/${this.perfCrowdChecks}  SEPCHK ${this.perfSepChecks}`,
         ].join('\n');
@@ -2805,56 +2388,6 @@ export class RogueShooterGame extends Component {
         this.playerGfx.stroke();
     }
 
-
-
-
-    private drawPickup(pickup: Pickup) {
-        const chest = this.isChestPickup(pickup.type);
-        let color = '#4CC9F0';
-        if (this.isChestPickup(pickup.type)) {
-            color = pickup.type === 'chest-rare' ? '#F59E0B' : '#43AA8B';
-        } else if (pickup.type !== 'xp') {
-            color = this.getResourceDef(pickup.type).color;
-        }
-        pickup.gfx.clear();
-        if (pickup.sprite) {
-            pickup.gfx.fillColor = this.hex('#020617', 60);
-            pickup.gfx.circle(2, -2, pickup.radius + 6);
-            pickup.gfx.fill();
-            pickup.gfx.strokeColor = this.hex(color, 170);
-            pickup.gfx.lineWidth = 2;
-            pickup.gfx.circle(0, 0, pickup.radius + 9);
-            pickup.gfx.stroke();
-            return;
-        }
-        pickup.gfx.fillColor = this.hex('#020617', 90);
-        pickup.gfx.circle(2, -2, pickup.radius + 3);
-        pickup.gfx.fill();
-        pickup.gfx.fillColor = this.hex(color);
-        if (pickup.type === 'xp') {
-            pickup.gfx.circle(0, 0, pickup.radius);
-        } else if (chest) {
-            pickup.gfx.roundRect(-pickup.radius - 3, -pickup.radius + 2, pickup.radius * 2 + 6, pickup.radius * 1.55, 5);
-            pickup.gfx.fill();
-            pickup.gfx.fillColor = this.hex('#F8FAFC', 190);
-            pickup.gfx.roundRect(-pickup.radius - 3, -pickup.radius + 1, pickup.radius * 2 + 6, 5, 3);
-            pickup.gfx.fill();
-            pickup.gfx.fillColor = this.hex(pickup.type === 'chest-rare' ? '#B5179E' : '#0F172A', 210);
-            pickup.gfx.roundRect(-4, -pickup.radius + 4, 8, pickup.radius * 1.22, 3);
-        } else {
-            pickup.gfx.moveTo(0, pickup.radius + 2);
-            pickup.gfx.lineTo(pickup.radius + 2, 0);
-            pickup.gfx.lineTo(0, -pickup.radius - 2);
-            pickup.gfx.lineTo(-pickup.radius - 2, 0);
-            pickup.gfx.close();
-        }
-        pickup.gfx.fill();
-        pickup.gfx.strokeColor = this.hex('#F8FAFC', 190);
-        pickup.gfx.lineWidth = 2;
-        pickup.gfx.circle(0, 0, pickup.radius + 1);
-        pickup.gfx.stroke();
-    }
-
     private drawZap(fromX: number, fromY: number, toX: number, toY: number) {
         const node = new Node('DroneZap');
         node.layer = Layers.Enum.UI_2D;
@@ -2870,81 +2403,6 @@ export class RogueShooterGame extends Component {
         gfx.lineTo(toX, toY);
         gfx.stroke();
         this.scheduleOnce(() => node.destroy(), 0.06);
-    }
-
-    private spawnFloatingText(text: string, x: number, y: number, color: string, fontSize: number) {
-        if (!this.worldNode) return;
-        if (this.floatingTexts.length >= FLOATING_TEXT_LIMIT) {
-            const oldest = this.floatingTexts.shift();
-            if (oldest) this.recycleFloatingText(oldest, false);
-        }
-
-        const floatingText = this.acquireFloatingText();
-        floatingText.x = x;
-        floatingText.y = y;
-        floatingText.vy = 58 + Math.random() * 34;
-        floatingText.life = 0.72;
-        floatingText.maxLife = 0.72;
-        floatingText.color = color;
-        floatingText.node.active = true;
-        floatingText.node.setPosition(x, y, 24);
-        floatingText.label.string = text;
-        floatingText.label.fontSize = fontSize;
-        floatingText.label.lineHeight = Math.round(fontSize * 1.12);
-        floatingText.label.color = this.hex(color);
-        this.floatingTexts.push(floatingText);
-    }
-
-    private acquireFloatingText(): FloatingText {
-        const pooled = this.floatingTextPool.pop();
-        if (pooled) return pooled;
-
-        const node = new Node('FloatingText');
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode!.addChild(node);
-        node.addComponent(UITransform).setContentSize(120, 34);
-        const label = node.addComponent(Label);
-        label.horizontalAlign = Label.HorizontalAlign.CENTER;
-        label.verticalAlign = Label.VerticalAlign.CENTER;
-        label.enableWrapText = false;
-        return {
-            node,
-            label,
-            x: 0,
-            y: 0,
-            vy: 0,
-            life: 0,
-            maxLife: 0.72,
-            color: '#F8FAFC',
-        };
-    }
-
-    private updateFloatingTexts(dt: number) {
-        if (this.floatingTexts.length <= 0) return;
-        const removing: FloatingText[] = [];
-        for (const floatingText of this.floatingTexts) {
-            floatingText.life -= dt;
-            floatingText.y += floatingText.vy * dt;
-            floatingText.node.setPosition(floatingText.x, floatingText.y, 24);
-            const alpha = Math.round(255 * this.clamp(floatingText.life / floatingText.maxLife, 0, 1));
-            floatingText.label.color = this.hex(floatingText.color, alpha);
-            if (floatingText.life <= 0) {
-                removing.push(floatingText);
-            }
-        }
-        for (const floatingText of removing) {
-            this.recycleFloatingText(floatingText, true);
-        }
-    }
-
-    private recycleFloatingText(floatingText: FloatingText, removeFromActive: boolean) {
-        if (removeFromActive) {
-            const index = this.floatingTexts.indexOf(floatingText);
-            if (index >= 0) this.floatingTexts.splice(index, 1);
-        }
-        floatingText.label.string = '';
-        floatingText.node.active = false;
-        this.floatingTextPool.push(floatingText);
     }
 
     private drawJoystick() {
@@ -2986,7 +2444,7 @@ export class RogueShooterGame extends Component {
 
     private pickLevelChoices(): LevelUpgrade[] {
         const maxTier = this.cs.level < 4 ? 2 : this.cs.level < 8 ? 3 : this.cs.level < 13 ? 4 : 5;
-        const available = LEVEL_UPGRADES.filter((item) => item.tier <= maxTier && !this.acquiredStatUpgradeIds.has(item.id));
+        const available = LEVEL_UPGRADES.filter((item) => item.tier <= maxTier && !this.pickupMgr.acquiredStatUpgradeIds.has(item.id));
         const pool = this.shuffle(available.length >= 3 ? available : LEVEL_UPGRADES.filter((item) => item.tier <= maxTier));
         const picked: LevelUpgrade[] = [];
         const usedCategories = new Set<string>();
@@ -3010,7 +2468,7 @@ export class RogueShooterGame extends Component {
         const available = RUN_ITEMS.filter((item) =>
             item.tier >= minTier
             && item.tier <= tierCeiling
-            && !this.acquiredRunItemIds.has(item.id),
+            && !this.pickupMgr.acquiredRunItemIds.has(item.id),
         );
         const fallback = RUN_ITEMS.filter((item) => item.tier >= minTier && item.tier <= tierCeiling);
         return this.pickDistinctItems(available.length >= 3 ? available : fallback, 3);
@@ -3018,7 +2476,7 @@ export class RogueShooterGame extends Component {
 
     private pickShopOffers(): LevelUpgrade[] {
         const maxTier = this.getRunItemTierLimit();
-        const available = RUN_ITEMS.filter((item) => item.tier <= maxTier && !this.acquiredRunItemIds.has(item.id));
+        const available = RUN_ITEMS.filter((item) => item.tier <= maxTier && !this.pickupMgr.acquiredRunItemIds.has(item.id));
         const fallback = RUN_ITEMS.filter((item) => item.tier <= maxTier);
         return this.pickDistinctItems(available.length >= SHOP_ITEM_COUNT ? available : fallback, SHOP_ITEM_COUNT);
     }
@@ -3028,7 +2486,7 @@ export class RogueShooterGame extends Component {
             this.shopOffers.push(this.pickShopOfferForSlot(this.shopOffers.length));
         }
         for (let i = 0; i < SHOP_ITEM_COUNT; i++) {
-            if (!this.shopOffers[i] || this.acquiredRunItemIds.has(this.shopOffers[i].id)) {
+            if (!this.shopOffers[i] || this.pickupMgr.acquiredRunItemIds.has(this.shopOffers[i].id)) {
                 this.shopOffers[i] = this.pickShopOfferForSlot(i);
             }
         }
@@ -3041,10 +2499,10 @@ export class RogueShooterGame extends Component {
         for (let i = 0; i < this.shopOffers.length; i++) {
             if (i !== index && this.shopOffers[i]) excluded.add(this.shopOffers[i].id);
         }
-        for (const id of this.acquiredRunItemIds) excluded.add(id);
+        for (const id of this.pickupMgr.acquiredRunItemIds) excluded.add(id);
 
         const available = RUN_ITEMS.filter((item) => item.tier <= maxTier && !excluded.has(item.id));
-        const fallback = RUN_ITEMS.filter((item) => item.tier <= maxTier && !this.acquiredRunItemIds.has(item.id));
+        const fallback = RUN_ITEMS.filter((item) => item.tier <= maxTier && !this.pickupMgr.acquiredRunItemIds.has(item.id));
         const pool = available.length > 0 ? available : fallback.length > 0 ? fallback : RUN_ITEMS.filter((item) => item.tier <= maxTier);
         return this.pickDistinctItems(pool, 1)[0] || RUN_ITEMS[0];
     }
@@ -3302,7 +2760,7 @@ export class RogueShooterGame extends Component {
 
     private getCharacterStats(): CharacterStats {
         const stats = createBaseCharacterStats();
-        this.addCharacterStats(stats, this.runStats);
+        this.addCharacterStats(stats, this.pickupMgr.runStats);
 
         stats.attackSpeed += this.getWeaponStat('fireRate') * 0.18;
         stats.bulletSpeed += this.getWeaponStat('bulletSpeed') * 6;
@@ -3341,10 +2799,6 @@ export class RogueShooterGame extends Component {
 
     private getMoveSpeed() {
         return Math.max(96, this.getCharacterStats().moveSpeed);
-    }
-
-    private getPickupRadius() {
-        return Math.max(42, this.getCharacterStats().pickupRange);
     }
 
     private getArmor() {
@@ -3544,16 +2998,14 @@ export class RogueShooterGame extends Component {
         for (const enemy of this.enemyMgr.enemies) enemy.node.destroy();
         for (const bullet of [...this.proj.bullets]) this.proj.recycleBullet(bullet, true);
         for (const projectile of [...this.proj.enemyProjectiles]) this.proj.recycleEnemyProjectile(projectile, true);
-        for (const pickup of this.pickups) pickup.node.destroy();
-        for (const floatingText of [...this.floatingTexts]) this.recycleFloatingText(floatingText, true);
+        this.pickupMgr.clearAll();
         this.clearDroneVisuals();
         if (this.playerNode) this.playerNode.destroy();
         this.enemyMgr.enemies = [];
         this.enemyMgr.enemySet.clear();
         this.enemyMgr.currentWaveSpecs = [];
         this.enemyMgr.enemySepTick = 999;
-        this.pickups = [];
-        this.floatingTexts = [];
+
         this.playerNode = null;
         this.playerGfx = null;
         this.playerSprite = null;
@@ -3565,8 +3017,8 @@ export class RogueShooterGame extends Component {
     }
 
     private removePickup(pickup: Pickup) {
-        const index = this.pickups.indexOf(pickup);
-        if (index >= 0) this.pickups.splice(index, 1);
+        const index = this.pickupMgr.pickups.indexOf(pickup);
+        if (index >= 0) this.pickupMgr.pickups.splice(index, 1);
         pickup.node.destroy();
     }
 
