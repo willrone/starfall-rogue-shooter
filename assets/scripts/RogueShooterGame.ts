@@ -35,7 +35,14 @@ import {
     hasResources as walletHasResources,
     spendResources as spendWalletResources,
 } from './core/resources';
-import type { ResourceType, ResourceWallet } from './core/types';
+import type { ResourceType, ResourceWallet, StatEffect, CharacterStats, StatKey } from './core/types';
+import {
+    STAT_META,
+    createEmptyCharacterStats,
+    createBaseCharacterStats,
+    addCharacterStats as addStats,
+    formatStat as formatStatByKey,
+} from './core/stats';
 
 const { ccclass } = _decorator;
 
@@ -248,45 +255,6 @@ interface WeaponStats {
     bulletSpeed: number;
 }
 
-interface CharacterStats {
-    attackPower: number;
-    attackSpeed: number;
-    attackRange: number;
-    critChance: number;
-    critDamage: number;
-    lethalChance: number;
-    lethalDamage: number;
-    lethalMaxHpPct: number;
-    bulletSpeed: number;
-    pierce: number;
-    multiShot: number;
-    dronePower: number;
-    physicalDefense: number;
-    magicDefense: number;
-    fireDefense: number;
-    lightningDefense: number;
-    poisonDefense: number;
-    iceDefense: number;
-    maxHp: number;
-    shieldMax: number;
-    shieldRegen: number;
-    hpRegen: number;
-    damageReduction: number;
-    dodgeChance: number;
-    moveSpeed: number;
-    pickupRange: number;
-    luck: number;
-    xpGain: number;
-    resourceGain: number;
-}
-
-type StatKey = keyof CharacterStats;
-
-interface StatEffect {
-    stat: StatKey;
-    amount: number;
-}
-
 interface EquipmentDef {
     id: string;
     name: string;
@@ -319,38 +287,6 @@ interface LootChoice {
     apply: () => void;
 }
 
-const STAT_META: Record<StatKey, { name: string; kind: 'number' | 'percent' | 'multiplier' }> = {
-    attackPower: { name: '攻击力', kind: 'number' },
-    attackSpeed: { name: '攻击速度', kind: 'percent' },
-    attackRange: { name: '攻击距离', kind: 'number' },
-    critChance: { name: '暴击率', kind: 'percent' },
-    critDamage: { name: '暴击伤害', kind: 'multiplier' },
-    lethalChance: { name: '致命几率', kind: 'percent' },
-    lethalDamage: { name: '致命伤害', kind: 'multiplier' },
-    lethalMaxHpPct: { name: '致命生命斩杀', kind: 'percent' },
-    bulletSpeed: { name: '弹速', kind: 'number' },
-    pierce: { name: '穿透', kind: 'number' },
-    multiShot: { name: '多重弹', kind: 'number' },
-    dronePower: { name: '无人机强度', kind: 'number' },
-    physicalDefense: { name: '物理防御', kind: 'number' },
-    magicDefense: { name: '魔法防御', kind: 'number' },
-    fireDefense: { name: '火防', kind: 'number' },
-    lightningDefense: { name: '雷防', kind: 'number' },
-    poisonDefense: { name: '毒防', kind: 'number' },
-    iceDefense: { name: '冰防', kind: 'number' },
-    maxHp: { name: '生命值', kind: 'number' },
-    shieldMax: { name: '护盾值', kind: 'number' },
-    shieldRegen: { name: '护盾回复', kind: 'number' },
-    hpRegen: { name: '生命恢复', kind: 'number' },
-    damageReduction: { name: '全减伤', kind: 'percent' },
-    dodgeChance: { name: '闪避率', kind: 'percent' },
-    moveSpeed: { name: '移动速度', kind: 'number' },
-    pickupRange: { name: '拾取范围', kind: 'number' },
-    luck: { name: '幸运值', kind: 'number' },
-    xpGain: { name: '经验收益', kind: 'percent' },
-    resourceGain: { name: '资源收益', kind: 'percent' },
-};
-
 const GEAR_SLOT_ORDER: GearSlot[] = ['hat', 'armor', 'boots', 'accessory'];
 const GEAR_SLOT_LABELS: Record<GearSlot, string> = {
     hat: '帽子',
@@ -358,62 +294,6 @@ const GEAR_SLOT_LABELS: Record<GearSlot, string> = {
     boots: '鞋子',
     accessory: '首饰',
 };
-
-function createEmptyCharacterStats(): CharacterStats {
-    return {
-        attackPower: 0,
-        attackSpeed: 0,
-        attackRange: 0,
-        critChance: 0,
-        critDamage: 0,
-        lethalChance: 0,
-        lethalDamage: 0,
-        lethalMaxHpPct: 0,
-        bulletSpeed: 0,
-        pierce: 0,
-        multiShot: 0,
-        dronePower: 0,
-        physicalDefense: 0,
-        magicDefense: 0,
-        fireDefense: 0,
-        lightningDefense: 0,
-        poisonDefense: 0,
-        iceDefense: 0,
-        maxHp: 0,
-        shieldMax: 0,
-        shieldRegen: 0,
-        hpRegen: 0,
-        damageReduction: 0,
-        dodgeChance: 0,
-        moveSpeed: 0,
-        pickupRange: 0,
-        luck: 0,
-        xpGain: 0,
-        resourceGain: 0,
-    };
-}
-
-function createBaseCharacterStats(): CharacterStats {
-    const stats = createEmptyCharacterStats();
-    stats.attackPower = 16;
-    stats.attackSpeed = 0;
-    stats.attackRange = 760;
-    stats.critChance = 0.05;
-    stats.critDamage = 2;
-    stats.lethalChance = 0.006;
-    stats.lethalDamage = 2.75;
-    stats.lethalMaxHpPct = 0.05;
-    stats.bulletSpeed = 620;
-    stats.physicalDefense = 4;
-    stats.magicDefense = 2;
-    stats.maxHp = 180;
-    stats.shieldMax = 24;
-    stats.shieldRegen = 1.8;
-    stats.dodgeChance = 0.03;
-    stats.moveSpeed = 238;
-    stats.pickupRange = 82;
-    return stats;
-}
 
 interface RunItemBlueprint {
     id: string;
@@ -5531,8 +5411,9 @@ export class RogueShooterGame extends Component {
     }
 
     private addCharacterStats(target: CharacterStats, source: CharacterStats) {
+        const result = addStats(target, source);
         for (const key of Object.keys(target) as StatKey[]) {
-            target[key] += source[key];
+            target[key] = result[key];
         }
     }
 

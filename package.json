@@ -1,5 +1,9 @@
 {
   "name": "starfall-rogue-shooter",
+  "scripts": {
+    "test": "npx --yes tsx tests/run.ts",
+    "typecheck": "npx --yes -p typescript@5.9.3 tsc -p tsconfig.json"
+  },
   "creator": {
     "version": "3.8.8"
   },
