@@ -104,7 +104,86 @@ export class ProjectileManager {
     public enemyProjectilePool: EnemyProjectile[] = [];
     public perfDrawBullet = 0;
 
+    // ── Hit spark / muzzle flash object pools ──────────────────────
+    private sparkNodes: Node[] = [];
+    private sparkGfx: Graphics[] = [];
+    private sparkTimer: number[] = [];
+    private sparkActive = 0;
+    private flashNodes: Node[] = [];
+    private flashGfx: Graphics[] = [];
+    private flashTimer: number[] = [];
+    private flashActive = 0;
+    private sparkLayer: Node | null = null;
+    private flashLayer: Node | null = null;
+    private static readonly SPARK_POOL_SIZE = 40;
+    private static readonly FLASH_POOL_SIZE = 20;
+    private static readonly SPARK_LIFE = 0.12;
+    private static readonly FLASH_LIFE = 0.08;
+
     constructor(public ctx: ProjectileHostContext) {}
+
+    // ── Pool initialization (call once after worldNode is ready) ─────
+    initEffectPools(worldNode: Node): void {
+        this.sparkLayer = new Node('SparkLayer');
+        worldNode.addChild(this.sparkLayer);
+        this.flashLayer = new Node('FlashLayer');
+        worldNode.addChild(this.flashLayer);
+        for (let i = 0; i < ProjectileManager.SPARK_POOL_SIZE; i++) {
+            const n = new Node(`Spark${i}`);
+            n.layer = Layers.Enum.UI_2D;
+            n.setPosition(0, 0, 13);
+            this.sparkLayer.addChild(n);
+            const g = n.addComponent(Graphics);
+            this.sparkNodes.push(n);
+            this.sparkGfx.push(g);
+            this.sparkTimer.push(-1);
+        }
+        for (let i = 0; i < ProjectileManager.FLASH_POOL_SIZE; i++) {
+            const n = new Node(`Flash${i}`);
+            n.layer = Layers.Enum.UI_2D;
+            this.flashLayer.addChild(n);
+            const g = n.addComponent(Graphics);
+            this.flashNodes.push(n);
+            this.flashGfx.push(g);
+            this.flashTimer.push(-1);
+        }
+    }
+
+    private acquireSpark(): number {
+        for (let i = 0; i < ProjectileManager.SPARK_POOL_SIZE; i++) {
+            if (this.sparkTimer[i] < 0) return i;
+        }
+        return -1; // pool exhausted, skip effect
+    }
+    private acquireFlash(): number {
+        for (let i = 0; i < ProjectileManager.FLASH_POOL_SIZE; i++) {
+            if (this.flashTimer[i] < 0) return i;
+        }
+        return -1;
+    }
+
+    public updateEffectPools(dt: number): void {
+        for (let i = 0; i < ProjectileManager.SPARK_POOL_SIZE; i++) {
+            if (this.sparkTimer[i] > 0) {
+                this.sparkTimer[i] -= dt;
+                if (this.sparkTimer[i] <= 0) {
+                    this.sparkNodes[i].active = false;
+                    this.sparkGfx[i].clear();
+                    this.sparkActive--;
+                }
+            }
+        }
+        for (let i = 0; i < ProjectileManager.FLASH_POOL_SIZE; i++) {
+            if (this.flashTimer[i] > 0) {
+                this.flashTimer[i] -= dt;
+                if (this.flashTimer[i] <= 0) {
+                    this.flashNodes[i].active = false;
+                    this.flashGfx[i].clear();
+                    this.flashActive--;
+                }
+            }
+        }
+    }
 
     // ── Helper utilities ──────────────────────────────────────────────────
 
@@ -369,16 +448,16 @@ export class ProjectileManager {
     // ── Muzzle flash / hit spark ──────────────────────────────────────────
 
     spawnMuzzleFlash(angle: number, style: WeaponAttackStyle, color: string, shotCount: number): void {
-        if (!this.ctx.worldNode) return;
-        const node = new Node('MuzzleFlash');
-        node.layer = Layers.Enum.UI_2D;
-        this.ctx.worldNode.addChild(node);
-        const distance = 38;
-        node.setPosition(this.ctx.cs.playerX + Math.cos(angle) * distance, this.ctx.cs.playerY + Math.sin(angle) * distance, 12);
+        const idx = this.acquireFlash();
+        if (idx < 0) return;
+        const node = this.flashNodes[idx];
+        const gfx = this.flashGfx[idx];
+        node.setPosition(this.ctx.cs.playerX + Math.cos(angle) * 38, this.ctx.cs.playerY + Math.sin(angle) * 38, 12);
         node.angle = angle * 180 / Math.PI;
-        const gfx = node.addComponent(Graphics);
+        node.active = true;
         const length = style === 'rail' ? 58 : style === 'shotgun' ? 42 : style === 'meteor' ? 34 : 30;
         const width = style === 'shotgun' ? 16 + shotCount * 2 : style === 'rail' ? 8 : 12;
+        gfx.clear();
         gfx.fillColor = this.ctx.hex(color, 170);
         gfx.moveTo(-4, 0);
         gfx.lineTo(length, width * 0.5);
@@ -389,17 +468,19 @@ export class ProjectileManager {
         gfx.fillColor = this.ctx.hex(this.getWeaponAccentColor(style, color), 230);
         gfx.circle(0, 0, Math.max(7, width * 0.42));
         gfx.fill();
-        this.ctx.scheduleOnce(() => node.destroy(), 0.075);
+        this.flashTimer[idx] = ProjectileManager.FLASH_LIFE;
+        this.flashActive++;
     }
 
     spawnBulletHitSpark(x: number, y: number, style: WeaponAttackStyle, color: string, accent: string): void {
-        if (!this.ctx.worldNode) return;
-        const node = new Node('BulletHitSpark');
-        node.layer = Layers.Enum.UI_2D;
-        this.ctx.worldNode.addChild(node);
+        const idx = this.acquireSpark();
+        if (idx < 0) return;
+        const node = this.sparkNodes[idx];
+        const gfx = this.sparkGfx[idx];
         node.setPosition(x, y, 13);
-        const gfx = node.addComponent(Graphics);
+        node.active = true;
         const radius = style === 'meteor' ? 24 : style === 'pulse' ? 20 : style === 'rail' ? 16 : 12;
+        gfx.clear();
         gfx.fillColor = this.ctx.hex(color, 70);
         gfx.circle(0, 0, radius);
         gfx.fill();
@@ -414,7 +495,8 @@ export class ProjectileManager {
             gfx.lineTo(0, radius * 0.55);
             gfx.stroke();
         }
-        this.ctx.scheduleOnce(() => node.destroy(), 0.11);
+        this.sparkTimer[idx] = ProjectileManager.SPARK_LIFE;
+        this.sparkActive++;
     }
 
     // ── Enemy projectile pooling / lifecycle ──────────────────────────────
