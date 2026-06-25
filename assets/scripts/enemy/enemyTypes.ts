@@ -39,4 +39,5 @@ export interface Enemy {
     _lastScaleY?: number;
     _lastAngle?: number;
     _wasHitColor?: boolean;
+    visualSkip?: number;
 }

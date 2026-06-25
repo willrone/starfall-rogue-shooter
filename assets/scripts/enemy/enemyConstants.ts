@@ -21,13 +21,13 @@ export const MAX_CHESTS_PER_WAVE = 2;
 export const ENEMY_HIT_FLASH_DURATION = 0.14;
 export const ENEMY_STATUS_KEY_ARMOR = 'armor';
 export const ENEMY_STATUS_KEY_DASH = 'dash';
-export const ENEMY_SEP_INTERVAL = 0.045;
-export const ENEMY_SEP_PLAYER_DIST = 480;
+export const ENEMY_SEP_INTERVAL = 0.12;
+export const ENEMY_SEP_PLAYER_DIST = 360;
 export const ENEMY_CROWD_MIN_COUNT = 18;
-export const ENEMY_CROWD_REPEL_RADIUS = 112;
-export const ENEMY_CROWD_MAX_NEIGHBORS = 12;
+export const ENEMY_CROWD_REPEL_RADIUS = 96;
+export const ENEMY_CROWD_MAX_NEIGHBORS = 8;
 export const ENEMY_CROWD_REPEL_WEIGHT = 1.45;
-export const ENEMY_CROWD_ORBIT_WEIGHT = 0.58;
+export const ENEMY_CROWD_ORBIT_WEIGHT = 0.35;
 
 // ── Drop rates ────────────────────────────────────────────────────
 export const NORMAL_XP_DROP_CHANCE = 0.38;

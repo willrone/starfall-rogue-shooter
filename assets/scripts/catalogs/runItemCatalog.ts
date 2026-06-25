@@ -93,32 +93,32 @@ export function buildRunItemCatalog(): LevelUpgrade[] {
 }
 
 export const STAT_UPGRADE_BLUEPRINTS: RunItemBlueprint[] = [
-    { id: 'fire-control', name: '火控训练', category: '攻击属性', color: '#F94144', effects: [{ stat: 'attackPower', amount: 16 }] },
+    { id: 'fire-control', name: '火控训练', category: '攻击属性', color: '#F94144', effects: [{ stat: 'attackPower', amount: 12 }] },
     { id: 'neural-rapid', name: '神经加速', category: '攻击属性', color: '#4CC9F0', effects: [{ stat: 'attackSpeed', amount: 0.14 }] },
     { id: 'long-lock', name: '远距锁定', category: '攻击属性', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 110 }, { stat: 'bulletSpeed', amount: 38 }] },
     { id: 'crit-instinct', name: '暴击直觉', category: '攻击属性', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.055 }] },
     { id: 'weakpoint-study', name: '弱点解析', category: '攻击属性', color: '#C084FC', effects: [{ stat: 'critDamage', amount: 0.28 }, { stat: 'critChance', amount: 0.012 }] },
     { id: 'lethal-judgement', name: '致命判断', category: '攻击属性', color: '#F59E0B', effects: [{ stat: 'lethalChance', amount: 0.014 }, { stat: 'lethalDamage', amount: 0.2 }] },
     { id: 'execution-sense', name: '斩杀本能', category: '攻击属性', color: '#B5179E', effects: [{ stat: 'lethalMaxHpPct', amount: 0.012 }, { stat: 'attackPower', amount: 5 }] },
-    { id: 'pierce-drill', name: '穿透训练', category: '攻击属性', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 1.2 }] },
-    { id: 'multi-control', name: '多弹操控', category: '攻击属性', color: '#E879F9', effects: [{ stat: 'multiShot', amount: 0.75 }] },
+    { id: 'pierce-drill', name: '穿透训练', category: '攻击属性', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 1.0 }] },
+    { id: 'multi-control', name: '多弹操控', category: '攻击属性', color: '#E879F9', effects: [{ stat: 'multiShot', amount: 0.6 }] },
     { id: 'drone-command', name: '无人机指挥', category: '攻击属性', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 1.4 }, { stat: 'attackRange', amount: 28 }] },
     { id: 'armor-body', name: '装甲体魄', category: '防御属性', color: '#64748B', effects: [{ stat: 'physicalDefense', amount: 12 }, { stat: 'maxHp', amount: 22 }] },
     { id: 'arcane-resolve', name: '秘法抗性', category: '防御属性', color: '#8B5CF6', effects: [{ stat: 'magicDefense', amount: 12 }, { stat: 'shieldMax', amount: 22 }] },
     { id: 'element-balance', name: '元素调和', category: '防御属性', color: '#14B8A6', effects: [{ stat: 'fireDefense', amount: 9 }, { stat: 'lightningDefense', amount: 9 }, { stat: 'poisonDefense', amount: 9 }, { stat: 'iceDefense', amount: 9 }] },
-    { id: 'life-expansion', name: '生命扩容', category: '防御属性', color: '#43AA8B', effects: [{ stat: 'maxHp', amount: 42 }] },
+    { id: 'life-expansion', name: '生命扩容', category: '防御属性', color: '#43AA8B', effects: [{ stat: 'maxHp', amount: 48 }] },
     { id: 'shield-expansion', name: '护盾扩容', category: '防御属性', color: '#22D3EE', effects: [{ stat: 'shieldMax', amount: 46 }, { stat: 'shieldRegen', amount: 0.9 }] },
     { id: 'regen-loop', name: '自愈循环', category: '防御属性', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 1.0 }, { stat: 'maxHp', amount: 10 }] },
     { id: 'damage-soften', name: '冲击缓释', category: '防御属性', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.028 }, { stat: 'physicalDefense', amount: 4 }] },
     { id: 'evasion-steps', name: '闪避步伐', category: '其他属性', color: '#2DD4BF', effects: [{ stat: 'dodgeChance', amount: 0.038 }, { stat: 'moveSpeed', amount: 12 }] },
-    { id: 'mobility-drill', name: '移动训练', category: '其他属性', color: '#43AA8B', effects: [{ stat: 'moveSpeed', amount: 34 }] },
+    { id: 'mobility-drill', name: '移动训练', category: '其他属性', color: '#43AA8B', effects: [{ stat: 'moveSpeed', amount: 40 }] },
     { id: 'lucky-sense', name: '幸运感知', category: '其他属性', color: '#F9C74F', effects: [{ stat: 'luck', amount: 14 }, { stat: 'pickupRange', amount: 18 }] },
-    { id: 'field-sweep', name: '战场拾取', category: '其他属性', color: '#577590', effects: [{ stat: 'pickupRange', amount: 58 }, { stat: 'xpGain', amount: 0.045 }] },
-    { id: 'combat-learning', name: '战斗学习', category: '其他属性', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.09 }, { stat: 'luck', amount: 3 }] },
+    { id: 'field-sweep', name: '战场拾取', category: '其他属性', color: '#577590', effects: [{ stat: 'pickupRange', amount: 70 }, { stat: 'xpGain', amount: 0.055 }] },
+    { id: 'combat-learning', name: '战斗学习', category: '其他属性', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.12 }, { stat: 'luck', amount: 4 }] },
     { id: 'salvage-sense', name: '资源嗅觉', category: '其他属性', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.08 }, { stat: 'luck', amount: 5 }] },
 ];
 
-const SCALE_STAT = (tier: number) => 1 + (tier - 1) * 0.66;
+const SCALE_STAT = (tier: number) => 1 + (tier - 1) * 0.58;
 
 export function scaleStatUpgradeEffect(effect: StatEffect, tier: number): StatEffect {
     const amount = effect.amount * SCALE_STAT(tier);

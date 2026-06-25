@@ -206,7 +206,11 @@ export class EnemyManager {
             nextX = this.ctx.clamp(nextX, WORLD_LEFT + enemy.radius, WORLD_RIGHT - enemy.radius);
             nextY = this.ctx.clamp(nextY, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius);
             enemy.node.setPosition(nextX, nextY, 4);
-            this.updateEnemyVisual(enemy, dt, vx, vy, moveSpeed);
+            // 分帧视觉更新：每 3 帧才更新一次视觉
+            enemy.visualSkip = ((enemy.visualSkip || 0) + 1) % 3;
+            if (enemy.visualSkip === 0) {
+                this.updateEnemyVisual(enemy, dt, vx, vy, moveSpeed);
+            }
         }
         if (doSeparation) {
             const sepStart = this.ctx.perfNow();

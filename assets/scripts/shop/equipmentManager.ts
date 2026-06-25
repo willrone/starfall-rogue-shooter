@@ -20,7 +20,7 @@ import type {
 } from '../core/types';
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const SHOP_REFRESH_COST = 18;
+const SHOP_REFRESH_COST = 22;
 const SHOP_ITEM_COUNT = 6;
 const CHEST_REFRESH_COST = 34;
 const SAVE_KEY = 'starfall-rogue-shooter-progress-v1';
@@ -484,8 +484,8 @@ export class EquipmentManager {
     getShopItemCost(item: LevelUpgrade): number {
         const waveFee = Math.floor(this.ctx.cs.waveIndex / 4) * 5;
         const cycleFee = (this.ctx.cs.endlessCycle - 1) * 10;
-        const baseCost = 44 + item.tier * 18 + waveFee + cycleFee;
-        return Math.max(46, Math.round(baseCost * this.getRunItemShopPriceMultiplier(item)));
+        const baseCost = 44 + item.tier * 22 + waveFee + cycleFee;
+        return Math.max(50, Math.round(baseCost * this.getRunItemShopPriceMultiplier(item)));
     }
 
     getRunItemShopPriceMultiplier(item: LevelUpgrade): number {
