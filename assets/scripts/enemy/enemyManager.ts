@@ -1,5 +1,6 @@
 import { Color, Graphics, Layers, Node, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
 import type { CharacterStats, ChestPickupType, DamageType, EnemySpec, PickupType, ResourceType } from '../core/types';
+import type { GameEventBus } from '../core/gameContext';
 import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS } from '../catalogs/enemyCatalog';
 
 export const WORLD_LEFT = -2400;
@@ -91,6 +92,7 @@ export const ENEMY_STRIP_META: Record<string, { frameName: string; frames: numbe
 
 export interface EnemyHostContext {
     phase: string;
+    bus: GameEventBus;
     combatTime: number;
     cycleTime: number;
     endlessCycle: number;
@@ -776,6 +778,8 @@ export class EnemyManager {
         this.enemySet.delete(enemy);
         const x = enemy.node.position.x;
         const y = enemy.node.position.y;
+        this.ctx.bus.emit('enemy-killed', { x, y, drops: true, isBoss: enemy.boss, isSplitter: enemy.spec.family === 'splitter', damageType: enemy.damageType });
+        if (enemy.boss) this.ctx.bus.emit('boss-defeated', {});
         this.ctx.playSfx(enemy.boss ? 'sfx_boss_die' : 'sfx_enemy_die', enemy.boss ? 0.82 : 0.45, enemy.boss ? 1.0 : 0.045);
         this.drawEnemyDeathBurst(x, y, enemy.radius, enemy.spec.color, enemy.elite || enemy.boss);
         enemy.node.destroy();

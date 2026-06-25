@@ -87,6 +87,7 @@ import { WEAPON_FAMILIES, WEAPON_VARIANTS, WEAPON_CATALOG, WEAPON_COUNT, buildWe
 import { EQUIPMENT, GEAR_BLUEPRINTS, GEAR_RARITIES, GEAR_CATALOG, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from './catalogs/equipmentCatalog';
 import { ENEMY_SPECS, BOSS_ENEMY_COUNT, TOTAL_ENEMY_TYPES, ENEMY_VARIANTS, buildEnemyCatalog } from './catalogs/enemyCatalog';
 import { EnemyManager, ENEMY_PLAYER_PADDING, ENEMY_STRIP_META, MAX_CHESTS_PER_WAVE, type Enemy, type EnemyHostContext, type SpriteStripAnimation } from './enemy/enemyManager';
+import { GameEventBus } from './core/gameContext';
 import { CombatState, createCombatState, resetCombatSession } from './state/combatState';
 import { ProjectileManager, BULLET_HIT_CELL, type Bullet, type EnemyProjectile, type ProjectileHostContext } from './projectile/projectileManager';
 import { PickupManager, type Pickup, type PickupHostContext } from './pickup/pickupManager';
@@ -202,6 +203,7 @@ export class RogueShooterGame extends Component {
     private proj = new ProjectileManager(this as unknown as ProjectileHostContext);
     private pickupMgr = new PickupManager(this as unknown as PickupHostContext);
     private debugHudEnabled = false;
+    private bus = new GameEventBus();
     private perfFrameMs = 0;
     private perfPreMs = 0;
     private perfPlayerMs = 0;
@@ -1375,6 +1377,7 @@ export class RogueShooterGame extends Component {
 
     private finishBattle(reason: BattleEndReason) {
         if (this.cs.phase !== 'combat') return;
+        this.bus.emit('battle-end', { reason });
         const reward = this.calculateEndlessReward(reason);
         this.cs.battleAlloy = 0;
         this.addWalletToInventory(reward);
