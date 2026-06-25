@@ -1322,6 +1322,7 @@ export class RogueShooterGame extends Component {
         }
         if (damage > 0) {
             this.cs.playerHp = Math.max(0, this.cs.playerHp - damage);
+            this.bus.emit('player-hit', { damage, type });
             this.playSfx('sfx_player_hit', 0.65, 0.28);
             this.pickupMgr.spawnFloatingText(`-${Math.ceil(damage)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 28, '#F94144', 25);
             this.showToast(`受击 -${Math.ceil(damage)}，拉开距离。`);
@@ -1366,6 +1367,7 @@ export class RogueShooterGame extends Component {
         this.cs.playerHp = Math.min(this.cs.playerMaxHp, this.cs.playerHp + amount);
         const healed = this.cs.playerHp - before;
         if (healed > 0.05) {
+            this.bus.emit('player-heal', { amount: healed });
             this.pickupMgr.spawnFloatingText(`+${Math.ceil(healed)}`, this.cs.playerX, this.cs.playerY + this.cs.playerRadius + 34, '#43AA8B', 23);
         }
     }

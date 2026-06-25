@@ -532,6 +532,7 @@ export class EnemyManager {
 
         this.cs.bossSpawned = false;
         this.ctx.requestBgm('bgm_combat_loop');
+        this.ctx.bus.emit('wave-start', { wave: this.cs.waveIndex, isBoss: this.isBossWave() });
         this.ctx.showToast(`第 ${this.cs.waveIndex} 波开始，${Math.round(this.cs.waveDuration)} 秒内怪潮会持续涌入。`);
     }
     public grantWaveClearAlloy() {
