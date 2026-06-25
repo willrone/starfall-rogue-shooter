@@ -42,7 +42,8 @@ const WORLD_BOTTOM = -3200;
 const WORLD_TOP = 3200;
 const CAMERA_FOCUS_X = 0;
 const CAMERA_FOCUS_Y = -96;
-const ART_DIR = 'art';
+const ART_DIRS = ['art/placeholder', 'art/characters', 'art/enemies', 'art/weapons'] as const;
+const ART_LOAD_TIMEOUT_SECONDS = 4;
 const AUDIO_DIR = 'audio';
 const PLACEHOLDER_ART_DIR = 'art/placeholder';
 const HANGAR_EQUIPMENT_SLOTS = 8;
@@ -1348,29 +1349,52 @@ export class RogueShooterGame extends Component {
 
     private loadPlaceholderArt(done: () => void) {
         this.setLoadingProgress('加载美术资源 0%');
-        resources.loadDir(
-            ART_DIR,
-            SpriteFrame,
-            (finished, total) => {
-                const progress = total > 0 ? Math.round((finished / total) * 100) : 0;
-                this.setLoadingProgress(`加载美术资源 ${progress}%`);
-            },
-            (error, frames) => {
-                if (error) {
-                    console.warn('Failed to load game art, falling back to Graphics', error);
-                    this.setLoadingProgress('资源加载失败，使用基础图形继续');
-                    done();
-                    return;
-                }
 
-                for (const frame of frames) {
-                    this.artFrames.set(frame.name, frame);
-                }
+        let finishedDirs = 0;
+        let totalProgress = 0;
+        let entered = false;
+        const finishOnce = (message: string) => {
+            if (entered) return;
+            entered = true;
+            this.setLoadingProgress(message);
+            done();
+        };
+
+        this.scheduleOnce(() => {
+            finishOnce('资源加载较慢，先进入游戏');
+        }, ART_LOAD_TIMEOUT_SECONDS);
+
+        const finishDir = () => {
+            finishedDirs += 1;
+            if (finishedDirs >= ART_DIRS.length) {
                 this.buildSpriteStripAnimations();
-                this.setLoadingProgress('加载完成');
-                done();
-            },
-        );
+                finishOnce('加载完成');
+            }
+        };
+
+        for (const dir of ART_DIRS) {
+            resources.loadDir(
+                dir,
+                SpriteFrame,
+                (finished, total) => {
+                    const dirProgress = total > 0 ? finished / total : 1;
+                    totalProgress = Math.max(totalProgress, (finishedDirs + dirProgress) / ART_DIRS.length);
+                    this.setLoadingProgress(`加载美术资源 ${Math.round(totalProgress * 100)}%`);
+                },
+                (error, frames) => {
+                    if (error) {
+                        console.warn(`Failed to load art dir ${dir}; falling back for this dir.`, error);
+                        finishDir();
+                        return;
+                    }
+
+                    for (const frame of frames) {
+                        this.artFrames.set(frame.name, frame);
+                    }
+                    finishDir();
+                },
+            );
+        }
     }
 
     private initAudio() {
@@ -1544,14 +1568,14 @@ export class RogueShooterGame extends Component {
     }
 
     private drawArena(root: Node) {
-        this.rect(root, 'DeepSpaceBase', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#07111F');
-        this.rect(root, 'NebulaBandTop', 0, 0, DESIGN_WIDTH, 250, '#111A33');
-        this.rect(root, 'NebulaBandBottom', 0, 1060, DESIGN_WIDTH, 220, '#160F2A');
+        this.rect(root, 'DeepSpaceBase', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#10294A');
+        this.rect(root, 'NebulaBandTop', 0, 0, DESIGN_WIDTH, 250, '#1E3A5F');
+        this.rect(root, 'NebulaBandBottom', 0, 1060, DESIGN_WIDTH, 220, '#2A1748');
 
         const sky = new Node('StaticStarSky');
         sky.layer = Layers.Enum.UI_2D;
         root.addChild(sky);
-        sky.setPosition(0, 0, -60);
+        sky.setPosition(0, 0, 1);
         sky.addComponent(UITransform).setContentSize(DESIGN_WIDTH, DESIGN_HEIGHT);
         const gfx = sky.addComponent(Graphics);
 
@@ -1581,14 +1605,14 @@ export class RogueShooterGame extends Component {
         const floor = new Node('PlanetBattlefield');
         floor.layer = Layers.Enum.UI_2D;
         world.addChild(floor);
-        floor.setPosition(0, 0, -20);
+        floor.setPosition(0, 0, 1);
         floor.addComponent(UITransform).setContentSize(WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM);
         const floorGfx = floor.addComponent(Graphics);
 
-        floorGfx.fillColor = this.hex('#14243A');
+        floorGfx.fillColor = this.hex('#254A66');
         floorGfx.roundRect(WORLD_LEFT, WORLD_BOTTOM, WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM, 52);
         floorGfx.fill();
-        floorGfx.fillColor = this.hex('#1F3651', 180);
+        floorGfx.fillColor = this.hex('#3B6D86', 210);
         floorGfx.roundRect(WORLD_LEFT + 120, WORLD_BOTTOM + 150, WORLD_RIGHT - WORLD_LEFT - 240, WORLD_TOP - WORLD_BOTTOM - 300, 180);
         floorGfx.fill();
         floorGfx.fillColor = this.hex('#2E4A63', 120);
