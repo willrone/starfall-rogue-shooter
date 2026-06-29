@@ -1,4 +1,4 @@
-import { Color, Graphics, Layers, Node, Sprite, UITransform } from 'cc';
+import { Color, Graphics, Layers, Node, resources, Sprite, SpriteFrame, UITransform } from 'cc';
 import type {
     CharacterStats,
     DamageType,
@@ -6,6 +6,12 @@ import type {
     WeaponAttackStyle,
 } from '../core/types';
 import { createBaseCharacterStats } from '../core/stats';
+import {
+    weaponDamageAtLevel,
+    weaponFireRateAtLevel,
+    weaponPierceAtLevel,
+    weaponBulletSpeedAtLevel,
+} from '../core/combatFormulas';
 import {
     WORLD_LEFT,
     WORLD_RIGHT,
@@ -50,6 +56,9 @@ export interface Bullet {
     damage: number;
     radius: number;
     pierce: number;
+    pierceDamageRetention: number;
+    mechanic: string | null;
+    mechData: Record<string, number> | null;
     life: number;
     maxLife: number;
     color: string;
@@ -70,15 +79,21 @@ export interface ProjectileHostContext {
         activeWeaponIndex: number;
         playerRadius: number;
         invulnerableTimer: number;
+        critStacks: number;
+        attackSpeedBoostTimer: number;
+        pierceStacks: number;
+        pierceStackTimer: number;
+        droneCharge: number;
     };
     worldNode: Node | null;
     enemyMgr: {
         enemies: Enemy[];
         enemySet: Set<Enemy>;
         buildEnemyGrid(cellSize: number): Map<string, Enemy[]>;
+        getEnemyPosition(enemy: Enemy): { x: number; y: number };
         findNearestEnemy(x: number, y: number, radius: number): Enemy | null;
         damageEnemy(enemy: Enemy, amount: number, color?: string, tag?: string): void;
-        rollOutgoingDamage(enemy: Enemy, baseDamage: number): { amount: number; color: string; tag: string };
+        rollOutgoingDamage(enemy: Enemy, baseDamage: number, critChanceBonus?: number, critDamageBonus?: number): { amount: number; color: string; tag: string };
     };
     getCharacterStats(): CharacterStats;
     getActiveWeapon(): EquipmentDef | null;
@@ -91,6 +106,7 @@ export interface ProjectileHostContext {
     perfNow(): number;
     addSpriteChild(parent: Node, name: string, frameName: string, width: number, height: number): Sprite | null;
     takeDamage(amount: number, type?: DamageType): void;
+    drawAreaPulse(x: number, y: number, radius: number, color: string): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,9 +139,25 @@ export class ProjectileManager {
     constructor(public ctx: ProjectileHostContext) {}
 
     // ── Pool initialization (call once after worldNode is ready) ─────
+    // ── Bullet sprite cache ─────────────────────────────────────────
+    private bulletSpriteFrames: Record<string, SpriteFrame | null> = {};
+    private static readonly BULLET_STYLES: Record<string, string> = {
+        rifle: 'bullet_default', shotgun: 'bullet_shotgun', rail: 'bullet_rail',
+        laser: 'bullet_rail', meteor: 'bullet_meteor', pulse: 'bullet_pulse',
+        scythe: 'bullet_disc', disc: 'bullet_disc',
+    };
+
     initEffectPools(worldNode: Node): void {
         this.sparkLayer = new Node('SparkLayer');
         worldNode.addChild(this.sparkLayer);
+        // Preload bullet sprites
+        for (const key of Object.keys(ProjectileManager.BULLET_STYLES)) {
+            const file = ProjectileManager.BULLET_STYLES[key];
+            const path = `effects/${file}/spriteFrame`;
+            resources.load(path, SpriteFrame, (_e, sf) => {
+                if (sf) this.bulletSpriteFrames[file] = sf;
+            });
+        }
         this.flashLayer = new Node('FlashLayer');
         worldNode.addChild(this.flashLayer);
         for (let i = 0; i < ProjectileManager.SPARK_POOL_SIZE; i++) {
@@ -251,14 +283,16 @@ export class ProjectileManager {
     }
 
     // ── Weapon stat getters ───────────────────────────────────────────────
+    // 每级成长率: 伤害+12%, 射速+10%, 穿透+10%, 弹速+8% (公式在 combatFormulas.ts)
 
     getBulletDamage(): number {
         const weapon = this.ctx.getActiveWeapon();
         const weaponDamage = weapon ? weapon.weaponStats?.damage || 0 : 0;
         const level = weapon ? this.ctx.getEquipmentLevel(weapon.id) : 1;
-        const base = weaponDamage * level;
+        const stats = this.ctx.getCharacterStats();
+        const base = weaponDamageAtLevel(weaponDamage, level) * Math.max(0.1, 1 + stats.weaponDamagePct);
         const baseAttackPower = createBaseCharacterStats().attackPower;
-        const attackDelta = this.ctx.getCharacterStats().attackPower - baseAttackPower;
+        const attackDelta = stats.attackPower - baseAttackPower;
         return Math.max(2, base + baseAttackPower * 0.15 + attackDelta);
     }
 
@@ -266,16 +300,18 @@ export class ProjectileManager {
         const weapon = this.ctx.getActiveWeapon();
         const weaponFireRate = weapon ? weapon.weaponStats?.fireRate || 0 : 0;
         const level = weapon ? this.ctx.getEquipmentLevel(weapon.id) : 1;
-        const baseRate = weaponFireRate * level;
-        const attackSpeedBonus = this.ctx.getCharacterStats().attackSpeed;
-        return Math.max(0.07, 1 / Math.max(0.15, baseRate + attackSpeedBonus * 0.45));
+        const stats = this.ctx.getCharacterStats();
+        // 机制词条: crit_stacks (风暴步枪) 暴击叠加 1% 射速/层, 上限 5 层
+        const critBoost = (this.ctx.cs.critStacks || 0) * 0.01;
+        const baseRate = weaponFireRateAtLevel(weaponFireRate, level) * Math.max(0.1, 1 + stats.weaponFireRatePct + critBoost);
+        return Math.max(0.07, 1 / Math.max(0.15, baseRate + stats.attackSpeed * 0.45));
     }
 
     getBulletSpeed(): number {
         const weapon = this.ctx.getActiveWeapon();
         const weaponSpeed = weapon?.weaponStats?.bulletSpeed || 0;
         const level = weapon ? this.ctx.getEquipmentLevel(weapon.id) : 1;
-        const base = weaponSpeed * level;
+        const base = weaponBulletSpeedAtLevel(weaponSpeed, level);
         const bonus = this.ctx.getCharacterStats().bulletSpeed;
         return Math.max(260, 300 + base * 140 + bonus * 0.4);
     }
@@ -284,16 +320,164 @@ export class ProjectileManager {
         const weapon = this.ctx.getActiveWeapon();
         const weaponPierce = weapon?.weaponStats?.pierce || 0;
         const level = weapon ? this.ctx.getEquipmentLevel(weapon.id) : 1;
-        const base = weaponPierce * level;
+        const base = weaponPierceAtLevel(weaponPierce, level);
         const bonus = this.ctx.getCharacterStats().pierce;
-        const total = base + bonus * 0.3;
+        // 机制: pierce_stacks (回声弓) — 暴击叠加穿透
+        const extra = this.ctx.cs.pierceStacks || 0;
+        const total = base + bonus + extra;
         const guaranteed = Math.floor(total);
         return guaranteed + (Math.random() < total - guaranteed ? 1 : 0);
     }
 
+    getPierceDamageRetention(): number {
+        const bonus = this.ctx.getCharacterStats().pierceDamagePct;
+        // 默认每穿透一层保留 50% 伤害；升级道具提高保留比例，上限 90%。
+        return Math.min(0.9, Math.max(0.35, 0.5 + bonus));
+    }
+
+    // ── 机制词条 (Phase 2) ─────────────────────────────────────────────
+    // 在每次子弹命中后调用。14 个机制中, 4 个是命中型 (hit-time),
+    // 其余是飞行/状态/生成型, 会写在其他地方。
+    private applyMechanicOnHit(bullet: Bullet, enemy: Enemy, roll: { tag: string; color: string }): void {
+        if (!bullet.mechanic) return;
+        switch (bullet.mechanic) {
+            case 'crit_stacks':
+                this.onCritStacks(bullet, roll);
+                break;
+            case 'slow':
+                this.onSlowHit(bullet, enemy);
+                break;
+            case 'poison':
+                this.onPoisonHit(bullet, enemy);
+                break;
+            case 'knockback':
+                this.onKnockbackHit(bullet, enemy, roll);
+                break;
+            case 'pierce_stacks':
+                this.onPierceStacksHit(bullet, roll);
+                break;
+            case 'pierce_bonus':
+                // 在命中循环内处理, 不在这里
+                break;
+            case 'crit_master':
+                // rollOutgoingDamage 处理
+                break;
+            case 'straight':
+                // 穿透衰减在命中循环覆盖
+                break;
+            case 'ricochet':
+                // 反弹在 updateBullets 处理
+                break;
+            case 'aoe_burn':
+                this.onAoeBurnHit(bullet, enemy);
+                break;
+        }
+    }
+
+    // ── 机制 1: crit_stacks (风暴步枪) ─────────────────────────────────
+    // 暴击时叠加 fireRate, 最多 5 层, 每秒衰减 1 层
+    private onCritStacks(bullet: Bullet, roll: { tag: string }): void {
+        if (roll.tag.indexOf('暴击') < 0) return;
+        const stats = this.ctx.getCharacterStats();
+        const cur = stats.attackSpeed;
+        const next = Math.min(stats.attackSpeed + 0.04, 4.5);
+        if (next > cur + 0.001) {
+            // 通过临时修改 combatState 字段
+            this.ctx.cs.attackSpeedBoostTimer = 3.0; // 3 秒后开始衰减
+            // 直接增加 attackSpeed (简化处理: 用全局战斗状态)
+            const base = createBaseCharacterStats();
+            const weaponFireRate = (this.ctx.getActiveWeapon()?.weaponStats?.fireRate || 0) * this.ctx.getEquipmentLevel(this.ctx.getActiveWeapon()?.id || '');
+            // 不直接改 stats, 而是给 ctx.cs 加一个临时 boost
+            if (!this.ctx.cs.critStacks) this.ctx.cs.critStacks = 0;
+            this.ctx.cs.critStacks = Math.min(5, this.ctx.cs.critStacks + 1);
+        }
+    }
+
+    // ── 机制 2: slow (霜束发射器) ────────────────────────────────────
+    // 命中减速目标 0.4 秒, 减速 40%
+    private onSlowHit(bullet: Bullet, enemy: Enemy): void {
+        if (enemy.boss) return; // Boss 不吃减速
+        enemy.slowTimer = 0.6;
+        enemy.slowFactor = 0.5; // 移动速度 × 0.5
+    }
+
+    // ── 机制 3: poison (瘟疫喷射器) ──────────────────────────────────
+    // 命中叠 1 层毒 (上限 5), 每秒扣 maxHp × stacks × 0.02
+    private onPoisonHit(bullet: Bullet, enemy: Enemy): void {
+        if (enemy.boss) return;
+        enemy.poisonStacks = Math.min(5, enemy.poisonStacks + 1);
+        enemy.poisonTimer = 1.0; // 1 秒后第一次 tick
+    }
+
+    // ── 机制 4: knockback (重力锤) ───────────────────────────────────
+    // 命中击退 60 像素, 暴击 2 倍
+    private onKnockbackHit(bullet: Bullet, enemy: Enemy, roll: { tag: string }): void {
+        if (enemy.boss) return; // Boss 不击退
+        const isCrit = roll.tag.indexOf('暴击') >= 0;
+        const dist = this.distance(enemy.node.position.x - this.ctx.cs.playerX, enemy.node.position.y - this.ctx.cs.playerY);
+        if (dist < 0.001) return;
+        const nx = (enemy.node.position.x - this.ctx.cs.playerX) / dist;
+        const ny = (enemy.node.position.y - this.ctx.cs.playerY) / dist;
+        const force = isCrit ? 180 : 100;
+        enemy.knockbackVx = nx * force;
+        enemy.knockbackVy = ny * force;
+    }
+
+    private distance(dx: number, dy: number): number {
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // ── 无人机爆炸 (drone_charge 充能满后触发) ───────────────────────────
+    private spawnDroneExplosion(x: number, y: number, damage: number): void {
+        // 对爆炸范围内所有敌人造成伤害
+        for (const enemy of this.ctx.enemyMgr.enemies) {
+            if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
+            const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
+            const dx = x - pos.x;
+            const dy = y - pos.y;
+            if (dx * dx + dy * dy <= 80 * 80) {
+                this.ctx.enemyMgr.damageEnemy(enemy, damage * 5, '#F9C74F', '无人机爆炸 ');
+            }
+        }
+        this.ctx.drawAreaPulse(x, y, 80, '#F9C74F');
+    }
+
+    // ── 机制 5: pierce_stacks (回声弓) ───────────────────────────────
+    // 暴击时穿透+1, 3 层封顶, 6 秒不暴击衰减 1 层
+    private onPierceStacksHit(bullet: Bullet, roll: { tag: string }): void {
+        if (roll.tag.indexOf('暴击') < 0) return;
+        this.ctx.cs.pierceStacks = Math.min(3, (this.ctx.cs.pierceStacks || 0) + 1);
+        this.ctx.cs.pierceStackTimer = 6.0;
+    }
+
+    // ── 机制 8: aoe_burn (流星发射器) ───────────────────────────────
+    // 命中留下 3 秒燃烧区, 每秒 12% 攻击力的伤害
+    private onAoeBurnHit(bullet: Bullet, enemy: Enemy): void {
+        const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
+        const burnDmg = 0.12 * bullet.damage;
+        // 创建燃烧区 ID
+        const zoneId = `burn_${bullet.node.uuid}_${Date.now()}`;
+        const burnZones = (this as any)._burnZones || [];
+        burnZones.push({
+            id: zoneId,
+            x: bullet.x,
+            y: bullet.y,
+            radius: 60,
+            lifetime: 3.0,
+            tickTimer: 0,
+            tickInterval: 1.0,
+            damagePerTick: burnDmg,
+            color: '#EF4444',
+            hitSet: new Set<number>(),
+        });
+        (this as any)._burnZones = burnZones;
+        // 火焰视觉效果: 绘制一个圆环
+        this.ctx.drawAreaPulse(bullet.x, bullet.y, 60, '#EF4444');
+    }
+
     // ── Bullet creation / pooling ─────────────────────────────────────────
 
-    createBullet(angle: number, damage: number, pierce: number, style: WeaponAttackStyle, color: string): void {
+    createBullet(angle: number, damage: number, pierce: number, style: WeaponAttackStyle, color: string, mechanic: string | null = null): void {
         const speed = this.getBulletSpeed();
         const bullet = this.acquireBullet();
         bullet.x = this.ctx.cs.playerX;
@@ -306,12 +490,25 @@ export class ProjectileManager {
         bullet.accent = this.getWeaponAccentColor(style, color);
         bullet.radius = this.getWeaponBulletRadius(style);
         bullet.pierce = pierce;
+        bullet.pierceDamageRetention = this.getPierceDamageRetention();
+        bullet.mechanic = mechanic;
+        bullet.mechData = mechanic ? {} : null;
         bullet.life = this.getWeaponBulletLife(style);
         bullet.maxLife = bullet.life;
         bullet.hitIds.clear();
         bullet.node.active = true;
         bullet.node.setPosition(bullet.x, bullet.y, 6);
         bullet.node.angle = angle * 180 / Math.PI;
+        // Assign style-specific sprite
+        if (bullet.sprite) {
+            const sf = this.bulletSpriteFrames[ProjectileManager.BULLET_STYLES[style] || 'bullet_default'];
+            if (sf) {
+                bullet.sprite.spriteFrame = sf;
+                bullet.sprite.node.active = true;
+            } else if (bullet.gfx) {
+                bullet.sprite.node.active = false;
+            }
+        }
         this.drawBullet(bullet);
         this.bullets.push(bullet);
     }
@@ -326,6 +523,7 @@ export class ProjectileManager {
         node.addComponent(UITransform).setContentSize(24, 24);
         const gfx = node.addComponent(Graphics);
         const sprite = this.ctx.addSpriteChild(node, 'BulletArt', 'bullet_plasma', 28, 28);
+        if (sprite) sprite.node.active = false; // hide until style is set in createBullet
         return {
             node,
             gfx,
@@ -337,6 +535,9 @@ export class ProjectileManager {
             damage: 0,
             radius: 7,
             pierce: 0,
+            pierceDamageRetention: 0.5,
+            mechanic: null,
+            mechData: null,
             life: 0,
             maxLife: 0,
             color: '#4CC9F0',
@@ -405,6 +606,58 @@ export class ProjectileManager {
             bullet.node.setPosition(bullet.x, bullet.y, 6);
 
             if (bullet.life <= 0 || bullet.x < WORLD_LEFT - 180 || bullet.x > WORLD_RIGHT + 180 || bullet.y < WORLD_BOTTOM - 180 || bullet.y > WORLD_TOP + 180) {
+                // 机制: ricochet (荆棘连弩) — 撞墙反弹, 最多 2 次, 每次 +15% 伤害
+                if (bullet.mechanic === 'ricochet' && bullet.life > 0) {
+                    const curBounces = (bullet.mechData && bullet.mechData.bounces) || 0;
+                    if (curBounces < 2) {
+                        if (!bullet.mechData) bullet.mechData = {};
+                        bullet.mechData.bounces = curBounces + 1;
+                        bullet.damage *= 1.15;
+                        // 反射方向
+                        if (bullet.x < WORLD_LEFT - 180 || bullet.x > WORLD_RIGHT + 180) bullet.vx = -bullet.vx;
+                        if (bullet.y < WORLD_BOTTOM - 180 || bullet.y > WORLD_TOP + 180) bullet.vy = -bullet.vy;
+                        // 弹回场内
+                        bullet.x = Math.max(WORLD_LEFT, Math.min(WORLD_RIGHT, bullet.x));
+                        bullet.y = Math.max(WORLD_BOTTOM, Math.min(WORLD_TOP, bullet.y));
+                        bullet.node.setPosition(bullet.x, bullet.y, 6);
+                        continue;
+                    }
+                }
+                removing.push(bullet);
+                continue;
+            }
+
+            // 机制: split (量子织机) — 飞行 0.5 秒后分裂 2 颗
+            if (bullet.mechanic === 'split' && (bullet.mechData?.splitDone || 0) === 0 && bullet.life <= bullet.maxLife - 0.5) {
+                if (!bullet.mechData) bullet.mechData = {};
+                (bullet.mechData as Record<string, number>).splitDone = 1;
+                for (const offset of [-0.35, 0.35]) {
+                    const a = Math.atan2(bullet.vy, bullet.vx) + offset;
+                    const s = Math.sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy);
+                    const splitBullet = this.acquireBullet();
+                    splitBullet.x = bullet.x;
+                    splitBullet.y = bullet.y;
+                    splitBullet.vx = Math.cos(a) * s;
+                    splitBullet.vy = Math.sin(a) * s;
+                    splitBullet.damage = bullet.damage * 0.7;
+                    splitBullet.style = bullet.style;
+                    splitBullet.color = bullet.color;
+                    splitBullet.accent = bullet.accent;
+                    splitBullet.radius = bullet.radius;
+                    splitBullet.pierce = bullet.pierce;
+                    splitBullet.pierceDamageRetention = bullet.pierceDamageRetention;
+                    splitBullet.mechanic = null;
+                    splitBullet.mechData = null;
+                    splitBullet.life = bullet.maxLife - 0.5;
+                    splitBullet.maxLife = splitBullet.life;
+                    splitBullet.hitIds.clear();
+                    splitBullet.node.active = true;
+                    splitBullet.node.setPosition(splitBullet.x, splitBullet.y, 6);
+                    splitBullet.node.angle = a * 180 / Math.PI;
+                    this.drawBullet(splitBullet);
+                    this.bullets.push(splitBullet);
+                }
+                // 原弹消失
                 removing.push(bullet);
                 continue;
             }
@@ -419,12 +672,39 @@ export class ProjectileManager {
                     for (const enemy of bucket) {
                         if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
                         if (bullet.hitIds.has(enemy.id)) continue;
-                        const distSq = this.distanceSq(bullet.x, bullet.y, enemy.node.position.x, enemy.node.position.y);
+                        const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
+                        const distSq = this.distanceSq(bullet.x, bullet.y, pos.x, pos.y);
                         const hitRadius = bullet.radius + enemy.radius;
                         if (distSq <= hitRadius * hitRadius) {
                             bullet.hitIds.add(enemy.id);
-                            const roll = this.ctx.enemyMgr.rollOutgoingDamage(enemy, bullet.damage);
+                            const pierceDepth = Math.max(0, bullet.hitIds.size - 1);
+                            // 机制: straight (离子长枪) — 穿透不衰减
+                            const pierceRetention = bullet.mechanic === 'straight' ? 1.0 : bullet.pierceDamageRetention;
+                            // 机制: pierce_bonus (磁轨炮) — 每次穿透 +8% 伤害
+                            if (bullet.mechanic === 'pierce_bonus') {
+                                if (!bullet.mechData) bullet.mechData = {};
+                                bullet.mechData.pierceCount = (bullet.mechData.pierceCount || 0) + 1;
+                            }
+                            const pierceBonus = (bullet.mechanic === 'pierce_bonus' && bullet.mechData?.pierceCount)
+                                ? 1 + (bullet.mechData.pierceCount - 1) * 0.15 : 1.0;
+                            const retainedDamage = bullet.damage * Math.pow(pierceRetention, pierceDepth) * pierceBonus;
+                            const critMastery = bullet.mechanic === 'crit_master';
+                            const roll = this.ctx.enemyMgr.rollOutgoingDamage(enemy, retainedDamage, critMastery ? 0.15 : 0, critMastery ? 0.30 : 0);
                             this.ctx.enemyMgr.damageEnemy(enemy, roll.amount, roll.color, roll.tag);
+                            // 机制词条: drone_charge (轨道无人机) — 击杀充能
+                            if (bullet.mechanic === 'drone_charge') {
+                                const isDead = !this.ctx.enemyMgr.enemySet.has(enemy);
+                                if (isDead) {
+                                    if (!this.ctx.cs.droneCharge) this.ctx.cs.droneCharge = 0;
+                                    this.ctx.cs.droneCharge += 20; // 每击杀一个怪 +20%, 5 杀 1 爆
+                                    if (this.ctx.cs.droneCharge >= 100) {
+                                        this.ctx.cs.droneCharge = 0;
+                                        this.spawnDroneExplosion(bullet.x, bullet.y, bullet.damage);
+                                    }
+                                }
+                            }
+                            // 机制词条调度 (Phase 2)
+                            this.applyMechanicOnHit(bullet, enemy, roll);
                             // 限制火花频率：每3次命中才画1次，减少渲染节点 churn
                             if (Math.random() < 0.33) {
                                 this.spawnBulletHitSpark(bullet.x, bullet.y, bullet.style, bullet.color, bullet.accent);
@@ -440,9 +720,43 @@ export class ProjectileManager {
                 }
             }
         }
+        // 机制: 燃烧区 tick (aoe_burn)
+        this.tickBurnZones(dt);
         for (const bullet of removing) {
             this.removeBullet(bullet);
         }
+    }
+
+    private tickBurnZones(dt: number): void {
+        const zones: any[] = (this as any)._burnZones;
+        if (!zones || zones.length === 0) return;
+        const toRemove: number[] = [];
+        for (let i = 0; i < zones.length; i++) {
+            const zone = zones[i];
+            zone.lifetime -= dt;
+            if (zone.lifetime <= 0) { toRemove.push(i); continue; }
+            zone.tickTimer += dt;
+            if (zone.tickTimer >= zone.tickInterval) {
+                zone.tickTimer = 0;
+                // 对区域内所有怪造成伤害
+                for (const enemy of this.ctx.enemyMgr.enemies) {
+                    if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
+                    if (zone.hitSet.has(enemy.id)) continue;
+                    const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
+                    const dx = zone.x - pos.x;
+                    const dy = zone.y - pos.y;
+                    if (dx * dx + dy * dy <= zone.radius * zone.radius) {
+                        zone.hitSet.add(enemy.id);
+                        this.ctx.enemyMgr.damageEnemy(enemy, zone.damagePerTick, zone.color, '燃烧 ');
+                    }
+                }
+            }
+        }
+        // 移除过期 zone
+        for (const idx of toRemove.sort((a, b) => b - a)) {
+            zones.splice(idx, 1);
+        }
+        (this as any)._burnZones = zones;
     }
 
     // ── Muzzle flash / hit spark ──────────────────────────────────────────

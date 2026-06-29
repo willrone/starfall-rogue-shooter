@@ -1,10 +1,11 @@
 {
-  "ver": "0.0.1",
+  "ver": "1.0.0",
   "importer": "*",
   "imported": true,
   "uuid": "ec2b0a0c-068e-44b7-947f-b09f3bfab7e3",
   "files": [
-    ".gif"
+    ".gif",
+    ".json"
   ],
   "subMetas": {},
   "userData": {}

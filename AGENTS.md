@@ -38,7 +38,7 @@ guaranteedExtra = min(3, floor(spreadPower / 2.2))  // 每次射击额外弹道
 ```
 
 **baseAttackPower = 16**（createBaseCharacterStats 里的值）
-**weaponLevel = 战斗内始终为 1**（不升级武器）
+**weaponLevel = 战斗内等于机库等级**（非固定 1），每级成长：伤害+12%、射速+10%、穿透+10%、弹速+8%、多弹丸+8%、无人机+8%
 
 ### 2.2 无人机伤害
 
@@ -93,7 +93,7 @@ RUN_ITEM 买后直接 `applyRunItem(id)` 加到 runStats，效果和升级选项
 
 ```
 xpToNext = 65 × 1.24^level + 22 + level×5
-XP 掉率 = 38%，掉落量 = monsterXP × 2.1
+XP 掉率 = 56%，掉落量 = monsterXP × 2.6
 ```
 
 ### 2.7 怪物公式
@@ -141,9 +141,21 @@ magnet-coil:    pickupRange+22, luck+1.2
 # TypeScript 编译
 npx --yes -p typescript@5.9.3 tsc -p tsconfig.json
 
-# 数值平衡模拟器
-python3 tools/balance_simulator.py --runs 1000 --seed 42
+# 数值平衡：跑真实 Cocos 游戏 + CDP bot（不要用 Python 重写战斗仿真）
+# 先启动 web-mobile/preview，并用 headed Chrome --remote-debugging-port=9222 打开游戏页
+npm run balance:cdp
+```
 
+**当前无广告生存目标按武器阶段分层，不再统一按 8-12 波判断：**
+
+| 阶段 | 目标 |
+|---|---|
+| 新手/弱武器 | P50 死在 5-6 波，P90 不超过 7 |
+| 中等武器 | P50 死在 8-9 波，P90 不超过 10 |
+| 强武器 | 可以见到第一只 Boss，但多数局打不过（P50≈10，P90≤10） |
+| 顶级武器 | 可以刚好打过第一只 Boss，但不应一路滚到 20 波（P50≈11，P90≤12） |
+
+```bash
 # Cocos 抖音构建（可选）
 '/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/MacOS/CocosCreator' \
   --project /Users/ronghui/Documents/game_dev_cocos \
@@ -236,7 +248,8 @@ assets/scripts/
     └── panels.ts                    # UI 面板管理
 
 tools/
-└── balance_simulator.py             # Monte Carlo 数值平衡模拟器
+└── bot/
+    └── run_balance_cdp.py           # 真实 Cocos 运行时 + CDP bot 数值平衡测试
 
 docs/
 ├── AGENTS.md                        # 本文件（AI 权威参考）
@@ -255,9 +268,7 @@ docs/
 | 问题 | 状态 | 位置 |
 |---|---|---|
 | 主文件 RogueShooterGame.ts 仍 6000+ 行 | 待拆 | 整个文件 |
-| 升级选项的 tier 缩放没在模拟器中建模 | 待修 | tools/balance_simulator.py |
-| 商店道具价格公式未在模拟器中建模 | 待修 | tools/balance_simulator.py |
-| 需要真机测试数值感受 | 待做 | 用 PLAYTEST_TEMPLATE.md |
+| 需要真实 CDP 跑局数据补充分层样本 | 待做 | tools/bot/run_balance_cdp.py |
 
 ---
 

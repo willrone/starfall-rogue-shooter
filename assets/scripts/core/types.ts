@@ -22,7 +22,9 @@ export interface CharacterStats {
     lethalMaxHpPct: number;
     bulletSpeed: number;
     pierce: number;
-    multiShot: number;
+    pierceDamagePct: number;
+    weaponDamagePct: number;
+    weaponFireRatePct: number;
     dronePower: number;
     physicalDefense: number;
     magicDefense: number;
@@ -59,7 +61,6 @@ export interface WeaponStats {
     damage: number;
     fireRate: number;
     pierce: number;
-    multiShot: number;
     drone: number;
     bulletSpeed: number;
 }

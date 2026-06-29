@@ -25,6 +25,9 @@ export class AudioManager {
     currentBgmName = '';
     sfxVolume = 0.72;
     bgmVolume = 0.34;
+    bgmFadeTimer = 0;
+    bgmFadeOutName = '';
+    bgmPendingName = '';
 
     constructor(public ctx: AudioHostContext) {}
 
@@ -84,12 +87,17 @@ export class AudioManager {
                 break;
             case 'laser':
             case 'pulse':
-            case 'disc':
-            case 'scythe':
                 this.playSfx('sfx_shoot_laser', 0.68, 0.08);
                 break;
+            case 'meteor':
+                this.playSfx('sfx_shoot_meteor', 0.72, 0.14);
+                break;
+            case 'disc':
+            case 'scythe':
+                this.playSfx('sfx_shoot_disc', 0.68, 0.1);
+                break;
             default:
-                this.playSfx('sfx_shoot_rifle', 0.64, 0.055);
+                this.playSfx('sfx_shoot_default', 0.64, 0.055);
                 break;
         }
     }
@@ -104,12 +112,49 @@ export class AudioManager {
         const clip = this.bgmClips.get(this.currentBgmName);
         if (!clip) return;
         if (!forceRestart && this.bgmSource.clip === clip && this.bgmSource.playing) return;
-        this.bgmSource.stop();
-        this.bgmSource.clip = clip;
-        this.bgmSource.loop = true;
-        this.bgmSource.volume = this.bgmVolume;
-        this.bgmSource.play();
+        // Crossfade: fade out current, then play new
+        if (this.bgmSource.playing && this.bgmSource.clip) {
+            this.bgmFadeOutName = this.currentBgmName;
+            this.bgmFadeTimer = 0.4;
+            this.bgmPendingName = this.currentBgmName;
+            this.bgmPendingClip = clip;
+        } else {
+            this.bgmSource.stop();
+            this.bgmSource.clip = clip;
+            this.bgmSource.loop = true;
+            this.bgmSource.volume = this.bgmVolume;
+            this.bgmSource.play();
+        }
     }
+
+    updateBgmFade(dt: number): void {
+        if (this.bgmFadeTimer <= 0 || !this.bgmSource) return;
+        this.bgmFadeTimer -= dt;
+        const progress = 1 - Math.max(0, this.bgmFadeTimer / 0.4);
+        if (progress < 0.6) {
+            // Fade out
+            this.bgmSource.volume = this.bgmVolume * (1 - progress / 0.6);
+        } else if (progress < 0.65) {
+            // Swap clip at ~60% through
+            this.bgmSource.stop();
+            const pending = this.bgmPendingClip;
+            if (pending) {
+                this.bgmSource.clip = pending;
+                this.bgmSource.loop = true;
+                this.bgmSource.volume = 0;
+                this.bgmSource.play();
+            }
+        } else {
+            // Fade in
+            const fadeIn = (progress - 0.65) / 0.35;
+            this.bgmSource.volume = this.bgmVolume * fadeIn;
+            if (progress >= 1) {
+                this.bgmFadeTimer = 0;
+                this.bgmSource.volume = this.bgmVolume;
+            }
+        }
+    }
+    private bgmPendingClip: AudioClip | null = null;
 
     requestPhaseBgm(): void {
         if (this.ctx.cs.phase === 'combat') {

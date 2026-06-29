@@ -46,6 +46,12 @@ export class PanelManager {
     bgmToggleButton: ButtonView | null = null;
     sfxToggleButton: ButtonView | null = null;
 
+    // Revive panel
+    revivePanel: Node | null = null;
+    reviveTitleLabel: Label | null = null;
+    reviveWatchButton: ButtonView | null = null;
+    reviveDeclineButton: ButtonView | null = null;
+
     // Info panel
     infoPanel: Node | null = null;
     infoPanelShadow: Node | null = null;
@@ -90,6 +96,10 @@ export class PanelManager {
     upgradeActionButton: ButtonView | null = null;
     equipmentDetailLabel: Label | null = null;
     startButton: ButtonView | null = null;
+    preBuffButton: ButtonView | null = null;
+    preBuffLabel: Label | null = null;
+    extractDoubleButton: ButtonView | null = null;
+    buffLabel: Label | null = null;
 
     /** Hide all overlay panels (menu, pause, settings, info, level, shop, hangar). */
     hideAllOverlays(): void {

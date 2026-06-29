@@ -1,6 +1,6 @@
 {
-  "ver": "0.0.1",
-  "importer": "*",
+  "ver": "2.0.1",
+  "importer": "json",
   "imported": true,
   "uuid": "a504a8f9-5cc4-481c-92e6-caf86c4f502f",
   "files": [

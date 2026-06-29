@@ -19,6 +19,13 @@ export const ENEMY_SEPARATION_MAX_CHECKS = 18;
 export const ENEMY_PROJECTILE_LIMIT = 140;
 export const MAX_CHESTS_PER_WAVE = 2;
 export const ENEMY_HIT_FLASH_DURATION = 0.14;
+
+// ── Difficulty scaling ────────────────────────────────────────────
+export const ENEMY_HP_PROGRESS_SCALE = 2.5;
+export const ENEMY_DAMAGE_PROGRESS_SCALE = 1.3;
+/** 11 波后的无尽模式：每波指数增长 5% */
+export const ENDLESS_SCALE_RATE = 0.05;
+export const ENDLESS_START_WAVE = 11;
 export const ENEMY_STATUS_KEY_ARMOR = 'armor';
 export const ENEMY_STATUS_KEY_DASH = 'dash';
 export const ENEMY_SEP_INTERVAL = 0.12;
@@ -28,9 +35,10 @@ export const ENEMY_CROWD_REPEL_RADIUS = 96;
 export const ENEMY_CROWD_MAX_NEIGHBORS = 8;
 export const ENEMY_CROWD_REPEL_WEIGHT = 1.45;
 export const ENEMY_CROWD_ORBIT_WEIGHT = 0.35;
+export const FAR_CULL_DIST_SQ = 3240000; // 1800²: enemies farther than this get simplified movement
 
 // ── Drop rates ────────────────────────────────────────────────────
-export const NORMAL_XP_DROP_CHANCE = 0.38;
+export const NORMAL_XP_DROP_CHANCE = 0.56;
 export const ELITE_XP_DROP_CHANCE = 0.82;
 export const NORMAL_ALLOY_DROP_MULTIPLIER = 0.55;
 export const NORMAL_MATERIAL_DROP_CHANCE = 0.045;

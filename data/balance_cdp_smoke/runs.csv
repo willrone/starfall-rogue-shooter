@@ -1,0 +1,2 @@
+weapon_id,weapon_name,cost,target_profile,run,final_wave,combat_time,kills,level,alloy,phase,hp,died
+storm-rifle,风暴步枪,38,novice,1,4,180.41,17,2,46,paused,0.0,True

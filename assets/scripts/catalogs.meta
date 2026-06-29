@@ -1,6 +1,6 @@
 {
-  "ver": "0.0.1",
-  "importer": "*",
+  "ver": "1.2.0",
+  "importer": "directory",
   "imported": true,
   "uuid": "0a672af8-46ee-4b8d-981f-08d8a92e85a1",
   "files": [],

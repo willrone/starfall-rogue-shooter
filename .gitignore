@@ -4,6 +4,18 @@ local/
 build/
 profiles/
 node_modules/
+.codegraph/
+
+# OS / editor noise
 .DS_Store
 *.log
-.codegraph/
+
+# Python tool caches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local runtime scratch
+*.pid

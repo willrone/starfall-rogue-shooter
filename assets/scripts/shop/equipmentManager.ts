@@ -1,9 +1,25 @@
-import { Color, Graphics, Label, Node, sys, Vec2 } from 'cc';
+import { Color, Graphics, Label, Layers, Node, Sprite, SpriteFrame, UITransform, sys, Vec2 } from 'cc';
 import { PanelManager } from '../ui/panels';
 import { CombatState } from '../state/combatState';
 import { EQUIPMENT, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from '../catalogs/equipmentCatalog';
-import { WEAPON_CATALOG, WEAPON_COUNT, getWeaponStyleName } from '../catalogs/weaponCatalog';
+import { WEAPON_CATALOG, WEAPON_COUNT, getWeaponStyleName, getWeaponTierForId } from '../catalogs/weaponCatalog';
 import { RUN_ITEMS, RUN_ITEM_COUNT, formatRunItemEffect } from '../catalogs/runItemCatalog';
+import {
+    applyEquipmentLootChoiceSpec,
+    createEquipmentLootChoiceSpecs,
+    type EquipmentLootChoiceSpec,
+} from '../catalogs/equipmentLootChoices';
+import {
+    formatEquipmentBlueprintProgress,
+    getEquipmentBlueprintCount,
+    getEquipmentBlueprintRequirement,
+    getEquipmentUnlockReason as getProgressionUnlockReason,
+    hasEquipmentBlueprints,
+    isEquipmentCraftable as isProgressionEquipmentCraftable,
+    isEquipmentDiscoverable as isProgressionEquipmentDiscoverable,
+    isEquipmentLootEligible as isProgressionEquipmentLootEligible,
+    type EquipmentProgressionState,
+} from '../catalogs/equipmentProgression';
 import {
     createEmptyWallet as createResourceWallet,
     formatWallet as formatResourceWallet,
@@ -16,8 +32,10 @@ import type {
     LevelUpgrade,
     GearSlot,
     CharacterStats,
+    WeaponStats,
     LootChoice,
 } from '../core/types';
+import { AdManager } from '../ad/AdManager';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const SHOP_REFRESH_COST = 22;
@@ -36,6 +54,9 @@ const GEAR_SLOT_LABELS: Record<GearSlot, string> = {
     boots: '鞋子',
     accessory: '首饰',
 };
+
+const BLUEPRINT_DROP_CHANCE_BASE = 0.16;
+const BLUEPRINT_DROP_CHANCE_MAX = 0.26;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ButtonView {
@@ -74,11 +95,13 @@ export interface ShopHostContext {
     updateJoystickView(): void;
     touchActive: boolean;
     touchVector: Vec2;
+    getIcon(name: string): SpriteFrame | null;
 }
 
 // ── EquipmentManager ───────────────────────────────────────────────────────
 export class EquipmentManager {
     equipmentLevels: Record<string, number> = {};
+    equipmentBlueprints: Record<string, number> = {};
     ownedEquipment = new Set<string>();
     equippedEquipment: string[] = [];
     selectedEquipmentId = '';
@@ -87,6 +110,57 @@ export class EquipmentManager {
     shopOffers: (LevelUpgrade | null)[] = [];
 
     private ctx: ShopHostContext;
+
+    // ── Equipment → icon key mapping ──────────────────────────────────
+    private equipIconKey(equipment: EquipmentDef): string {
+        if (equipment.id.startsWith('wpn_') || equipment.id.startsWith('weapon_')) {
+            // Map weapon id to icon key: weapon_storm_rifle → wpn_assault_rifle
+            const id = equipment.id.replace('weapon_', '').replace('wpn_', '');
+            const map: Record<string, string> = {
+                'storm_rifle': 'wpn_assault_rifle', 'split_barrel': 'wpn_shotgun',
+                'rail_cannon': 'wpn_railgun', 'nova_shotgun': 'wpn_shotgun',
+                'ion_lance': 'wpn_laser_gun', 'orbital_drone': 'wpn_drone_spirit',
+                'pulse_rifle': 'wpn_assault_rifle', 'tesla_coil': 'wpn_tesla',
+                'meteor_launcher': 'wpn_meteor', 'chain_lightning': 'wpn_chain_lightning',
+                'frost_emitter': 'wpn_ice_gun', 'inferno_cannon': 'wpn_fire_wand',
+                'venom_sprayer': 'wpn_poison_sprayer', 'arc_crossbow': 'wpn_crossbow',
+            };
+            return map[id] || 'wpn_assault_rifle';
+        }
+        if (equipment.gearSlot) {
+            const slotMap: Record<string, string> = {
+                'hat': 'slot_helmet', 'armor': 'slot_armor',
+                'boots': 'slot_boots', 'accessory': 'slot_accessory',
+            };
+            return slotMap[equipment.gearSlot] || 'stat_shield';
+        }
+        const runMap: Record<string, string> = {
+            'reactor_core': 'resource_core', 'magnet_coil': 'stat_lightning_def',
+            'vampire_chip': 'stat_hp', 'phase_armor': 'stat_defense',
+            'kinetic_boots': 'stat_attack_speed', 'tactical_visor': 'stat_crit_chance',
+        };
+        return runMap[equipment.id] || 'stat_shield';
+    }
+
+    // ── Button icon helper ───────────────────────────────────────────
+    private setButtonIcon(button: ButtonView, iconKey: string): void {
+        const nodeName = `${button.node.name}_Icon`;
+        let iconNode = button.node.getChildByName(nodeName);
+        const sf = iconKey ? this.ctx.getIcon(iconKey) : null;
+        if (!sf) { if (iconNode) iconNode.active = false; return; }
+        if (!iconNode) {
+            iconNode = new Node(nodeName);
+            iconNode.layer = Layers.Enum.UI_2D;
+            button.node.addChild(iconNode);
+            const it = iconNode.addComponent(UITransform);
+            it.setContentSize(24, 24);
+            iconNode.addComponent(Sprite).sizeMode = Sprite.SizeMode.CUSTOM;
+        }
+        const sp = iconNode!.getComponent(Sprite)!;
+        sp.spriteFrame = sf;
+        iconNode!.setPosition(-button.width / 2 + 20, 0);
+        iconNode!.active = true;
+    }
 
     constructor(ctx: ShopHostContext) {
         this.ctx = ctx;
@@ -101,6 +175,7 @@ export class EquipmentManager {
         this.ctx.cs.circuits = 10;
         this.ctx.cs.crystals = 0;
         this.equipmentLevels = {};
+        this.equipmentBlueprints = {};
         for (const id of STARTER_EQUIPMENT_IDS) this.equipmentLevels[id] = 1;
         try {
             const raw = sys.localStorage.getItem(SAVE_KEY);
@@ -118,6 +193,9 @@ export class EquipmentManager {
             }
             if (data.equipmentLevels && typeof data.equipmentLevels === 'object') {
                 this.equipmentLevels = data.equipmentLevels;
+            }
+            if (data.equipmentBlueprints && typeof data.equipmentBlueprints === 'object') {
+                this.equipmentBlueprints = data.equipmentBlueprints;
             }
             if (Array.isArray(data.equippedEquipment)) {
                 this.equippedEquipment = data.equippedEquipment.filter((id: string) => typeof id === 'string');
@@ -144,6 +222,7 @@ export class EquipmentManager {
                 ownedEquipment: [...this.ownedEquipment],
                 equippedEquipment: this.equippedEquipment,
                 equipmentLevels: this.equipmentLevels,
+                equipmentBlueprints: this.equipmentBlueprints,
             }));
         } catch (error) {
             console.warn('Failed to save rogue shooter progress', error);
@@ -166,6 +245,30 @@ export class EquipmentManager {
     getEquipmentLevel(id: string): number {
         if (!this.ownedEquipment.has(id)) return 0;
         return Math.max(1, Math.floor(this.equipmentLevels[id] || 1));
+    }
+
+    private getProgressionState(): EquipmentProgressionState {
+        return {
+            battlesWon: this.ctx.cs.battlesWon,
+            ownedEquipment: this.ownedEquipment,
+            equipmentBlueprints: this.equipmentBlueprints,
+        };
+    }
+
+    getBlueprintCount(id: string): number {
+        return getEquipmentBlueprintCount(this.getProgressionState(), id);
+    }
+
+    getBlueprintRequirement(equipment: EquipmentDef): number {
+        return getEquipmentBlueprintRequirement(equipment);
+    }
+
+    hasRequiredBlueprints(equipment: EquipmentDef): boolean {
+        return hasEquipmentBlueprints(this.getProgressionState(), equipment);
+    }
+
+    formatBlueprintProgress(equipment: EquipmentDef): string {
+        return formatEquipmentBlueprintProgress(this.getProgressionState(), equipment);
     }
 
     getActiveEquipmentLevel(id: string): number {
@@ -215,6 +318,53 @@ export class EquipmentManager {
         return this.getOwnedWeapons().length;
     }
 
+    getEquipmentUnlockReason(equipment: EquipmentDef): string {
+        return getProgressionUnlockReason(this.getProgressionState(), equipment);
+    }
+
+    isEquipmentDiscoverable(equipment: EquipmentDef): boolean {
+        return isProgressionEquipmentDiscoverable(this.getProgressionState(), equipment);
+    }
+
+    isEquipmentCraftable(equipment: EquipmentDef): boolean {
+        return isProgressionEquipmentCraftable(this.getProgressionState(), equipment);
+    }
+
+    isEquipmentLootEligible(equipment: EquipmentDef, rare: boolean): boolean {
+        return isProgressionEquipmentLootEligible(this.getProgressionState(), equipment, rare);
+    }
+
+    tryDropBossBlueprint(): EquipmentDef | null {
+        const dropChance = Math.min(
+            BLUEPRINT_DROP_CHANCE_MAX,
+            BLUEPRINT_DROP_CHANCE_BASE + Math.max(0, this.ctx.cs.battlesWon) * 0.006,
+        );
+        if (Math.random() >= dropChance) return null;
+
+        const candidates = WEAPON_CATALOG.filter((weapon) => {
+            if (this.ownedEquipment.has(weapon.id)) return false;
+            if (!this.isEquipmentDiscoverable(weapon)) return false;
+            const required = this.getBlueprintRequirement(weapon);
+            if (required <= 0) return false;
+            return this.getBlueprintCount(weapon.id) < required;
+        });
+        if (candidates.length <= 0) return null;
+
+        const weighted: EquipmentDef[] = [];
+        for (const weapon of candidates) {
+            const tier = getWeaponTierForId(weapon.id);
+            const missing = this.getBlueprintRequirement(weapon) - this.getBlueprintCount(weapon.id);
+            const weight = Math.max(1, Math.min(6, missing + Math.floor(tier / 3)));
+            for (let i = 0; i < weight; i++) weighted.push(weapon);
+        }
+        const target = this.ctx.shuffle(weighted)[0] || candidates[0];
+        this.equipmentBlueprints[target.id] = this.getBlueprintCount(target.id) + 1;
+        this.saveProgress();
+        this.refreshEquipmentButtons();
+        this.ctx.showToast(`Boss 数据芯片解析成功：${target.name} 蓝图 ${this.getBlueprintCount(target.id)}/${this.getBlueprintRequirement(target)}`);
+        return target;
+    }
+
     // ── Warehouse / hangar display ───────────────────────────────────────
     getWarehouseSortScore(equipment: EquipmentDef): number {
         if (this.isEquipped(equipment.id)) return 0;
@@ -225,7 +375,7 @@ export class EquipmentManager {
     }
 
     getWarehouseEquipmentList(): EquipmentDef[] {
-        return [...EQUIPMENT].sort((a, b) => {
+        return EQUIPMENT.filter((equipment) => this.isEquipmentDiscoverable(equipment)).sort((a, b) => {
             const aScore = this.getWarehouseSortScore(a);
             const bScore = this.getWarehouseSortScore(b);
             if (aScore !== bScore) return aScore - bScore;
@@ -336,35 +486,45 @@ export class EquipmentManager {
         const level = this.getEquipmentLevel(equipment.id);
         const cost = this.createEmptyWallet();
         if (equipment.kind === 'weapon') {
-            cost.shards = Math.ceil(level * 1.8 + equipment.baseCost / 38);
-            cost.circuits = Math.ceil(level * 1.05 + equipment.baseCost / 70);
+            // 武器升级成本: 线性递增, 高等级需核心/晶体
+            cost.shards = 8 + Math.ceil(level * 3 + equipment.baseCost / 30);
+            cost.circuits = 5 + Math.ceil(level * 2 + equipment.baseCost / 50);
         } else {
             const slot = equipment.gearSlot || 'accessory';
             const base = Math.max(1, equipment.baseCost);
             if (slot === 'hat') {
-                cost.circuits = Math.ceil(level * 1.25 + base / 58);
-                cost.shards = Math.ceil(level * 1.1 + base / 64);
+                cost.circuits = 6 + Math.ceil(level * 2.5 + base / 48);
+                cost.shards = 4 + Math.ceil(level * 2 + base / 56);
             } else if (slot === 'armor') {
-                cost.biomass = Math.ceil(level * 1.65 + base / 46);
-                cost.cores = Math.max(cost.cores, Math.floor(level / 4));
+                cost.biomass = 8 + Math.ceil(level * 3 + base / 38);
+                cost.cores = Math.max(cost.cores, Math.floor(level / 3));
             } else if (slot === 'boots') {
-                cost.biomass = Math.ceil(level * 1.15 + base / 60);
-                cost.circuits = Math.ceil(level * 1.1 + base / 68);
+                cost.biomass = 6 + Math.ceil(level * 2 + base / 50);
+                cost.circuits = 4 + Math.ceil(level * 2.2 + base / 58);
             } else {
-                cost.shards = Math.ceil(level * 1.45 + base / 48);
-                cost.circuits = Math.ceil(level * 0.9 + base / 78);
+                cost.shards = 8 + Math.ceil(level * 2.8 + base / 40);
+                cost.circuits = 3 + Math.ceil(level * 1.8 + base / 68);
             }
         }
-        if (level >= 4) cost.cores = Math.ceil((level - 3) / 2);
-        if (level >= 7) cost.crystals = Math.ceil((level - 6) / 2);
+        if (level >= 4) cost.cores = Math.max(cost.cores || 0, Math.ceil((level - 2) / 2));
+        if (level >= 7) cost.crystals = Math.max(cost.crystals || 0, Math.ceil((level - 5) / 2));
         return cost;
     }
 
     getCraftCost(equipment: EquipmentDef): ResourceWallet {
         const cost = this.createEmptyWallet();
         if (equipment.kind === 'weapon') {
-            cost.shards = 18 + Math.ceil(equipment.baseCost / 14);
-            cost.circuits = 6 + Math.ceil(equipment.baseCost / 26);
+            const tier = getWeaponTierForId(equipment.id);
+            if (tier <= 3) {
+                cost.shards = 18 + Math.ceil(equipment.baseCost / 14) + tier * 5;
+                cost.circuits = 6 + Math.ceil(equipment.baseCost / 26) + tier * 2;
+            } else {
+                cost.shards = Math.ceil(42 + equipment.baseCost / 6 + tier * tier * 4.2);
+                cost.circuits = Math.ceil(14 + equipment.baseCost / 14 + tier * tier * 1.8);
+                cost.cores = Math.ceil((tier - 3) * 1.35);
+                if (tier >= 5) cost.crystals = Math.ceil((tier - 4) * 0.9);
+                if (equipment.baseCost >= 160) cost.crystals += 1;
+            }
         } else {
             const slot = equipment.gearSlot || 'accessory';
             if (slot === 'hat') {
@@ -381,8 +541,10 @@ export class EquipmentManager {
                 cost.circuits = 4 + Math.ceil(equipment.baseCost / 52);
             }
         }
-        if (equipment.baseCost >= 60) cost.crystals = 1;
-        if (equipment.baseCost >= 160) cost.crystals += 1;
+        if (equipment.kind !== 'weapon') {
+            if (equipment.baseCost >= 60) cost.crystals = 1;
+            if (equipment.baseCost >= 160) cost.crystals += 1;
+        }
         return cost;
     }
 
@@ -418,13 +580,16 @@ export class EquipmentManager {
             const dmg = equipment.weaponStats.damage * detailLevel;
             const rate = equipment.weaponStats.fireRate * detailLevel;
             const pier = equipment.weaponStats.pierce * detailLevel;
-            const multi = equipment.weaponStats.multiShot * detailLevel;
             lines.push(`伤害 ${this.formatStat(dmg)}  |  射速 ${this.formatStat(rate)}次/秒  |  穿透 ${this.formatStat(pier)}`);
-            lines.push(`弹丸 +${this.formatStat(multi)}  |  弹速倍率 ${this.formatStat(equipment.weaponStats.bulletSpeed * detailLevel)}`);
+            lines.push(`弹速倍率 ${this.formatStat(equipment.weaponStats.bulletSpeed * detailLevel)}`);
         } else {
             lines.push(this.formatGearStats(equipment, detailLevel));
         }
         if (!owned) {
+            const blueprint = this.formatBlueprintProgress(equipment);
+            if (blueprint) lines.push(blueprint);
+            const reason = this.getEquipmentUnlockReason(equipment);
+            if (reason) lines.push(`解锁条件：${reason}`);
             lines.push(`合成消耗：${this.formatCost(this.getCraftCost(equipment))}`);
         } else if (level < equipment.maxLevel) {
             lines.push(`升级消耗：${this.formatCost(this.getUpgradeCost(equipment))}`);
@@ -456,6 +621,15 @@ export class EquipmentManager {
         const available = RUN_ITEMS.filter((item) => item.tier <= maxTier && !excluded.has(item.id));
         const fallback = RUN_ITEMS.filter((item) => item.tier <= maxTier && !this.ctx.pickupMgr.acquiredRunItemIds.has(item.id));
         const pool = available.length > 0 ? available : fallback.length > 0 ? fallback : RUN_ITEMS.filter((item) => item.tier <= maxTier);
+        // 11 波后：高 tier 道具权重更高，鼓励玩家花钱买强力道具迎战无尽模式
+        if (pool.length > 0 && this.ctx.cs.waveIndex >= 11) {
+            const weighted: LevelUpgrade[] = [];
+            for (const item of pool) {
+                const weight = Math.max(1, item.tier);
+                for (let w = 0; w < weight; w++) weighted.push(item);
+            }
+            return this.ctx.shuffle(weighted)[0];
+        }
         return this.pickDistinctItems(pool, 1)[0] || RUN_ITEMS[0];
     }
 
@@ -478,6 +652,11 @@ export class EquipmentManager {
 
     getRunItemTierLimit(): number {
         const minutes = Math.floor(this.ctx.cs.combatTime / 150);
+        // 11 波后：逐步解锁更高 tier，最高 10
+        if (this.ctx.cs.waveIndex >= 11) {
+            const endlessTier = Math.floor((this.ctx.cs.waveIndex - 10) / 3) + 2;
+            return this.ctx.clamp(endlessTier + minutes, 2, 10);
+        }
         return this.ctx.clamp(2 + Math.floor(this.ctx.cs.endlessCycle / 2) + minutes, 2, 5);
     }
 
@@ -485,7 +664,12 @@ export class EquipmentManager {
         const waveFee = Math.floor(this.ctx.cs.waveIndex / 4) * 5;
         const cycleFee = (this.ctx.cs.endlessCycle - 1) * 10;
         const baseCost = 44 + item.tier * 22 + waveFee + cycleFee;
-        return Math.max(50, Math.round(baseCost * this.getRunItemShopPriceMultiplier(item)));
+        // 11 波后：每波价格指数增长 5%
+        let endlessMultiplier = 1;
+        if (this.ctx.cs.waveIndex >= 11) {
+            endlessMultiplier = Math.pow(1.05, this.ctx.cs.waveIndex - 10);
+        }
+        return Math.max(50, Math.round(baseCost * this.getRunItemShopPriceMultiplier(item) * endlessMultiplier));
     }
 
     getRunItemShopPriceMultiplier(item: LevelUpgrade): number {
@@ -499,6 +683,12 @@ export class EquipmentManager {
             const amount = effect.amount;
             if (amount > 0) {
                 switch (effect.stat) {
+                    case 'weaponDamagePct':
+                        offense += amount * 5.2;
+                        break;
+                    case 'weaponFireRatePct':
+                        offense += amount * 5.5;
+                        break;
                     case 'attackPower':
                         offense += amount / 18;
                         break;
@@ -506,10 +696,10 @@ export class EquipmentManager {
                         offense += amount * 3.5;
                         break;
                     case 'pierce':
-                        offense += amount * 0.55;
+                        offense += amount * 0.45;
                         break;
-                    case 'multiShot':
-                        offense += amount * 0.5;
+                    case 'pierceDamagePct':
+                        offense += amount * 2.2;
                         break;
                     case 'dronePower':
                         offense += amount * 0.26;
@@ -617,10 +807,22 @@ export class EquipmentManager {
         this.ctx.showToast(`购买本局道具：${item.name}，该格已补货。`);
     }
 
+    chooseShopItemByIndex(index: number): void {
+        this.buyShopItem(index);
+    }
+
     refreshShopSlot(index: number) {
         if (this.ctx.cs.phase !== 'shop') return;
         if (!this.spendRunAlloy(SHOP_REFRESH_COST)) {
-            this.ctx.showToast(`合金不足，刷新需要 ${SHOP_REFRESH_COST}。`);
+            AdManager.playRewardedAd((result) => {
+                if (!result.success) {
+                    this.ctx.showToast('刷新失败，请重试。');
+                    return;
+                }
+                this.shopOffers[index] = this.pickShopOfferForSlot(index);
+                this.renderShop();
+                this.ctx.showToast('看视频免费刷新！');
+            });
             return;
         }
         this.shopOffers[index] = this.pickShopOfferForSlot(index);
@@ -648,6 +850,7 @@ export class EquipmentManager {
             button.color = item.color;
             button.label.string = `${item.category} T${item.tier}  合金${cost}\n${item.name}\n${item.desc}`;
             this.ctx.drawButton(button, this.getSpendableAlloy() < cost);
+            this.setButtonIcon(button, item.id.startsWith('fire-') || item.id.startsWith('neural-') ? 'stat_attack_power' : 'stat_shield');
         });
         this.ctx.panels.shopSlotRefreshButtons.forEach((button: ButtonView) => {
             button.label.string = `刷新此格 -${SHOP_REFRESH_COST}`;
@@ -689,63 +892,37 @@ export class EquipmentManager {
     }
 
     createLootChoices(): LootChoice[] {
-        const choices: LootChoice[] = [];
-        const locked = this.ctx.shuffle(EQUIPMENT.filter((equipment) => !this.ownedEquipment.has(equipment.id)));
-        if (locked.length > 0) {
-            const unlock = locked[0];
-            choices.push({
-                title: `新装备：${unlock.name}`,
-                desc: unlock.desc,
-                color: unlock.color,
-                apply: () => {
-                    this.ownedEquipment.add(unlock.id);
-                    this.equipmentLevels[unlock.id] = Math.max(1, this.getEquipmentLevel(unlock.id));
-                },
-            });
-        }
+        return createEquipmentLootChoiceSpecs({
+            ownedEquipment: this.ownedEquipment,
+            equipmentLevels: this.equipmentLevels,
+            battleIndex: this.ctx.cs.battleIndex,
+            getEquipmentLevel: (id: string) => this.getEquipmentLevel(id),
+            isEquipmentLootEligible: (equipment, rare) => this.isEquipmentLootEligible(equipment, rare),
+        }, (items) => this.ctx.shuffle(items), true).map((spec) => this.toLootChoice(spec));
+    }
 
-        const owned = this.ctx.shuffle(EQUIPMENT.filter((equipment) => this.ownedEquipment.has(equipment.id) && this.getEquipmentLevel(equipment.id) < equipment.maxLevel));
-        for (const equipment of owned.slice(0, 2)) {
-            choices.push({
-                title: `强化：${equipment.name}`,
-                desc: `免费升 1 级。${equipment.desc}`,
-                color: equipment.color,
-                apply: () => {
-                    this.equipmentLevels[equipment.id] = Math.min(equipment.maxLevel, this.getEquipmentLevel(equipment.id) + 1);
-                },
-            });
-        }
+    private toLootChoice(spec: EquipmentLootChoiceSpec): LootChoice {
+        return {
+            title: spec.title,
+            desc: spec.desc,
+            color: spec.color,
+            apply: () => this.applyLootChoiceSpec(spec),
+        };
+    }
 
-        choices.push({
-            title: '资源箱',
-            desc: '立刻获得装备碎片、生体样本、电路板和 1 核心。',
-            color: '#43AA8B',
-            apply: () => {
-                this.ctx.cs.shards += 8 + this.ctx.cs.battleIndex * 2;
-                this.ctx.cs.biomass += 5 + this.ctx.cs.battleIndex;
-                this.ctx.cs.circuits += 4 + Math.floor(this.ctx.cs.battleIndex / 2);
-                this.ctx.cs.cores += 1;
+    private applyLootChoiceSpec(spec: EquipmentLootChoiceSpec): void {
+        applyEquipmentLootChoiceSpec({
+            ownedEquipment: this.ownedEquipment,
+            equipmentLevels: this.equipmentLevels,
+            getEquipmentLevel: (id: string) => this.getEquipmentLevel(id),
+            addResources: (wallet: ResourceWallet) => {
+                this.ctx.cs.shards += wallet.shards;
+                this.ctx.cs.biomass += wallet.biomass;
+                this.ctx.cs.circuits += wallet.circuits;
+                this.ctx.cs.cores += wallet.cores;
+                this.ctx.cs.crystals += wallet.crystals;
             },
-        });
-
-        while (choices.length < 3) {
-            const equipment = owned[choices.length % Math.max(1, owned.length)] || EQUIPMENT[0];
-            choices.push({
-                title: `校准：${equipment.name}`,
-                desc: '免费升 1 级，若已满级则转化为装备碎片和核心。',
-                color: equipment.color,
-                apply: () => {
-                    if (this.getEquipmentLevel(equipment.id) < equipment.maxLevel) {
-                        this.equipmentLevels[equipment.id] = this.getEquipmentLevel(equipment.id) + 1;
-                    } else {
-                        this.ctx.cs.shards += 10;
-                        this.ctx.cs.cores += 1;
-                    }
-                },
-            });
-        }
-
-        return this.ctx.shuffle(choices).slice(0, 3);
+        }, spec);
     }
 
     selectVisibleEquipment(index: number) {
@@ -854,6 +1031,11 @@ export class EquipmentManager {
 
     craftEquipment(equipment: EquipmentDef) {
         if (this.ownedEquipment.has(equipment.id)) return;
+        const reason = this.getEquipmentUnlockReason(equipment);
+        if (reason) {
+            this.ctx.showToast(reason);
+            return;
+        }
         const cost = this.getCraftCost(equipment);
         if (!this.hasResources(cost)) {
             this.ctx.showToast(`合成资源不足：需要 ${this.formatCost(cost)}`);
@@ -867,6 +1049,30 @@ export class EquipmentManager {
         this.refreshEquipmentButtons();
         this.ctx.refreshHud();
         this.ctx.showToast(`合成新装备：${equipment.name}`);
+    }
+
+    // ── Upgrade preview ─────────────────────────────────────────────────
+    /** 返回选中装备的升级预览文本（下一级属性变化 + 花费） */
+    private getUpgradePreviewText(equipment: EquipmentDef): string {
+        const level = this.getEquipmentLevel(equipment.id);
+        if (level >= equipment.maxLevel) return '已达到最高等级。';
+        if (equipment.kind === 'weapon') {
+            const ws = equipment.weaponStats;
+            if (!ws) return '';
+            // 武器每级固定增长比例（与 projectileManager.ts 对齐）
+            const dmgBonus = 0.12 * 100;
+            const rateBonus = 0.10 * 100;
+            const pieBonus = 0.10 * 100;
+            const parts: string[] = [`伤害+${dmgBonus.toFixed(0)}%`, `射速+${rateBonus.toFixed(0)}%`];
+            if (ws.pierce > 0) parts.push(`穿透+${pieBonus.toFixed(0)}%`);
+            if (ws.drone > 0) parts.push('无人机+8%');
+            const cost = this.getUpgradeCost(equipment);
+            return `下一级: ${parts.join(' ')}  花费 ${this.formatCost(cost)}`;
+        } else {
+            // 装备每级固定 +100% 效果（gearStats × level，每升一级 +1）
+            const cost = this.getUpgradeCost(equipment);
+            return `下一级: 属性效果+100%  花费 ${this.formatCost(cost)}`;
+        }
     }
 
     // ── Equipment button refresh ─────────────────────────────────────────
@@ -888,10 +1094,15 @@ export class EquipmentManager {
             button.color = selected ? '#0F172A' : equipped ? '#2563EB' : owned ? equipment.color : '#64748B';
             if (!owned) {
                 button.label.string = `${equipment.name}\n未获得`;
+            } else if (selected && level < equipment.maxLevel) {
+                // 选中且可升级 → 显示升级预览
+                const preview = this.getUpgradePreviewText(equipment);
+                button.label.string = `${equipment.name} Lv.${level}\n${equipped ? '出战中' : '仓库中'} 选中\n${preview}`;
             } else {
                 button.label.string = `${equipment.name} Lv.${level}\n${equipped ? '出战中' : '仓库中'}${selected ? '  选中' : ''}`;
             }
             this.ctx.drawButton(button, false);
+            this.setButtonIcon(button, this.equipIconKey(equipment));
         });
         this.refreshHangarActions();
         if (this.ctx.panels.hangarStatsLabel && this.ctx.cs.phase === 'hangar') {
@@ -915,12 +1126,14 @@ export class EquipmentManager {
                 button.color = '#1E293B';
                 button.label.string = `${slotName}\n空`;
                 this.ctx.drawButton(button, false);
+                this.setButtonIcon(button, index < MAX_EQUIPPED_WEAPONS ? 'wpn_assault_rifle' : 'stat_shield');
                 return;
             }
             const level = this.getEquipmentLevel(equipment.id);
             button.color = equipment.id === this.selectedEquipmentId ? '#0F172A' : equipment.color;
             button.label.string = `${slotName}\n${equipment.name} Lv.${level}`;
             this.ctx.drawButton(button, false);
+            this.setButtonIcon(button, this.equipIconKey(equipment));
         });
     }
 
@@ -952,8 +1165,9 @@ export class EquipmentManager {
 
         if (this.ctx.panels.equipActionButton) {
             if (!selected || !this.ownedEquipment.has(selected.id)) {
-                this.ctx.panels.equipActionButton.label.string = selected ? '合成' : '未解锁';
-                this.ctx.drawButton(this.ctx.panels.equipActionButton, !selected || !this.hasResources(this.getCraftCost(selected)));
+                const craftable = !!selected && this.isEquipmentCraftable(selected);
+                this.ctx.panels.equipActionButton.label.string = craftable ? '合成' : '未解锁';
+                this.ctx.drawButton(this.ctx.panels.equipActionButton, !craftable || !this.hasResources(this.getCraftCost(selected)));
             } else {
                 const replacingGear = selected.kind === 'gear'
                     && !!selected.gearSlot

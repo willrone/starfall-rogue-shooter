@@ -7,11 +7,10 @@ export interface WeaponFamily {
     damage: number;
     fireRate: number;
     pierce: number;
-    multiShot: number;
     drone: number;
     bulletSpeed: number;
-    cost: number;
     desc: string;
+    mechanic?: string;
 }
 
 export interface WeaponVariant {
@@ -22,46 +21,46 @@ export interface WeaponVariant {
     damage: number;
     fireRate: number;
     pierce: number;
-    multiShot: number;
     drone: number;
     speed: number;
     cost: number;
 }
 
 export const WEAPON_FAMILIES: WeaponFamily[] = [
-    { id: 'storm-rifle', name: '风暴步枪', color: '#4CC9F0', damage: 4.5, fireRate: 1.12, pierce: 0, multiShot: 0, drone: 0, bulletSpeed: 1.1, cost: 38, desc: '稳定提升自动射击伤害和射速。' },
-    { id: 'split-barrel', name: '裂变枪管', color: '#F15BB5', damage: 3.4, fireRate: 0.5, pierce: 0.9, multiShot: 1.25, drone: 0, bulletSpeed: 0.35, cost: 52, desc: '追加散射弹、分裂弹和穿透。' },
-    { id: 'orbital-drone', name: '轨道无人机', color: '#90BE6D', damage: 1.6, fireRate: 0.18, pierce: 0, multiShot: 0, drone: 1.25, bulletSpeed: 0, cost: 58, desc: '自动电击附近怪物。' },
-    { id: 'rail-cannon', name: '磁轨炮', color: '#577590', damage: 7.2, fireRate: 0.0, pierce: 1.1, multiShot: 0, drone: 0, bulletSpeed: 1.8, cost: 62, desc: '高伤害、高弹速、偏穿透。' },
-    { id: 'nova-shotgun', name: '新星霰弹', color: '#F8961E', damage: 4.0, fireRate: 0.35, pierce: 0.2, multiShot: 1.65, drone: 0, bulletSpeed: 0.0, cost: 56, desc: '近距离多弹道爆发。' },
-    { id: 'ion-lance', name: '离子长枪', color: '#43AA8B', damage: 5.5, fireRate: 0.35, pierce: 0.9, multiShot: 0.15, drone: 0, bulletSpeed: 1.4, cost: 60, desc: '稳定穿刺线性火力。' },
-    { id: 'ember-smg', name: '余烬冲锋枪', color: '#F3722C', damage: 3.2, fireRate: 1.65, pierce: 0.15, multiShot: 0.45, drone: 0, bulletSpeed: 0.7, cost: 44, desc: '高速低伤弹幕。' },
-    { id: 'frost-beamer', name: '霜束发射器', color: '#A7F3D0', damage: 4.2, fireRate: 0.82, pierce: 0.4, multiShot: 0.3, drone: 0.12, bulletSpeed: 0.8, cost: 50, desc: '均衡火力和控场弹速。' },
-    { id: 'void-needle', name: '虚空针', color: '#B5179E', damage: 4.8, fireRate: 0.58, pierce: 1.35, multiShot: 0, drone: 0, bulletSpeed: 1.2, cost: 64, desc: '细小高穿透弹。' },
-    { id: 'sun-disc', name: '日冕飞盘', color: '#F9C74F', damage: 4.2, fireRate: 0.38, pierce: 0.55, multiShot: 0.7, drone: 0.3, bulletSpeed: 0.4, cost: 54, desc: '旋转火力和少量无人支援。' },
-    { id: 'echo-bow', name: '回声弓', color: '#38BDF8', damage: 4.6, fireRate: 0.72, pierce: 0.5, multiShot: 0.6, drone: 0, bulletSpeed: 1.0, cost: 48, desc: '中速多段弹道。' },
-    { id: 'plague-sprayer', name: '瘟疫喷射器', color: '#84CC16', damage: 3.8, fireRate: 1.1, pierce: 0.25, multiShot: 0.85, drone: 0, bulletSpeed: 0.15, cost: 46, desc: '高频散射清群。' },
-    { id: 'gravity-hammer', name: '重力锤', color: '#64748B', damage: 8.0, fireRate: -0.12, pierce: 0.6, multiShot: 0, drone: 0.15, bulletSpeed: -0.3, cost: 70, desc: '重型慢射高伤。' },
-    { id: 'mirror-prism', name: '镜像棱镜', color: '#E879F9', damage: 3.4, fireRate: 0.72, pierce: 0.3, multiShot: 1.2, drone: 0.2, bulletSpeed: 0.6, cost: 56, desc: '镜像弹道数量成长。' },
-    { id: 'meteor-launcher', name: '流星发射器', color: '#EF4444', damage: 7.0, fireRate: 0.15, pierce: 0.3, multiShot: 0.5, drone: 0, bulletSpeed: 0.25, cost: 66, desc: '重火力爆发武器。' },
-    { id: 'pulse-fan', name: '脉冲扇', color: '#22D3EE', damage: 3.2, fireRate: 1.0, pierce: 0.2, multiShot: 1.05, drone: 0, bulletSpeed: 0.75, cost: 44, desc: '扇形覆盖和高速射击。' },
-    { id: 'thorn-chain', name: '荆棘链', color: '#65A30D', damage: 3.9, fireRate: 0.42, pierce: 0.9, multiShot: 0.25, drone: 0.25, bulletSpeed: 0.45, cost: 52, desc: '穿透和链式辅助。' },
-    { id: 'star-scythe', name: '星镰', color: '#C084FC', damage: 5.6, fireRate: 0.36, pierce: 0.75, multiShot: 0.45, drone: 0, bulletSpeed: 0.9, cost: 64, desc: '后期成长型穿刺武器。' },
-    { id: 'quantum-loom', name: '量子织机', color: '#14B8A6', damage: 3.4, fireRate: 0.7, pierce: 0.45, multiShot: 0.7, drone: 0.35, bulletSpeed: 0.6, cost: 58, desc: '均衡弹幕与无人支援。' },
-    { id: 'redline-carbine', name: '红线卡宾', color: '#FB7185', damage: 4.6, fireRate: 0.82, pierce: 0.35, multiShot: 0.25, drone: 0, bulletSpeed: 1.3, cost: 54, desc: '高速精准火力。' },
+    // ── Novice (3 把) ─────────────────────────────
+    { id: 'storm-rifle', name: '风暴步枪', color: '#4CC9F0', damage: 4.6, fireRate: 1.36, pierce: 0.0, drone: 0.0, bulletSpeed: 1.0, mechanic: 'crit_stacks', desc: '均衡型入门武器。暴击时叠加攻速, 5 层封顶。' },
+    { id: 'plague-sprayer', name: '瘟疫喷射器', color: '#84CC16', damage: 1.1, fireRate: 3.18, pierce: 0.0, drone: 0.0, bulletSpeed: 0.8, mechanic: 'poison', desc: '机关枪型毒液喷射, 命中叠 5 层毒 (每层 0.4% HP/秒流失)。' },
+    { id: 'frost-beamer', name: '霜束发射器', color: '#A7F3D0', damage: 2.2, fireRate: 2.55, pierce: 0.3, drone: 0.0, bulletSpeed: 1.4, mechanic: 'slow', desc: '高频冰弹, 命中减速目标 0.4 秒。' },
+
+    // ── Standard (4 把) ─────────────────────────────
+    { id: 'echo-bow', name: '回声弓', color: '#38BDF8', damage: 6.1, fireRate: 1.18, pierce: 1.0, drone: 0.0, bulletSpeed: 1.7, mechanic: 'pierce_stacks', desc: '暴击时穿透 +1, 适合打直线敌群。' },
+    { id: 'split-barrel', name: '裂变枪管', color: '#F15BB5', damage: 3.1, fireRate: 2.09, pierce: 0.4, drone: 0.0, bulletSpeed: 1.2, mechanic: 'multishot_3', desc: '每次射击同时 3 颗扇形分布, 适合清群。' },
+    { id: 'mirror-prism', name: '镜像棱镜', color: '#E879F9', damage: 4.3, fireRate: 1.27, pierce: 0.3, drone: 0.3, bulletSpeed: 1.0, mechanic: 'radial_5', desc: '5 颗 360° 全方向散射, 清屏型武器。' },
+    { id: 'quantum-loom', name: '量子织机', color: '#14B8A6', damage: 6.6, fireRate: 1.09, pierce: 0.6, drone: 0.4, bulletSpeed: 1.0, mechanic: 'split', desc: '子弹飞行 0.5 秒后分裂成 2 颗, 范围自动扩散。' },
+
+    // ── Boss Gate (4 把) ─────────────────────────────
+    { id: 'ion-lance', name: '离子长枪', color: '#43AA8B', damage: 13.2, fireRate: 0.77, pierce: 1.5, drone: 0.0, bulletSpeed: 1.8, mechanic: 'straight', desc: '笔直弹道, 远距离命中不衰减。' },
+    { id: 'thorn-crossbow', name: '荆棘连弩', color: '#65A30D', damage: 6.6, fireRate: 1.64, pierce: 0.6, drone: 0.0, bulletSpeed: 1.6, mechanic: 'ricochet', desc: '子弹撞墙反弹 2 次, 死角反杀。' },
+    { id: 'rail-cannon', name: '磁轨炮', color: '#577590', damage: 15.6, fireRate: 0.64, pierce: 3.5, drone: 0.0, bulletSpeed: 2.5, mechanic: 'pierce_bonus', desc: '高速穿透, 每次穿透下次伤害 +8% (可叠加)。' },
+    { id: 'void-needle', name: '虚空针', color: '#B5179E', damage: 10.1, fireRate: 1.05, pierce: 1.2, drone: 0.0, bulletSpeed: 2.0, mechanic: 'crit_master', desc: '高暴击率+暴击伤害, 适合打 Boss。' },
+
+    // ── Boss Clear (3 把) ─────────────────────────────
+    { id: 'meteor-launcher', name: '流星发射器', color: '#EF4444', damage: 24.0, fireRate: 0.55, pierce: 1.0, drone: 0.0, bulletSpeed: 1.3, mechanic: 'aoe_burn', desc: '命中留下 3 秒燃烧区 (每秒 12% 攻击力的持续伤害)。' },
+    { id: 'orbital-drone', name: '轨道无人机', color: '#90BE6D', damage: 4.8, fireRate: 0.36, pierce: 0.0, drone: 2.8, bulletSpeed: 0.0, mechanic: 'drone_charge', desc: '击杀充能, 满 100% 召唤 1 个爆炸无人机。' },
+    { id: 'gravity-hammer', name: '重力锤', color: '#64748B', damage: 34.9, fireRate: 0.3, pierce: 1.0, drone: 0.5, bulletSpeed: 0.7, mechanic: 'knockback', desc: '极慢射重击, 命中强力击退, 暴击 2 倍击退。' },
 ];
 
 export const WEAPON_VARIANTS: WeaponVariant[] = [
-    { id: '', prefix: '', suffix: '', tier: 1, damage: 1, fireRate: 1, pierce: 1, multiShot: 1, drone: 1, speed: 1, cost: 1 },
-    { id: 'light', prefix: '轻型', suffix: '', tier: 2, damage: 0.86, fireRate: 1.22, pierce: 0.8, multiShot: 1.06, drone: 0.9, speed: 1.16, cost: 1.08 },
-    { id: 'pulse', prefix: '脉冲', suffix: '', tier: 3, damage: 1.04, fireRate: 1.12, pierce: 1, multiShot: 1.1, drone: 1, speed: 1.1, cost: 1.18 },
-    { id: 'accurate', prefix: '精准', suffix: '', tier: 4, damage: 1.22, fireRate: 0.92, pierce: 1.12, multiShot: 0.9, drone: 0.9, speed: 1.24, cost: 1.28 },
-    { id: 'heavy', prefix: '重载', suffix: '', tier: 5, damage: 1.48, fireRate: 0.72, pierce: 1.18, multiShot: 0.84, drone: 0.85, speed: 0.92, cost: 1.42 },
-    { id: 'rapid', prefix: '连射', suffix: '', tier: 6, damage: 0.94, fireRate: 1.55, pierce: 0.88, multiShot: 1.16, drone: 0.95, speed: 1.08, cost: 1.55 },
-    { id: 'piercing', prefix: '穿甲', suffix: '', tier: 7, damage: 1.18, fireRate: 0.96, pierce: 1.75, multiShot: 0.95, drone: 0.9, speed: 1.02, cost: 1.72 },
-    { id: 'overclock', prefix: '超频', suffix: '', tier: 8, damage: 1.22, fireRate: 1.36, pierce: 1.1, multiShot: 1.12, drone: 1.18, speed: 1.18, cost: 1.9 },
-    { id: 'resonance', prefix: '共振', suffix: '', tier: 9, damage: 1.36, fireRate: 1.08, pierce: 1.3, multiShot: 1.35, drone: 1.28, speed: 1.04, cost: 2.1 },
-    { id: 'starfall', prefix: '星陨', suffix: '', tier: 10, damage: 1.68, fireRate: 1.18, pierce: 1.55, multiShot: 1.45, drone: 1.42, speed: 1.2, cost: 2.35 },
+    { id: '', prefix: '', suffix: '', tier: 1, damage: 1, fireRate: 1, pierce: 1, drone: 1, speed: 1, cost: 1 },
+    { id: 'light', prefix: '轻型', suffix: '', tier: 2, damage: 0.86, fireRate: 1.22, pierce: 0.8, drone: 0.9, speed: 1.16, cost: 1.08 },
+    { id: 'pulse', prefix: '脉冲', suffix: '', tier: 3, damage: 1.14, fireRate: 1.12, pierce: 1, drone: 1, speed: 1.1, cost: 1.18 },
+    { id: 'accurate', prefix: '精准', suffix: '', tier: 4, damage: 1.22, fireRate: 0.92, pierce: 1.12, drone: 0.9, speed: 1.24, cost: 1.28 },
+    { id: 'heavy', prefix: '重载', suffix: '', tier: 5, damage: 1.48, fireRate: 0.72, pierce: 1.18, drone: 0.85, speed: 0.92, cost: 1.42 },
+    { id: 'rapid', prefix: '连射', suffix: '', tier: 6, damage: 0.94, fireRate: 1.55, pierce: 0.88, drone: 0.95, speed: 1.08, cost: 1.55 },
+    { id: 'piercing', prefix: '穿甲', suffix: '', tier: 7, damage: 1.18, fireRate: 0.96, pierce: 1.75, drone: 0.9, speed: 1.02, cost: 1.72 },
+    { id: 'overclock', prefix: '超频', suffix: '', tier: 8, damage: 1.22, fireRate: 1.36, pierce: 1.1, drone: 1.18, speed: 1.18, cost: 1.9 },
+    { id: 'resonance', prefix: '共振', suffix: '', tier: 9, damage: 1.36, fireRate: 1.08, pierce: 1.3, drone: 1.28, speed: 1.04, cost: 2.1 },
+    { id: 'starfall', prefix: '星陨', suffix: '', tier: 10, damage: 1.68, fireRate: 1.18, pierce: 1.55, drone: 1.42, speed: 1.2, cost: 2.35 },
 ];
 
 export function getEquipmentRarityForTier(tier: number): EquipmentRarity {
@@ -140,6 +139,20 @@ export function getWeaponFamilyId(id: string): string {
     return 'storm-rifle';
 }
 
+export function getWeaponVariantId(id: string): string {
+    const familyId = getWeaponFamilyId(id);
+    const suffix = id.slice(familyId.length);
+    if (suffix === '' || suffix === '-standard') return '';
+    const variantId = suffix.startsWith('-') ? suffix.slice(1) : suffix;
+    return WEAPON_VARIANTS.some((variant) => variant.id === variantId) ? variantId : '';
+}
+
+export function getWeaponTierForId(id: string): number {
+    const variantId = getWeaponVariantId(id);
+    const variant = WEAPON_VARIANTS.find((candidate) => candidate.id === variantId);
+    return variant ? variant.tier : 1;
+}
+
 export function buildWeaponCatalog(): EquipmentDef[] {
     const weapons: EquipmentDef[] = [];
     for (const family of WEAPON_FAMILIES) {
@@ -156,7 +169,7 @@ export function buildWeaponCatalog(): EquipmentDef[] {
                 kind: 'weapon',
                 color: family.color,
                 maxLevel: 6 + Math.ceil(variant.tier / 2),
-                baseCost: Math.round(family.cost * variant.cost * getRarityCostMultiplier(rarity)),
+                baseCost: Math.round(family.damage * 5 + variant.cost * 30 * getRarityCostMultiplier(rarity)),
                 desc: `${family.desc} ${getWeaponStyleName(attackStyle)}，${rarity}品质 T${variant.tier} 型。`,
                 attackStyle,
                 rarity,
@@ -164,7 +177,6 @@ export function buildWeaponCatalog(): EquipmentDef[] {
                     damage: Number((family.damage * variant.damage).toFixed(2)),
                     fireRate: Number((family.fireRate * variant.fireRate).toFixed(2)),
                     pierce: Number((family.pierce * variant.pierce).toFixed(2)),
-                    multiShot: Number((family.multiShot * variant.multiShot).toFixed(2)),
                     drone: Number((family.drone * variant.drone).toFixed(2)),
                     bulletSpeed: Number((family.bulletSpeed * variant.speed).toFixed(2)),
                 },

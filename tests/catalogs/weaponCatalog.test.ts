@@ -10,6 +10,8 @@ import {
     getWeaponAttackStyle,
     getWeaponStyleName,
     getWeaponFamilyId,
+    getWeaponVariantId,
+    getWeaponTierForId,
 } from '../../assets/scripts/catalogs/weaponCatalog';
 
 function testWeaponCatalogCount() {
@@ -67,6 +69,15 @@ function testWeaponFamilyIdLookup() {
     assert(getWeaponFamilyId('nonexistent') === 'storm-rifle', 'Unknown should default to storm-rifle');
 }
 
+function testWeaponVariantAndTierLookup() {
+    assert(getWeaponVariantId('storm-rifle') === '');
+    assert(getWeaponVariantId('storm-rifle-standard') === '');
+    assert(getWeaponVariantId('storm-rifle-light') === 'light');
+    assert(getWeaponTierForId('storm-rifle') === 1);
+    assert(getWeaponTierForId('storm-rifle-light') === 2);
+    assert(getWeaponTierForId('storm-rifle-starfall') === 10);
+}
+
 function testWeaponTierProgression() {
     // Variant tier 10 should cost more than tier 1
     const t1Weapons = WEAPON_CATALOG.filter(w => w.id.endsWith('-standard') || w.id === 'storm-rifle' || w.id === 'split-barrel' || w.id === 'orbital-drone');
@@ -100,6 +111,7 @@ testWeaponStyleNames();
 testRarityForTier();
 testRarityCostMultiplier();
 testWeaponFamilyIdLookup();
+testWeaponVariantAndTierLookup();
 testWeaponTierProgression();
 testBuildWeaponCatalogFresh();
 

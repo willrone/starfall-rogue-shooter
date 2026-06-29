@@ -37,11 +37,19 @@ export interface CombatState {
     shieldRechargeDelay: number;
     playerRadius: number;
     invulnerableTimer: number;
+    shakeIntensity: number;
     shotTimer: number;
     droneTimer: number;
     regenTimer: number;
     shotCounter: number;
     activeWeaponIndex: number;
+
+    // ── 机制词条状态 (Phase 2) ─────────────────────────────────────────
+    critStacks: number;
+    attackSpeedBoostTimer: number;
+    pierceStacks: number;
+    pierceStackTimer: number;
+    droneCharge: number;
 
     // ── Wave state ──────────────────────────────────────────────
     combatTime: number;
@@ -68,6 +76,9 @@ export interface CombatState {
     level: number;
     xp: number;
     xpToNext: number;
+
+    // ── Per-battle shield fragments ──────────────────────────────
+    shieldFragments: number;
 }
 
 /**
@@ -101,11 +112,17 @@ export function createCombatState(): CombatState {
         shieldRechargeDelay: 0,
         playerRadius: 18,
         invulnerableTimer: 0,
+        shakeIntensity: 0,
         shotTimer: 0,
         droneTimer: 0,
         regenTimer: 0,
         shotCounter: 0,
         activeWeaponIndex: 0,
+        critStacks: 0,
+        attackSpeedBoostTimer: 0,
+        pierceStacks: 0,
+        pierceStackTimer: 0,
+        droneCharge: 0,
 
         // Wave state
         combatTime: 0,
@@ -132,6 +149,7 @@ export function createCombatState(): CombatState {
         level: 1,
         xp: 0,
         xpToNext: 65,
+        shieldFragments: 0,
     };
 }
 
@@ -173,6 +191,7 @@ export function resetCombatSession(state: CombatState): void {
     state.level = 1;
     state.xp = 0;
     state.xpToNext = 65;
+    state.shieldFragments = 0;
 
     // Player combat state
     state.shotTimer = 0;

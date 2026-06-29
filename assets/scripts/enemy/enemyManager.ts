@@ -8,15 +8,19 @@ import {
     ENEMY_SEPARATION_BUCKET_SCAN, ENEMY_SEPARATION_MAX_CHECKS,
     ENEMY_PROJECTILE_LIMIT, MAX_CHESTS_PER_WAVE,
     ENEMY_HIT_FLASH_DURATION, ENEMY_STATUS_KEY_ARMOR, ENEMY_STATUS_KEY_DASH,
+    ENEMY_HP_PROGRESS_SCALE, ENEMY_DAMAGE_PROGRESS_SCALE,
+    ENDLESS_SCALE_RATE, ENDLESS_START_WAVE,
     ENEMY_SEP_INTERVAL, ENEMY_SEP_PLAYER_DIST,
     ENEMY_CROWD_MIN_COUNT, ENEMY_CROWD_REPEL_RADIUS, ENEMY_CROWD_MAX_NEIGHBORS,
     ENEMY_CROWD_REPEL_WEIGHT, ENEMY_CROWD_ORBIT_WEIGHT,
+    FAR_CULL_DIST_SQ,
     NORMAL_XP_DROP_CHANCE, ELITE_XP_DROP_CHANCE,
     NORMAL_ALLOY_DROP_MULTIPLIER, NORMAL_MATERIAL_DROP_CHANCE, ELITE_MATERIAL_DROP_CHANCE,
     ENEMY_VISUAL_SIZE_MULTIPLIER, ENEMY_STRIP_META,
 } from "./enemyConstants";
 
 import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS } from '../catalogs/enemyCatalog';
+import type { CombatState } from '../state/combatState';
 
 import * as EnemyConst from "./enemyConstants";
 export * from "./enemyConstants";
@@ -25,6 +29,7 @@ export type { SpriteStripAnimation, Enemy } from "./enemyTypes";
 
 
 export interface EnemyHostContext {
+    cs: CombatState;
     phase: string;
     bus: GameEventBus;
     combatTime: number;
@@ -49,6 +54,8 @@ export interface EnemyHostContext {
     perfSepChecks: number;
     perfDrawEnemy: number;
 
+    shakeIntensity: number;
+
     playerX: number;
     playerY: number;
     playerRadius: number;
@@ -62,6 +69,7 @@ export interface EnemyHostContext {
     addSpriteChild(parent: Node, name: string, frameName: string, width: number, height: number): Sprite | null;
     getActiveEquipmentLevel(id: string): number;
     healPlayer(amount: number): void;
+    addShieldFragment(): void;
     showToast(message: string): void;
     requestBgm(name: string): void;
     dropPickup(type: PickupType, amount: number, x: number, y: number): void;
@@ -76,9 +84,11 @@ export interface EnemyHostContext {
     scheduleOnce(fn: () => void, delay: number): void;
     createEnemyProjectile(x: number, y: number, angle: number, damage: number, damageType: DamageType, speed: number): void;
     getDamageTypeColor(type: DamageType): string;
+    rumbleVfx(effect: string): void;
     getDroneZapOrigin(): { x: number; y: number };
     drawZap(fromX: number, fromY: number, toX: number, toY: number): void;
     tryDropChest(type: ChestPickupType, x: number, y: number): boolean;
+    tryDropEquipmentBlueprint?(): void;
     getEnemyAnimation(spec: EnemySpec, boss: boolean): SpriteStripAnimation | null;
     getEnemyAnimationFrameName(spec: EnemySpec, boss: boolean): string;
     enemyArtName(spec: EnemySpec, boss: boolean): string;
@@ -95,7 +105,30 @@ export class EnemyManager {
     private barLayer: Node | null = null;
     private barGfx: Graphics | null = null;
 
+    // ── Ground mark pool ──────────────────────────────────────────
+    private groundMarkNodes: Node[] = [];
+    private groundMarkGfx: Graphics[] = [];
+    private groundMarkTimers: number[] = [];
+    private groundMarkNode: Node | null = null;
+    private static readonly GROUND_MARK_POOL = 20;
+    // Damage type → sprite frame mapping (loaded from AI-generated textures)
+    private groundMarkFrames: Record<string, SpriteFrame | null> = {};
+
+    // ── Death particle pool ───────────────────────────────────────
+    private deathPartNodes: Node[] = [];
+    private deathPartGfx: Graphics[] = [];
+    private deathPartLife: number[] = [];
+    private deathPartVx: number[] = [];
+    private deathPartVy: number[] = [];
+    private deathPartColor: string[] = [];
+    private deathPartRadius: number[] = [];
+    private deathPartNode: Node | null = null;
+    private static readonly DEATH_PART_POOL = 40;
+
     constructor(public ctx: EnemyHostContext) {}
+
+    public loadGroundMarkTextures(): void {
+    }
 
     public initBarLayer(worldNode: Node): void {
         this.barLayer = new Node('BarLayer');
@@ -103,18 +136,132 @@ export class EnemyManager {
         this.barGfx = this.barLayer.addComponent(Graphics);
     }
 
+    public initGroundMarkPool(worldNode: Node): void {
+        this.groundMarkNode = new Node('GroundMarks');
+        worldNode.addChild(this.groundMarkNode);
+        for (let i = 0; i < EnemyManager.GROUND_MARK_POOL; i++) {
+            const n = new Node(`GroundMark${i}`);
+            this.groundMarkNode.addChild(n);
+            n.active = false;
+            this.groundMarkNodes.push(n);
+            this.groundMarkGfx.push(n.addComponent(Graphics));
+            this.groundMarkTimers.push(-1);
+        }
+    }
+
+    public updateGroundMarks(dt: number): void {
+        for (let i = 0; i < this.groundMarkNodes.length; i++) {
+            if (this.groundMarkTimers[i] > 0) {
+                this.groundMarkTimers[i] -= dt;
+                if (this.groundMarkTimers[i] <= 0) {
+                    this.groundMarkNodes[i].active = false;
+                    this.groundMarkGfx[i].clear();
+                }
+            }
+        }
+    }
+
+    public initDeathParticlePool(worldNode: Node): void {
+        this.deathPartNode = new Node('DeathParticles');
+        worldNode.addChild(this.deathPartNode);
+        for (let i = 0; i < EnemyManager.DEATH_PART_POOL; i++) {
+            const n = new Node(`DeathPart${i}`);
+            this.deathPartNode.addChild(n);
+            n.active = false;
+            this.deathPartNodes.push(n);
+            this.deathPartGfx.push(n.addComponent(Graphics));
+            this.deathPartLife.push(-1);
+            this.deathPartVx.push(0);
+            this.deathPartVy.push(0);
+            this.deathPartColor.push('#FFFFFF');
+            this.deathPartRadius.push(0);
+        }
+    }
+
+    public updateDeathParticles(dt: number): void {
+        for (let i = 0; i < this.deathPartNodes.length; i++) {
+            if (this.deathPartLife[i] > 0) {
+                this.deathPartLife[i] -= dt;
+                const node = this.deathPartNodes[i];
+                const x = node.position.x + this.deathPartVx[i] * dt;
+                const y = node.position.y + this.deathPartVy[i] * dt;
+                node.setPosition(x, y, 3);
+                this.deathPartVy[i] -= 200 * dt; // gravity
+                if (this.deathPartLife[i] <= 0) {
+                    node.active = false;
+                    this.deathPartGfx[i].clear();
+                } else {
+                    const gfx = this.deathPartGfx[i];
+                    gfx.clear();
+                    const a = Math.round((this.deathPartLife[i] / 0.6) * 200);
+                    const sz = this.deathPartRadius[i] * (0.3 + this.deathPartLife[i] / 0.6 * 0.7);
+                    gfx.fillColor = this.ctx.hex(this.deathPartColor[i], a);
+                    gfx.circle(0, 0, Math.max(1, sz));
+                    gfx.fill();
+                }
+            }
+        }
+    }
+
+    private spawnDeathParticles(x: number, y: number, color: string, count: number, baseRadius: number): void {
+        for (let p = 0; p < count; p++) {
+            let idx = -1;
+            for (let i = 0; i < this.deathPartNodes.length; i++) {
+                if (this.deathPartLife[i] < 0) { idx = i; break; }
+            }
+            if (idx < 0) return;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 80 + Math.random() * 280;
+            this.deathPartNodes[idx].setPosition(x, y, 3);
+            this.deathPartNodes[idx].active = true;
+            this.deathPartVx[idx] = Math.cos(angle) * speed;
+            this.deathPartVy[idx] = Math.sin(angle) * speed;
+            this.deathPartLife[idx] = 0.4 + Math.random() * 0.3;
+            this.deathPartColor[idx] = color;
+            this.deathPartRadius[idx] = baseRadius * (0.4 + Math.random() * 0.6);
+        }
+    }
+
     public drawAllBars(): void {
         if (!this.barGfx) return;
         this.barGfx.clear();
-        const now = this.ctx.combatTime;
+        const now = this.cs.combatTime;
+        // Boss HP bar — drawn in screen-space (top center)
+        const bossEnemy = this.enemies.find((e) => e.boss && e.hp < e.maxHp);
+        if (bossEnemy && this.enemySet.has(bossEnemy)) {
+            const ratio = this.ctx.clamp(bossEnemy.hp / bossEnemy.maxHp, 0, 1);
+            // Bar is drawn at (200, 1236) = roughly center top of 720x1280 canvas
+            const barW = 320;
+            const barH = 12;
+            const barX = 200;
+            const barY = 1236;
+            this.barGfx.fillColor = this.ctx.hex('#0F172A', 200);
+            this.barGfx.roundRect(barX, barY, barW, barH, 6);
+            this.barGfx.fill();
+            const phaseColor = ratio <= 0.5 ? '#F59E0B' : '#EF4444';
+            this.barGfx.fillColor = this.ctx.hex(phaseColor);
+            this.barGfx.roundRect(barX, barY, barW * ratio, barH, 6);
+            this.barGfx.fill();
+            // Boss name
+            this.barGfx.strokeColor = this.ctx.hex('#F8FAFC', 150);
+            this.barGfx.lineWidth = 1.5;
+            this.barGfx.roundRect(barX, barY - 22, barW, 20, 4);
+            this.barGfx.stroke();
+            this.barGfx.fillColor = this.ctx.hex('#0F172A', 200);
+            this.barGfx.roundRect(barX, barY - 22, barW, 20, 4);
+            this.barGfx.fill();
+        }
+        // Normal enemies
+        // Normal enemies
         for (const enemy of this.enemies) {
             if (!this.enemySet.has(enemy)) continue;
             if (enemy.hp >= enemy.maxHp) continue;
             if (now - enemy.lastBarDrawTime < 0.15) continue;
             enemy.lastBarDrawTime = now;
-            const pos = enemy.node.position;
+            const pos = this.getEnemyPosition(enemy);
             const ratio = this.ctx.clamp(enemy.hp / enemy.maxHp, 0, 1);
             const r = enemy.radius || 14;
+            if (enemy.boss) continue; // handled above
             const barW = r * 2;
             const barH = 5;
             const barY = pos.y + r + 8;
@@ -127,8 +274,26 @@ export class EnemyManager {
         }
     }
 
-    private get cs(): EnemyHostContext {
-        return this.ctx;
+    private get cs(): CombatState {
+        return this.ctx.cs;
+    }
+
+    public getEnemyPosition(enemy: Enemy): { x: number; y: number } {
+        const pos = enemy.node.position;
+        const px = pos?.x;
+        const py = pos?.y;
+        if (Number.isFinite(px) && Number.isFinite(py)) {
+            enemy._botX = px;
+            enemy._botY = py;
+            return { x: px, y: py };
+        }
+        return { x: enemy._botX ?? 0, y: enemy._botY ?? 0 };
+    }
+
+    private setEnemyPosition(enemy: Enemy, x: number, y: number, z = 4): void {
+        enemy._botX = x;
+        enemy._botY = y;
+        enemy.node.setPosition(x, y, z);
     }
 
     public updateSpawning(dt: number) {
@@ -160,9 +325,10 @@ export class EnemyManager {
         const start = -(spread - 1) / 2;
         for (let i = 0; i < spread; i++) {
             const angle = baseAngle + (start + i) * (enemy.boss ? 0.26 : 0.18);
+            const pos = this.getEnemyPosition(enemy);
             this.ctx.createEnemyProjectile(
-                enemy.node.position.x,
-                enemy.node.position.y,
+                pos.x,
+                pos.y,
                 angle,
                 enemy.damage * (enemy.boss ? 0.8 : 0.62),
                 type,
@@ -173,8 +339,9 @@ export class EnemyManager {
     public buildEnemyGrid(cellSize: number) {
         const grid = new Map<string, Enemy[]>();
         for (const enemy of this.enemies) {
-            const cellX = Math.floor(enemy.node.position.x / cellSize);
-            const cellY = Math.floor(enemy.node.position.y / cellSize);
+            const pos = this.getEnemyPosition(enemy);
+            const cellX = Math.floor(pos.x / cellSize);
+            const cellY = Math.floor(pos.y / cellSize);
             const key = `${cellX},${cellY}`;
             let bucket = grid.get(key);
             if (!bucket) {
@@ -192,18 +359,54 @@ export class EnemyManager {
         const doSeparation = this.enemySepTick >= ENEMY_SEP_INTERVAL && this.enemies.length >= 6;
         if (doSeparation) this.enemySepTick = 0;
         const crowdGrid = this.enemies.length >= ENEMY_CROWD_MIN_COUNT ? this.buildEnemyGrid(ENEMY_SEPARATION_CELL) : null;
+        // Pre-compute wobble base once per frame (sin addition formula)
+        const wobbleTime = this.cs.combatTime * 2.4;
+        const wobbleBase = Math.sin(wobbleTime);
+        const cosBase = Math.cos(wobbleTime);
 
         for (const enemy of this.enemies) {
             if (!this.enemySet.has(enemy)) continue;
-            const ex = enemy.node.position.x;
-            const ey = enemy.node.position.y;
+            const { x: ex, y: ey } = this.getEnemyPosition(enemy);
             const dx = px - ex;
             const dy = py - ey;
-            const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
-            this.updateEnemySkill(enemy, dt, dist, dx / dist, dy / dist);
-            const wobble = Math.sin(this.cs.combatTime * 2.4 + enemy.id * 0.73) * 0.18;
-            let vx = dx / dist + (-dy / dist) * wobble;
-            let vy = dy / dist + (dx / dist) * wobble;
+            const distSq = dx * dx + dy * dy;
+
+            // Distance culling: enemies far from screen get simplified movement
+            if (distSq > FAR_CULL_DIST_SQ) {
+                const dist = Math.max(0.001, Math.sqrt(distSq));
+                let mvx = dx / dist;
+                let mvy = dy / dist;
+                if (enemy.dashTimer > 0) {
+                    enemy.dashTimer = Math.max(0, enemy.dashTimer - dt);
+                    mvx = enemy.dashVx;
+                    mvy = enemy.dashVy;
+                }
+                this.setEnemyPosition(
+                    enemy,
+                    this.ctx.clamp(ex + mvx * enemy.speed * dt, WORLD_LEFT + enemy.radius, WORLD_RIGHT - enemy.radius),
+                    this.ctx.clamp(ey + mvy * enemy.speed * dt, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius),
+                );
+                continue;
+            }
+
+            const dist = Math.max(0.001, Math.sqrt(distSq));
+            const dirX = dx / dist;
+            const dirY = dy / dist;
+            this.updateEnemySkill(enemy, dt, dist, dirX, dirY);
+            // Wobble: sin(a+b) = sin(a)cos(b) + cos(a)sin(b) — no per-enemy trig call
+            const wobble = (wobbleBase * enemy.wobbleCos + cosBase * enemy.wobbleSin) * 0.18;
+            let vx = dirX + (-dirY) * wobble;
+            let vy = dirY + (dirX) * wobble;
+            // Orbit spread: enemies far from the player add a tangential component so
+            // they approach in a curve rather than a straight line, spreading out along
+            // the circumference instead of clumping into a single ball.
+            // Effect diminishes as they get close (within ~150 units they converge directly).
+            const orbitDistanceWeight = Math.min(0.7, Math.max(0, (dist - 180) / 500));
+            if (orbitDistanceWeight > 0.01) {
+                const orbitSign = enemy.id % 2 === 0 ? 1 : -1;
+                vx += (-dirY) * orbitSign * orbitDistanceWeight * 0.45;
+                vy += (dirX) * orbitSign * orbitDistanceWeight * 0.45;
+            }
             let moveSpeed = enemy.speed;
             if (enemy.dashTimer > 0) {
                 enemy.dashTimer = Math.max(0, enemy.dashTimer - dt);
@@ -211,7 +414,39 @@ export class EnemyManager {
                 vy = enemy.dashVy;
                 moveSpeed = enemy.speed * (enemy.boss ? 2.15 : 2.9);
             } else if (crowdGrid) {
-                const steer = this.getEnemyCrowdSteer(enemy, crowdGrid, ex, ey, dx / dist, dy / dist, dist);
+                // ── 机制词条: 减速 (霜束) ───────────────────────────
+                if (enemy.slowTimer > 0) {
+                    enemy.slowTimer = Math.max(0, enemy.slowTimer - dt);
+                    moveSpeed *= enemy.slowFactor;
+                }
+                // ── 机制词条: 击退 (重力锤) ───────────────────────────
+                if (enemy.knockbackVx !== 0 || enemy.knockbackVy !== 0) {
+                    const knockDecay = Math.max(0, 1 - dt * 6);
+                    const kbx = enemy.knockbackVx * knockDecay * dt;
+                    const kby = enemy.knockbackVy * knockDecay * dt;
+                    this.setEnemyPosition(enemy, ex + kbx, ey + kby);
+                    if (Math.abs(enemy.knockbackVx) < 5) enemy.knockbackVx = 0;
+                    else enemy.knockbackVx *= knockDecay;
+                    if (Math.abs(enemy.knockbackVy) < 5) enemy.knockbackVy = 0;
+                    else enemy.knockbackVy *= knockDecay;
+                }
+                // ── 机制词条: 毒 (瘟疫) ───────────────────────────────
+                if (enemy.poisonStacks > 0) {
+                    enemy.poisonTimer -= dt;
+                    if (enemy.poisonTimer <= 0) {
+                        // tick: 扣 maxHp × stacks × 0.02
+                        const dot = enemy.maxHp * enemy.poisonStacks * 0.01;
+                        enemy.hp -= dot;
+                        if (enemy.hp <= 0) {
+                            this.killEnemy(enemy);
+                        } else {
+                            const p = this.getEnemyPosition(enemy);
+                            this.ctx.spawnFloatingText(`毒 ${Math.ceil(dot)}`, p.x, p.y + enemy.radius + 8, '#84CC16', 18);
+                        }
+                        enemy.poisonTimer = 1.0;
+                    }
+                }
+                const steer = this.getEnemyCrowdSteer(enemy, crowdGrid, ex, ey, dirX, dirY, dist);
                 vx += steer.x;
                 vy += steer.y;
                 const vLen = Math.max(0.001, Math.sqrt(vx * vx + vy * vy));
@@ -222,24 +457,26 @@ export class EnemyManager {
             let nextY = ey + vy * moveSpeed * dt;
             const fromPlayerX = nextX - px;
             const fromPlayerY = nextY - py;
-            const playerDist = Math.max(0.001, Math.sqrt(fromPlayerX * fromPlayerX + fromPlayerY * fromPlayerY));
+            const playerDistSq = fromPlayerX * fromPlayerX + fromPlayerY * fromPlayerY;
             const collideRadius = enemy.radius + this.cs.playerRadius;
-            const attemptedContactDist = Math.min(dist, playerDist);
-            if (attemptedContactDist <= collideRadius + 4 && this.cs.invulnerableTimer <= 0) {
+            const collideThreshold = collideRadius + 4;
+            if (playerDistSq <= collideThreshold * collideThreshold && this.cs.invulnerableTimer <= 0) {
                 this.ctx.takeDamage(enemy.damage, enemy.damageType);
             }
 
             const playerGap = enemy.radius + this.cs.playerRadius + ENEMY_PLAYER_PADDING;
-            if (playerDist < playerGap) {
+            const gapSq = playerGap * playerGap;
+            if (playerDistSq < gapSq) {
+                const playerDist = Math.max(0.001, Math.sqrt(playerDistSq));
                 const angle = enemy.id * 2.39996;
-                const nx = playerDist > 0.01 ? fromPlayerX / playerDist : Math.cos(angle);
-                const ny = playerDist > 0.01 ? fromPlayerY / playerDist : Math.sin(angle);
+                const nx = fromPlayerX / playerDist;
+                const ny = fromPlayerY / playerDist;
                 nextX = px + nx * playerGap;
                 nextY = py + ny * playerGap;
             }
             nextX = this.ctx.clamp(nextX, WORLD_LEFT + enemy.radius, WORLD_RIGHT - enemy.radius);
             nextY = this.ctx.clamp(nextY, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius);
-            enemy.node.setPosition(nextX, nextY, 4);
+            this.setEnemyPosition(enemy, nextX, nextY);
             // 分帧视觉更新：每 3 帧才更新一次视觉
             enemy.visualSkip = ((enemy.visualSkip || 0) + 1) % 3;
             if (enemy.visualSkip === 0) {
@@ -365,7 +602,8 @@ export class EnemyManager {
             enemy.dashTimer = enemy.boss ? 0.58 : 0.38;
             enemy.dashVx = dirX;
             enemy.dashVy = dirY;
-            this.ctx.spawnFloatingText('冲刺', enemy.node.position.x, enemy.node.position.y + enemy.radius + 20, '#F59E0B', 18);
+            const pos = this.getEnemyPosition(enemy);
+            this.ctx.spawnFloatingText('冲刺', pos.x, pos.y + enemy.radius + 20, '#F59E0B', 18);
             return;
         }
 
@@ -376,7 +614,8 @@ export class EnemyManager {
 
         if (enemy.spec.variantId === 'armored' || enemy.spec.family === 'brute' || enemy.spec.family === 'warden') {
             enemy.armorTimer = enemy.elite || enemy.boss ? 2.4 : 1.45;
-            this.ctx.spawnFloatingText('霸体', enemy.node.position.x, enemy.node.position.y + enemy.radius + 20, '#CBD5E1', 18);
+            const pos = this.getEnemyPosition(enemy);
+            this.ctx.spawnFloatingText('霸体', pos.x, pos.y + enemy.radius + 20, '#CBD5E1', 18);
             this.drawEnemy(enemy);
         }
     }
@@ -410,8 +649,9 @@ export class EnemyManager {
         const distSqThreshold = ENEMY_SEP_PLAYER_DIST * ENEMY_SEP_PLAYER_DIST;
         const buckets = new Map<string, Enemy[]>();
         for (const enemy of this.enemies) {
-            let ax = enemy.node.position.x;
-            let ay = enemy.node.position.y;
+            const enemyStart = this.getEnemyPosition(enemy);
+            let ax = enemyStart.x;
+            let ay = enemyStart.y;
             if (!enemy.boss) {
                 const edx = ax - px;
                 const edy = ay - py;
@@ -432,8 +672,9 @@ export class EnemyManager {
                     for (let index = bucket.length - 1; index >= start && checks < ENEMY_SEPARATION_MAX_CHECKS; index--) {
                         checks += 1;
                         const other = bucket[index];
-                        let bx = other.node.position.x;
-                        let by = other.node.position.y;
+                        const otherStart = this.getEnemyPosition(other);
+                        let bx = otherStart.x;
+                        let by = otherStart.y;
                         const minDist = enemy.radius + other.radius + ENEMY_SEPARATION_PADDING;
                         const dx = bx - ax;
                         const dy = by - ay;
@@ -456,15 +697,15 @@ export class EnemyManager {
                         ay = this.ctx.clamp(ay - ny * enemyPush, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius);
                         bx = this.ctx.clamp(bx + nx * otherPush, WORLD_LEFT + other.radius, WORLD_RIGHT - other.radius);
                         by = this.ctx.clamp(by + ny * otherPush, WORLD_BOTTOM + other.radius, WORLD_TOP - other.radius);
-                        if (Math.abs(bx - other.node.position.x) > 0.5 || Math.abs(by - other.node.position.y) > 0.5) {
-                            other.node.setPosition(bx, by, 4);
+                        if (Math.abs(bx - otherStart.x) > 0.5 || Math.abs(by - otherStart.y) > 0.5) {
+                            this.setEnemyPosition(other, bx, by);
                         }
                     }
                 }
             }
 
-            if (Math.abs(ax - enemy.node.position.x) > 0.5 || Math.abs(ay - enemy.node.position.y) > 0.5) {
-                enemy.node.setPosition(ax, ay, 4);
+            if (Math.abs(ax - enemyStart.x) > 0.5 || Math.abs(ay - enemyStart.y) > 0.5) {
+                this.setEnemyPosition(enemy, ax, ay);
             }
             this.ctx.perfSepChecks += checks;
             const finalCellX = Math.floor(ax / ENEMY_SEPARATION_CELL);
@@ -481,6 +722,7 @@ export class EnemyManager {
     public startNextWave() {
         if (this.cs.phase === 'combat' && this.cs.waveIndex > 0 && !this.isBossWave()) {
             this.grantWaveClearAlloy();
+            if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('waveClear');
         }
         this.cs.waveIndex += 1;
         this.cs.endlessCycle = Math.floor((this.cs.waveIndex - 1) / WAVES_PER_CYCLE) + 1;
@@ -495,6 +737,8 @@ export class EnemyManager {
 
         if (this.isBossWave()) {
             this.cs.bossSpawned = true;
+            if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('bossWarning');
+            this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3.5);
             this.ctx.requestBgm('bgm_boss_loop');
             this.ctx.playSfx('sfx_boss_warning', 0.9, 1.2);
             this.spawnBoss();
@@ -522,20 +766,89 @@ export class EnemyManager {
     }
     public getWaveSpawnInterval() {
         const slot = this.getWaveSlot();
-        return Math.max(0.95, 1.55 - slot * 0.035 - (this.cs.endlessCycle - 1) * 0.06 - Math.min(0.12, this.cs.waveElapsed / 420));
+        const base = 1.62 - slot * 0.035 - (this.cs.endlessCycle - 1) * 0.06 - Math.min(0.12, this.cs.waveElapsed / 420);
+        // 11 波后：间隔指数缩短（5% compound）
+        if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
+            const endlessFactor = this.getEndlessScale();
+            return Math.max(0.5, (base + 0.2) / endlessFactor);
+        }
+        // Early waves are where new players learn the loop.  Keep pressure lower
+        // so starter weapons can actually kill, collect XP, and reach upgrades
+        // before the real squeeze begins around waves 5-6.
+        // 爽感模式: 减少 earlyRelief 让前期怪潮更密，玩家有更多东西可杀
+        const earlyRelief = this.cs.endlessCycle === 1
+            ? this.cs.waveIndex <= 1 ? 0.6
+                : this.cs.waveIndex === 2 ? 0.5
+                    : this.cs.waveIndex === 3 ? 0.4
+                        : this.cs.waveIndex === 4 ? 0.3
+                            : this.cs.waveIndex === 5 ? 0.2
+                                : this.cs.waveIndex === 6 ? 0.1
+                                    : this.cs.waveIndex >= 7 ? 0.05
+                                        : 0
+            : 0;
+        return Math.max(this.cs.waveIndex <= 1 ? 1.5 : this.cs.waveIndex === 2 ? 1.4 : this.cs.waveIndex === 3 ? 1.3 : this.cs.waveIndex === 4 ? 1.2 : this.cs.waveIndex === 5 ? 1.1 : this.cs.waveIndex === 6 ? 1.0 : this.cs.waveIndex <= 8 ? 0.95 : 0.95, base + earlyRelief);
     }
     public getWaveSpawnBatchCount() {
         const slot = this.getWaveSlot();
-        const pressure = 2 + Math.floor(slot * 0.45) + this.cs.endlessCycle + Math.floor(this.cs.waveElapsed / 24);
+        // 11 波后：每批数量指数增长（5% compound）
+        if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
+            const baseCount = 3 + Math.floor(slot * 0.38) + this.cs.endlessCycle;
+            const bossBonus = this.isBossWave() ? 5 : 0;
+            const endlessFactor = this.getEndlessScale();
+            return Math.min(60, Math.round((baseCount + bossBonus) * endlessFactor));
+        }
+        if (this.cs.endlessCycle === 1 && this.cs.waveIndex <= 8) {
+            const earlyBase = this.cs.waveIndex <= 2
+                ? 2
+                : this.cs.waveIndex <= 4
+                    ? 3
+                    : this.cs.waveIndex <= 6
+                        ? 4
+                        : 5;
+            const earlyRandom = this.cs.waveIndex <= 2 ? 1 : this.ctx.randomInt(0, this.cs.waveIndex >= 7 ? 2 : 1);
+            return earlyBase + earlyRandom;
+        }
+        const earlyWave = this.cs.endlessCycle === 1 && this.cs.waveIndex <= 6;
+        const elapsedPressure = Math.floor(this.cs.waveElapsed / (earlyWave ? 42 : 24));
+        const pressure = 1 + Math.floor(slot * 0.38) + this.cs.endlessCycle + elapsedPressure;
         const bossBonus = this.isBossWave() ? 3 : 0;
-        return Math.min(22, pressure + bossBonus + this.ctx.randomInt(0, 2));
+        const randomBonus = earlyWave
+            ? this.cs.waveIndex <= 2 ? 0 : this.ctx.randomInt(0, 1)
+            : this.ctx.randomInt(0, 2);
+        return Math.min(22, Math.max(2, pressure + bossBonus + randomBonus));
     }
     public getEnemyCap() {
-        return Math.min(420, 110 + this.cs.battleIndex * 3 + this.cs.endlessCycle * 24 + this.cs.waveIndex * 6);
+        // 11 波后：上限指数增长
+        if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
+            const endlessFactor = this.getEndlessScale();
+            return Math.min(600, Math.round(168 * endlessFactor));
+        }
+        if (this.cs.endlessCycle === 1) {
+            const earlyCaps: Record<number, number> = { 1: 40, 2: 55, 3: 75, 4: 95, 5: 130, 6: 170, 7: 200, 8: 240 };
+            const cap = earlyCaps[this.cs.waveIndex];
+            if (cap) return cap + this.cs.battleIndex * 2;
+        }
+        return Math.min(280, 90 + this.cs.battleIndex * 3 + this.cs.endlessCycle * 24 + this.cs.waveIndex * 6);
+    }
+    private getEarlyProgressFactor(): number {
+        if (this.cs.waveIndex >= ENDLESS_START_WAVE) return 1;
+        if (this.cs.endlessCycle !== 1) return 1;
+        if (this.cs.waveIndex <= 2) return 0.3;
+        if (this.cs.waveIndex <= 4) return 0.4;
+        if (this.cs.waveIndex <= 6) return 0.55;
+        if (this.cs.waveIndex <= 8) return 0.78;
+        return 1;
     }
     public getWaveSlot(wave = this.cs.waveIndex) {
         if (wave <= 0) return 1;
+        // 11 波起不再循环 1-10 波，全程使用最高压力基数
+        if (wave >= ENDLESS_START_WAVE) return 10;
         return ((wave - 1) % WAVES_PER_CYCLE) + 1;
+    }
+    /** 无尽模式指数缩放系数：11 波起每波 +5% */
+    public getEndlessScale(wave = this.cs.waveIndex): number {
+        if (wave < ENDLESS_START_WAVE) return 1;
+        return Math.pow(1 + ENDLESS_SCALE_RATE, wave - (ENDLESS_START_WAVE - 1));
     }
     public isBossWave(wave = this.cs.waveIndex) {
         return wave > 0 && wave % WAVES_PER_CYCLE === 0;
@@ -543,18 +856,22 @@ export class EnemyManager {
     public spawnPack(count: number, ring: boolean, preferredSpecs: EnemySpec[] | null = null, fallbackSpecs: EnemySpec[] | null = null) {
         const cap = this.getEnemyCap();
         const room = Math.max(0, cap - this.enemies.length);
-        const guaranteed = preferredSpecs ? preferredSpecs.length : 0;
-        const total = Math.min(Math.max(count, guaranteed), room);
+        const total = Math.min(Math.max(0, count), room);
         const waveSpecs = preferredSpecs && preferredSpecs.length > 0
             ? preferredSpecs
             : this.pickEnemyWaveSpecs(total, ring, fallbackSpecs);
         const pool = fallbackSpecs && fallbackSpecs.length > 0 ? fallbackSpecs : this.getUnlockedEnemySpecs();
         for (let i = 0; i < total; i++) {
-            const spec = waveSpecs.length > 0 && (i < waveSpecs.length || Math.random() < 0.72)
-                ? waveSpecs[i % waveSpecs.length]
+            const spec = waveSpecs.length > 0
+                ? (waveSpecs.length <= total && i < waveSpecs.length
+                    ? waveSpecs[i]
+                    : this.pickWeightedEnemySpec(waveSpecs))
                 : this.pickWeightedEnemySpec(pool);
             const angle = ring ? (Math.PI * 2 * i) / Math.max(1, total) + Math.random() * 0.16 : Math.random() * Math.PI * 2;
-            const radius = ring ? 720 : this.ctx.randomRange(640, 840);
+            // Spread spawn radius per enemy so they approach from different distances,
+            // preventing the "all enemies converge as a single ball" problem.
+            const radiusVariation = this.ctx.randomRange(-120, 120);
+            const radius = ring ? 720 + radiusVariation : this.ctx.randomRange(580, 900);
             const point = this.getSpawnPointAroundPlayer(radius, angle);
             const eliteChance = Math.min(0.28, 0.025 + this.cs.endlessCycle * 0.018 + this.cs.waveIndex * 0.0035 + this.cs.combatTime * 0.00045);
             this.createEnemy(spec, point.x, point.y, Math.random() < eliteChance, false);
@@ -580,6 +897,19 @@ export class EnemyManager {
         const point = this.getSpawnPointAroundPlayer(760, Math.random() * Math.PI * 2);
         this.createEnemy(spec, point.x, point.y, true, true);
     }
+
+    public updateBossPhase(enemy: Enemy, hpRatio: number): void {
+        if (!enemy.boss) return;
+        // Phase 2: enrage at 50% HP
+        if (hpRatio <= 0.5 && enemy.speed < 130) {
+            enemy.speed *= 1.45;
+            enemy.damage *= 1.35;
+            this.ctx.showToast('星核巨像进入狂暴状态！');
+            this.ctx.playSfx('sfx_boss_warning', 0.7, 0.3);
+            // Phase 2 visual: shake + extra death particle color
+            this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 2);
+        }
+    }
     public getSpawnPointAroundPlayer(radius: number, angle: number): Vec2 {
         const padding = 92;
         for (let attempt = 0; attempt < 10; attempt++) {
@@ -596,7 +926,16 @@ export class EnemyManager {
         );
     }
     public createEnemy(spec: EnemySpec, x: number, y: number, elite: boolean, boss: boolean) {
-        const scale = 1 + this.cs.battleIndex * 0.06 + (this.cs.endlessCycle - 1) * 0.28 + this.cs.waveIndex * 0.028 + this.cs.combatTime * 0.0018;
+        const earlyProgressFactor = this.getEarlyProgressFactor();
+        const earlyDamageFactor = this.cs.endlessCycle === 1
+            ? this.cs.waveIndex <= 2 ? 0.82
+                : this.cs.waveIndex <= 4 ? 0.75
+                    : this.cs.waveIndex <= 6 ? 0.85
+                        : this.cs.waveIndex <= 8 ? 0.95
+                            : 1
+            : 1;
+        const endlessScale = this.getEndlessScale();
+        const scale = (1 + this.cs.battleIndex * 0.06 + (this.cs.endlessCycle - 1) * 0.28 + (this.cs.waveIndex * 0.028 + this.cs.combatTime * 0.0018) * ENEMY_HP_PROGRESS_SCALE * earlyProgressFactor) * endlessScale;
         const eliteScale = boss ? 6.4 + this.cs.endlessCycle * 0.58 : elite ? 2.65 : 1;
         const hp = Math.round(spec.hp * scale * eliteScale);
         const enemyRadius = Math.round(spec.radius * (boss ? 1.55 : elite ? 1.32 : 1.18));
@@ -626,7 +965,7 @@ export class EnemyManager {
             hp,
             maxHp: hp,
             speed: Math.max(42, spec.speed * (boss ? 0.78 : elite ? 0.9 : 1) + this.cs.endlessCycle * 5 + this.cs.waveIndex * 0.8),
-            damage: spec.damage * (boss ? 1.85 : elite ? 1.42 : 1.05) * (1 + (this.cs.endlessCycle - 1) * 0.16 + this.cs.waveIndex * 0.012 + this.cs.combatTime * 0.0009),
+            damage: spec.damage * (boss ? 1.85 : elite ? 1.42 : 1.05) * (1 + (this.cs.endlessCycle - 1) * 0.16 + (this.cs.waveIndex * 0.012 + this.cs.combatTime * 0.0009) * ENEMY_DAMAGE_PROGRESS_SCALE * earlyProgressFactor) * earlyDamageFactor * endlessScale,
             radius: enemyRadius,
             visualRadius: Math.max(enemyRadius + 12, enemyVisualSize * 0.42),
             elite,
@@ -637,11 +976,21 @@ export class EnemyManager {
             dashVx: 0,
             dashVy: 0,
             armorTimer: 0,
+            slowTimer: 0,
+            slowFactor: 0,
+            poisonStacks: 0,
+            poisonTimer: 0,
+            knockbackVx: 0,
+            knockbackVy: 0,
             animSeed: Math.random() * Math.PI * 2,
             hitFlash: 0,
             visualStateKey: '',
             animation,
             animationFrameIndex: animation ? 0 : -1,
+            wobbleSin: Math.sin(this.nextEnemyId * 0.73),
+            wobbleCos: Math.cos(this.nextEnemyId * 0.73),
+            _botX: x,
+            _botY: y,
         };
         this.drawEnemy(enemy);
         this.enemies.push(enemy);
@@ -694,13 +1043,34 @@ export class EnemyManager {
         return this.getUnlockedEnemySpecs();
     }
     public getUnlockedEnemySpecs() {
+        // 11 波后：所有种类全部解锁
+        if (this.cs.waveIndex >= ENDLESS_START_WAVE) return ENEMY_SPECS;
         const slot = this.getWaveSlot();
+        if (this.cs.endlessCycle === 1) {
+            const families = slot <= 2
+                ? ['mite']
+                : slot <= 4
+                    ? ['mite', 'runner']
+                    : slot <= 6
+                        ? ['mite', 'runner', 'brute']
+                        : slot <= 8
+                            ? ['mite', 'runner', 'brute', 'splitter']
+                            : BASE_ENEMY_ARCHETYPES.map((base) => base.family);
+            const maxVariantIndex = slot <= 2 ? 0 : slot <= 4 ? 2 : slot <= 6 ? 4 : slot <= 8 ? 6 : 10;
+            const earlyPool = ENEMY_SPECS.filter((spec) =>
+                families.indexOf(spec.family) >= 0 && (spec.variantIndex ?? 0) <= maxVariantIndex,
+            );
+            if (earlyPool.length > 0) return earlyPool;
+        }
         const wave = this.ctx.clamp(slot >= WAVES_PER_CYCLE ? ORDINARY_WAVES_PER_CYCLE : slot, 1, ORDINARY_WAVES_PER_CYCLE);
         const end = Math.floor((wave * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
         return ENEMY_SPECS.slice(0, Math.max(1, end));
     }
     public getWaveEnemySpecs(wave: number) {
+        // 11 波后：全部种类
+        if (wave >= ENDLESS_START_WAVE) return ENEMY_SPECS;
         const slot = this.getWaveSlot(wave);
+        if (this.cs.endlessCycle === 1 && slot <= 8) return this.getUnlockedEnemySpecs();
         const ordinaryWave = this.ctx.clamp(slot >= WAVES_PER_CYCLE ? ORDINARY_WAVES_PER_CYCLE : slot, 1, ORDINARY_WAVES_PER_CYCLE);
         const start = Math.floor(((ordinaryWave - 1) * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
         const end = Math.floor((ordinaryWave * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
@@ -709,13 +1079,30 @@ export class EnemyManager {
     public damageEnemy(enemy: Enemy, amount: number, color = '#F8FAFC', tag = '') {
         const finalAmount = enemy.armorTimer > 0 ? amount * (enemy.boss ? 0.58 : 0.72) : amount;
         const finalTag = enemy.armorTimer > 0 ? `${tag}霸体 ` : tag;
+        const isCrit = tag.indexOf('暴击') >= 0;
+        const isLethal = tag.indexOf('致命') >= 0;
+        const fontSize = isLethal ? 30 : isCrit ? 26 : finalTag ? 23 : 21;
+        // Boss phase check on hit
+        if (enemy.boss) {
+            const hpRatio = (enemy.hp - finalAmount) / enemy.maxHp;
+            this.updateBossPhase(enemy, hpRatio);
+        }
+        // HP auto-growth every 3 levels — also apply healing from level up
+        const pos = this.getEnemyPosition(enemy);
         this.ctx.spawnFloatingText(
             `${finalTag}${Math.ceil(finalAmount)}`,
-            enemy.node.position.x + this.ctx.randomRange(-12, 12),
-            enemy.node.position.y + enemy.radius + this.ctx.randomRange(8, 20),
+            pos.x + this.ctx.randomRange(-12, 12),
+            pos.y + enemy.radius + this.ctx.randomRange(8, 20),
             enemy.armorTimer > 0 ? '#CBD5E1' : color,
-            finalTag ? 23 : 21,
+            fontSize,
         );
+        // Screen shake for crit/lethal
+        if (isLethal) {
+            this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3);
+            this.ctx.playSfx('sfx_crit_hit', 0.55, 0.08);
+        } else if (isCrit) {
+            this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 1.5);
+        }
         enemy.hitFlash = ENEMY_HIT_FLASH_DURATION;
         this.ctx.playSfx('sfx_hit_enemy', enemy.boss ? 0.46 : 0.32, 0.035);
         enemy.hp -= finalAmount;
@@ -725,15 +1112,17 @@ export class EnemyManager {
             this.drawEnemy(enemy);
         }
     }
-    public rollOutgoingDamage(enemy: Enemy, baseDamage: number) {
+    public rollOutgoingDamage(enemy: Enemy, baseDamage: number, critChanceBonus = 0, critDamageBonus = 0): { amount: number; color: string; tag: string } {
         const stats = this.ctx.getCharacterStats();
         const lethalRoll = Math.random() < stats.lethalChance;
         if (lethalRoll) {
             const lethalDamage = Math.max(baseDamage * stats.lethalDamage, enemy.maxHp * stats.lethalMaxHpPct);
             return { amount: lethalDamage, color: '#F59E0B', tag: '致命 ' };
         }
-        if (Math.random() < stats.critChance) {
-            return { amount: baseDamage * stats.critDamage, color: '#F9C74F', tag: '暴击 ' };
+        const critChance = stats.critChance + critChanceBonus;
+        const critDamage = stats.critDamage + critDamageBonus;
+        if (Math.random() < critChance) {
+            return { amount: baseDamage * critDamage, color: '#F9C74F', tag: '暴击 ' };
         }
         return { amount: baseDamage, color: '#F8FAFC', tag: '' };
     }
@@ -743,16 +1132,22 @@ export class EnemyManager {
         this.ctx.droneHitPulse = 0.22;
         this.damageEnemy(enemy, roll.amount, roll.tag ? roll.color : '#90BE6D', roll.tag ? `无人机 ${roll.tag}` : '无人机 ');
         const origin = this.ctx.getDroneZapOrigin();
-        this.ctx.drawZap(origin.x, origin.y, enemy.node.position.x, enemy.node.position.y);
+        const pos = this.getEnemyPosition(enemy);
+        this.ctx.drawZap(origin.x, origin.y, pos.x, pos.y);
     }
     public killEnemy(enemy: Enemy) {
         const index = this.enemies.indexOf(enemy);
         if (index >= 0) this.enemies.splice(index, 1);
         this.enemySet.delete(enemy);
-        const x = enemy.node.position.x;
-        const y = enemy.node.position.y;
+        const { x, y } = this.getEnemyPosition(enemy);
         this.ctx.bus.emit('enemy-killed', { x, y, drops: true, isBoss: enemy.boss, isSplitter: enemy.spec.family === 'splitter', damageType: enemy.damageType });
-        if (enemy.boss) this.ctx.bus.emit('boss-defeated', {});
+        if (enemy.boss) {
+            this.ctx.bus.emit('boss-defeated', {});
+            if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('bossDeath');
+            this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 4);
+        } else if (enemy.elite) {
+            this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 1.2);
+        }
         this.ctx.playSfx(enemy.boss ? 'sfx_boss_die' : 'sfx_enemy_die', enemy.boss ? 0.82 : 0.45, enemy.boss ? 1.0 : 0.045);
         this.drawEnemyDeathBurst(x, y, enemy.radius, enemy.spec.color, enemy.elite || enemy.boss);
         enemy.node.destroy();
@@ -761,7 +1156,7 @@ export class EnemyManager {
 
         const xpDropChance = enemy.boss ? 1 : enemy.elite ? ELITE_XP_DROP_CHANCE : NORMAL_XP_DROP_CHANCE;
         if (Math.random() < xpDropChance) {
-            const xpMultiplier = enemy.boss ? 3 : enemy.elite ? 2.4 : 2.1;
+            const xpMultiplier = enemy.boss ? 3 : enemy.elite ? 2.4 : 2.6;
             this.ctx.dropPickup('xp', Math.max(1, Math.round(enemy.spec.xp * xpMultiplier)), x, y);
         }
 
@@ -785,6 +1180,10 @@ export class EnemyManager {
             const chestType: ChestPickupType = Math.random() < 0.14 ? 'chest-rare' : 'chest-common';
             this.ctx.tryDropChest(chestType, x + this.ctx.randomRange(-14, 14), y + this.ctx.randomRange(-14, 14));
         }
+        // Shield fragment drop (20% chance per kill)
+        if (Math.random() < 0.2 && this.ctx.addShieldFragment) {
+            this.ctx.addShieldFragment();
+        }
         if (enemy.boss) {
             this.ctx.dropPickup('cores', 1 + Math.floor(this.cs.endlessCycle / 3), x, y);
             this.ctx.dropPickup('shards', 7 + this.cs.endlessCycle * 2, x + 18, y + 8);
@@ -792,6 +1191,7 @@ export class EnemyManager {
             this.ctx.dropPickup('alloy', 18 + this.cs.endlessCycle * 4, x + 4, y + 36);
             this.ctx.tryDropChest('chest-rare', x, y + 32);
             this.cs.bossKills += 1;
+            if (this.ctx.tryDropEquipmentBlueprint) this.ctx.tryDropEquipmentBlueprint();
             this.cs.bossDefeatedThisWave = true;
             this.cs.bossSpawned = false;
             this.ctx.requestBgm('bgm_combat_loop');
@@ -818,6 +1218,52 @@ export class EnemyManager {
         for (let i = 0; i < rings; i++) {
             const ringRadius = radius * (1.15 + i * 0.45);
             this.ctx.scheduleOnce(() => this.ctx.drawAreaPulse(x, y, ringRadius, color), i * 0.035);
+        }
+        // Extra strong death burst for bosses (rare=true + boss=large radius)
+        if (rare && radius > 50) {
+            // Big outer ring
+            this.ctx.scheduleOnce(() => {
+                this.ctx.drawAreaPulse(x, y, radius * 2.8, '#F8FAFC');
+            }, 0.07);
+            this.ctx.scheduleOnce(() => {
+                this.ctx.drawAreaPulse(x, y, radius * 4.2, '#F94144');
+            }, 0.14);
+            // Extra particles
+            this.spawnDeathParticles(x, y, '#F94144', 16, radius * 0.15);
+            this.spawnDeathParticles(x, y, '#F59E0B', 8, radius * 0.1);
+        }
+        // Colored death particles
+        const partCount = rare ? 12 : 6;
+        this.spawnDeathParticles(x, y, color, partCount, Math.max(3, radius * 0.2));
+        // Additional accent particles for elite/boss
+        if (rare) {
+            this.spawnDeathParticles(x, y, '#F8FAFC', 6, Math.max(2, radius * 0.12));
+        }
+        // Ground scorch mark on death (boss/elite only) — internal pool
+        if (rare && this.groundMarkNodes) {
+            this.ctx.scheduleOnce(() => {
+                let idx = -1;
+                for (let i = 0; i < this.groundMarkNodes.length; i++) {
+                    if (this.groundMarkTimers[i] < 0) { idx = i; break; }
+                }
+                if (idx < 0) return;
+                const mark = this.groundMarkNodes[idx];
+                mark.setPosition(x, y, 2);
+                const s = 0.6 + Math.random() * 0.8;
+                mark.setScale(s, s);
+                mark.angle = Math.random() * 360;
+                mark.active = true;
+                this.groundMarkTimers[idx] = 3 + Math.random() * 2;
+                const gfx = this.groundMarkGfx[idx];
+                gfx.clear();
+                gfx.fillColor = this.ctx.hex(color, rare ? 45 : 28);
+                gfx.circle(0, 0, radius * (rare ? 1.8 : 1.4));
+                gfx.fill();
+                gfx.strokeColor = this.ctx.hex(color, rare ? 32 : 16);
+                gfx.lineWidth = 2;
+                gfx.circle(0, 0, radius * (rare ? 1.3 : 1.1));
+                gfx.stroke();
+            }, 0.08);
         }
     }
     public shouldEnemyExplodeOnDeath(enemy: Enemy) {
@@ -847,35 +1293,23 @@ export class EnemyManager {
             enemy.sprite.color = enemy.hitFlash > 0
                 ? this.ctx.hex('#FFFFFF', 255)
                 : tint;
-            enemy.gfx.fillColor = this.ctx.hex('#020617', 145);
-            enemy.gfx.ellipse(4, -8, visualRadius + 8, visualRadius * 0.72 + 5);
-            enemy.gfx.fill();
-            enemy.gfx.fillColor = this.ctx.hex(enemy.spec.color, enemy.boss ? 72 : 58);
-            enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 12 : 7));
-            enemy.gfx.fill();
-            enemy.gfx.strokeColor = this.ctx.hex(enemy.hitFlash > 0 ? '#FFFFFF' : enemy.spec.accent, enemy.boss ? 245 : 225);
-            enemy.gfx.lineWidth = enemy.boss ? 6 : enemy.elite ? 5 : 4;
-            enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 8 : 5));
+            // Thin border around sprite only — no shadow, no glow ring
+            enemy.gfx.strokeColor = this.ctx.hex(enemy.hitFlash > 0 ? '#FFFFFF' : enemy.spec.accent, enemy.boss ? 140 : 120);
+            enemy.gfx.lineWidth = enemy.boss ? 2 : 1.5;
+            enemy.gfx.circle(0, 0, enemy.radius + 2);
             enemy.gfx.stroke();
             this.drawEnemyVariantMark(enemy);
-            if (enemy.elite || enemy.boss) {
-                enemy.gfx.strokeColor = this.ctx.hex(enemy.boss ? '#F94144' : '#F8FAFC', enemy.boss ? 245 : 215);
-                enemy.gfx.lineWidth = enemy.boss ? 6 : 4;
-                enemy.gfx.circle(0, 0, visualRadius + (enemy.boss ? 18 : 11));
-                enemy.gfx.stroke();
-            }
+            // Armor/Dash indicator (functional)
             if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
-                enemy.gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 230);
-                enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 5 : 4;
-                enemy.gfx.circle(0, 0, visualRadius + (enemy.armorTimer > 0 ? 15 : 10));
+                enemy.gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 160);
+                enemy.gfx.lineWidth = 2;
+                enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 6 : 4));
                 enemy.gfx.stroke();
             }
             // Health bar drawn by shared barLayer — skip here
             return;
         }
-        enemy.gfx.fillColor = this.ctx.hex('#020617', 90);
-        enemy.gfx.circle(3, -4, enemy.radius + 3);
-        enemy.gfx.fill();
+        // Fallback non-sprite rendering
         enemy.gfx.fillColor = enemy.hitFlash > 0
             ? this.ctx.hex('#FFFFFF', 255)
             : this.getEnemyTint(enemy, enemy.elite ? 255 : 230);
@@ -885,14 +1319,14 @@ export class EnemyManager {
         enemy.gfx.circle(-enemy.radius * 0.3, enemy.radius * 0.12, enemy.radius * 0.35);
         enemy.gfx.fill();
         this.drawEnemyVariantMark(enemy);
-        enemy.gfx.strokeColor = this.ctx.hex(enemy.elite ? '#F8FAFC' : '#0F172A', enemy.boss ? 255 : 190);
-        enemy.gfx.lineWidth = enemy.boss ? 5 : enemy.elite ? 4 : 2;
+        enemy.gfx.strokeColor = this.ctx.hex(enemy.elite ? '#F8FAFC' : '#0F172A', enemy.boss ? 180 : 140);
+        enemy.gfx.lineWidth = enemy.boss ? 2 : enemy.elite ? 1.5 : 1;
         enemy.gfx.circle(0, 0, enemy.radius);
         enemy.gfx.stroke();
         if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
-            enemy.gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 210);
-            enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 4 : 3;
-            enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 9 : 5));
+            enemy.gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 180);
+            enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 2.5 : 2;
+            enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 8 : 5));
             enemy.gfx.stroke();
         }
         // Health bar drawn by shared barLayer — skip here
@@ -1004,8 +1438,12 @@ export class EnemyManager {
     public findNearestEnemy(range: number): Enemy | null {
         let best: Enemy | null = null;
         let bestDist = range * range;
-        for (const enemy of this.enemies) {
-            const dist = this.ctx.distanceSq(this.cs.playerX, this.cs.playerY, enemy.node.position.x, enemy.node.position.y);
+        const enemies = this.enemies;
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            if (!this.enemySet.has(enemy)) continue;
+            const { x: ex, y: ey } = this.getEnemyPosition(enemy);
+            const dist = this.ctx.distanceSq(this.cs.playerX, this.cs.playerY, ex, ey);
             if (dist < bestDist) {
                 best = enemy;
                 bestDist = dist;

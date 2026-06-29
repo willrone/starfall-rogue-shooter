@@ -48,11 +48,11 @@ function testRunItemTierProgression() {
     const tier1 = RUN_ITEMS.find(item => item.id === `${blueprint.id}-1`);
     const tier5 = RUN_ITEMS.find(item => item.id === `${blueprint.id}-5`);
     assert(tier1 && tier5, 'Should find tier 1 and tier 5 items');
-    // attackPower is positive, tier 5 should be > tier 1
-    const t1Atk = tier1!.effects.find(e => e.stat === 'attackPower');
-    const t5Atk = tier5!.effects.find(e => e.stat === 'attackPower');
-    assert(t1Atk && t5Atk, 'Should have attackPower effect');
-    assert(t5Atk!.amount > t1Atk!.amount, `Tier 5 atk (${t5Atk!.amount}) should exceed tier 1 (${t1Atk!.amount})`);
+    // weaponDamagePct is positive, tier 5 should be > tier 1
+    const t1Atk = tier1!.effects.find(e => e.stat === 'weaponDamagePct');
+    const t5Atk = tier5!.effects.find(e => e.stat === 'weaponDamagePct');
+    assert(t1Atk && t5Atk, 'Should have weaponDamagePct effect');
+    assert(t5Atk!.amount > t1Atk!.amount, `Tier 5 weaponDamagePct (${t5Atk!.amount}) should exceed tier 1 (${t1Atk!.amount})`);
 }
 
 function testScaleRunItemEffectPositive() {
@@ -115,9 +115,12 @@ function testScaleStatUpgradeEffect() {
     const scaled1 = scaleStatUpgradeEffect(effect, 1);
     assert(scaled1.amount === 16, `Tier 1 stat upgrade should be unchanged: got ${scaled1.amount}`);
 
-    const scaled3 = scaleStatUpgradeEffect(effect, 3);
-    // SCALE_STAT(3) = 1 + 2*0.66 = 2.32 → 16*2.32 = 37.12 → round to 37
-    assert(scaled3.amount === 37, `Tier 3 stat upgrade should be ~37: got ${scaled3.amount}`);
+    const tier3 = 3;
+    const scaled3 = scaleStatUpgradeEffect(effect, tier3);
+    // Current stat-upgrade scaling contract: SCALE_STAT(tier) = 1 + (tier - 1) * 0.58.
+    // Tier 3: 16 * (1 + 2 * 0.58) = 34.56 → round to 35.
+    const expected3 = Math.round(effect.amount * (1 + (tier3 - 1) * 0.58));
+    assert(scaled3.amount === expected3, `Tier 3 stat upgrade should be ${expected3}: got ${scaled3.amount}`);
 }
 
 // Run all tests

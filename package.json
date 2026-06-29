@@ -2,7 +2,24 @@
   "name": "starfall-rogue-shooter",
   "scripts": {
     "test": "npx --yes tsx tests/run.ts",
-    "typecheck": "npx --yes -p typescript@5.9.3 tsc -p tsconfig.json"
+    "test:tools": "python3 -m unittest discover -s tests -p '*test.py'",
+    "typecheck": "npx --yes -p typescript@5.9.3 tsc -p tsconfig.json",
+    "balance:build-web": "python3 tools/bot/build_web_mobile_for_bot.py",
+    "balance:cdp": "python3 tools/bot/run_balance_cdp.py --runs 3 --target-filter localhost:7457",
+    "balance:cdp:smoke": "python3 tools/bot/run_balance_cdp.py --runs 1 --weapon storm-rifle --max-seconds 240 --target-filter localhost:7457 --out data/balance_cdp_smoke --allow-balance-fail",
+    "balance:e2e:smoke": "python3 tools/bot/run_balance_e2e.py --runs 1 --weapon storm-rifle --max-seconds 240 --seed 42 --out data/balance_e2e_smoke --allow-balance-fail",
+    "balance:e2e": "python3 tools/bot/run_balance_e2e.py --runs 3 --seed 42 --out data/balance_e2e",
+    "balance:sim": "npm run balance:cdp",
+    "balance:pipeline:check": "python3 tools/bot/run_balance_pipeline.py --check-only --skip-build",
+    "balance:pipeline:smoke": "python3 tools/bot/run_balance_pipeline.py --runs 1 --max-seconds 60 --weapons storm-rifle --skip-build",
+    "balance:pipeline": "python3 tools/bot/run_balance_pipeline.py --runs 3 --max-seconds 720 --skip-build",
+    "build:preflight": "python3 tools/cocos_build_guard.py --preflight-only",
+    "build:check": "python3 tools/cocos_build_guard.py --validate-existing",
+    "size:bytedance": "python3 tools/cocos_build_guard.py --size-report",
+    "build:bytedance": "python3 tools/cocos_build_guard.py --skip-sim",
+    "build:bytedance:fast": "python3 tools/cocos_build_guard.py --skip-tests --skip-sim",
+    "verify": "npm run typecheck && npm test && npm run balance:e2e:smoke && npm run build:check",
+    "verify:bytedance": "npm run typecheck && npm test && npm run balance:e2e:smoke && npm run build:bytedance"
   },
   "creator": {
     "version": "3.8.8"

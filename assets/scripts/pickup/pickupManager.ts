@@ -5,6 +5,7 @@ import {
     Label,
     Node,
     Sprite,
+    SpriteFrame,
     UITransform,
 } from 'cc';
 import type { PanelManager, ButtonView } from '../ui/panels';
@@ -38,8 +39,13 @@ import {
     LEVEL_UPGRADES,
     RUN_ITEMS,
 } from '../catalogs/runItemCatalog';
-import { EQUIPMENT } from '../catalogs/equipmentCatalog';
+import {
+    applyEquipmentLootChoiceSpec,
+    createEquipmentLootChoiceSpecs,
+    type EquipmentLootChoiceSpec,
+} from '../catalogs/equipmentLootChoices';
 import type { CombatState } from '../state/combatState';
+import { AdManager } from '../ad/AdManager';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -110,6 +116,8 @@ export interface PickupHostContext {
     spendRunAlloy(cost: number): boolean;
 
     pickLevelChoices(): LevelUpgrade[];
+    rumbleVfx(effect: string): void;
+    getIcon(name: string): SpriteFrame | null;
     pickItemChoices(quality: ItemChoiceQuality): LevelUpgrade[];
 
     drawButton(button: ButtonView, disabled: boolean): void;
@@ -117,6 +125,8 @@ export interface PickupHostContext {
     saveProgress(): void;
     showHangar(message: string): void;
     getEquipmentLevel(id: string): number;
+    isEquipmentLootEligible?(equipment: EquipmentDef, rare: boolean): boolean;
+    refreshHud(): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,16 +178,16 @@ export class PickupManager {
         if (this.pickups.length > PICKUP_HARD_CAP) {
             this.compactPickupOverflow();
         }
-        const pickupRadius = this.getPickupRadius();
+        const basePickupRadius = this.getPickupRadius();
         const removing: Pickup[] = [];
         for (const pickup of this.pickups) {
             pickup.age += dt;
             const dx = this.cs.playerX - pickup.x;
             const dy = this.cs.playerY - pickup.y;
             const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
-            if (dist < pickupRadius) {
-                const pull = (pickupRadius - dist) / pickupRadius;
-                const speed = 180 + Math.max(0, pull) * 520;
+            if (dist < basePickupRadius) {
+                const pull = (basePickupRadius - dist) / basePickupRadius;
+                const speed = 180 + Math.max(0, pull) * 620;
                 pickup.x += (dx / dist) * speed * dt;
                 pickup.y += (dy / dist) * speed * dt;
                 pickup.node.setPosition(pickup.x, pickup.y, 5);
@@ -356,6 +366,11 @@ export class PickupManager {
             this.cs.xp -= this.cs.xpToNext;
             this.cs.level += 1;
             this.cs.xpToNext = Math.round(this.cs.xpToNext * 1.24 + 22 + this.cs.level * 5);
+            // HP auto-growth every 3 levels
+            if (this.cs.level % 3 === 0) {
+                this.cs.playerMaxHp += 20;
+                this.cs.playerHp += 20;
+            }
             this.ctx.playSfx('sfx_level_up', 0.78, 0.45);
             this.openLevelChoices();
         }
@@ -505,6 +520,7 @@ export class PickupManager {
 
     openLevelChoices(): void {
         this.cs.phase = 'level-up';
+        if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('levelUp');
         this.pendingLevelChoices = this.ctx.pickLevelChoices();
         this.renderChoicePanel(
             `角色 Lv.${this.cs.level} 属性成长`,
@@ -531,6 +547,12 @@ export class PickupManager {
         if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = true;
         if (this.panels.levelTitleLabel) this.panels.levelTitleLabel.string = title;
         if (this.panels.levelHintLabel) this.panels.levelHintLabel.string = hint;
+        const iconMap: Record<string, string> = {
+            'fire-control': 'stat_attack_power', 'neural-rapid': 'stat_attack_speed',
+            'pierce-drill': 'stat_defense', 'multi-control': 'dmg_physical',
+            'drone-command': 'wpn_drone_spirit', 'crit-instinct': 'stat_crit_chance',
+            'weakpoint-study': 'stat_crit_damage', 'lethal-judgement': 'stat_lethal_chance',
+        };
         this.panels.levelChoiceButtons.forEach((button, index) => {
             const choice = choices[index];
             button.node.active = !!choice;
@@ -538,6 +560,27 @@ export class PickupManager {
             button.color = choice.color;
             button.label.string = `${choice.category}｜${choice.name}\n${choice.desc}`;
             this.ctx.drawButton(button, false);
+            // Add icon to button
+            const iconNodeName = `ChoiceIcon_${index}`;
+            let iconNode = button.node.getChildByName(iconNodeName);
+            const iconKey = iconMap[choice.id] || '';
+            const sf = iconKey ? this.ctx.getIcon(iconKey) : null;
+            if (sf) {
+                if (!iconNode) {
+                    iconNode = new Node(iconNodeName);
+                    iconNode.layer = Layers.Enum.UI_2D;
+                    button.node.addChild(iconNode);
+                    const it = iconNode.addComponent(UITransform);
+                    it.setContentSize(28, 28);
+                    iconNode.addComponent(Sprite);
+                }
+                const sp = iconNode!.getComponent(Sprite)!;
+                sp.spriteFrame = sf;
+                sp.sizeMode = Sprite.SizeMode.CUSTOM;
+                iconNode!.setPosition(-button.width / 2 + 22, 0);
+            } else if (iconNode) {
+                iconNode.active = false;
+            }
         });
         if (this.panels.levelRefreshButton) {
             this.panels.levelRefreshButton.node.active = true;
@@ -600,7 +643,23 @@ export class PickupManager {
     refreshCurrentChoices(): void {
         if (this.cs.phase === 'level-up') {
             if (!this.ctx.spendRunAlloy(LEVEL_REFRESH_COST)) {
-                this.ctx.showToast(`合金不足，刷新需要 ${LEVEL_REFRESH_COST}。`);
+                // Try ad refresh instead
+                this.ctx.showToast(`合金不足，正在尝试视频免费刷新...`);
+                if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('adRefresh');
+                AdManager.playRewardedAd((result) => {
+                    if (!result.success) {
+                        this.ctx.showToast('刷新失败，请重试。');
+                        return;
+                    }
+                    this.pendingLevelChoices = this.ctx.pickLevelChoices();
+                    this.renderChoicePanel(
+                        `角色 Lv.${this.cs.level} 属性成长`,
+                        `免费刷新成功！选择 1 项成长。`,
+                        this.pendingLevelChoices,
+                        LEVEL_REFRESH_COST,
+                    );
+                    this.ctx.showToast('看视频免费刷新成功！');
+                });
                 return;
             }
             this.pendingLevelChoices = this.ctx.pickLevelChoices();
@@ -644,67 +703,44 @@ export class PickupManager {
     // ── Loot ───────────────────────────────────────────────────────────────
 
     createLootChoices(): LootChoice[] {
-        const choices: LootChoice[] = [];
-        const locked = this.ctx.shuffle(EQUIPMENT.filter((equipment) => !this.ctx.ownedEquipment.has(equipment.id)));
-        if (locked.length > 0) {
-            const unlock = locked[0];
-            choices.push({
-                title: `新装备：${unlock.name}`,
-                desc: unlock.desc,
-                color: unlock.color,
-                apply: () => {
-                    this.ctx.ownedEquipment.add(unlock.id);
-                    this.ctx.equipmentLevels[unlock.id] = Math.max(1, this.ctx.getEquipmentLevel(unlock.id));
-                },
-            });
-        }
-
-        const owned = this.ctx.shuffle(EQUIPMENT.filter((equipment) =>
-            this.ctx.ownedEquipment.has(equipment.id) && this.ctx.getEquipmentLevel(equipment.id) < equipment.maxLevel
-        ));
-        for (const equipment of owned.slice(0, 2)) {
-            choices.push({
-                title: `强化：${equipment.name}`,
-                desc: `免费升 1 级。${equipment.desc}`,
-                color: equipment.color,
-                apply: () => {
-                    this.ctx.equipmentLevels[equipment.id] = Math.min(equipment.maxLevel, this.ctx.getEquipmentLevel(equipment.id) + 1);
-                },
-            });
-        }
-
-        choices.push({
-            title: '资源箱',
-            desc: '立刻获得装备碎片、生体样本、电路板和 1 核心。',
-            color: '#43AA8B',
-            apply: () => {
-                this.cs.shards += 8 + this.cs.battleIndex * 2;
-                this.cs.biomass += 5 + this.cs.battleIndex;
-                this.cs.circuits += 4 + Math.floor(this.cs.battleIndex / 2);
-                this.cs.cores += 1;
-            },
-        });
-
-        while (choices.length < 3) {
-            const equipment = owned[choices.length % Math.max(1, owned.length)] || EQUIPMENT[0];
-            choices.push({
-                title: `校准：${equipment.name}`,
-                desc: '免费升 1 级，若已满级则转化为装备碎片和核心。',
-                color: equipment.color,
-                apply: () => {
-                    if (this.ctx.getEquipmentLevel(equipment.id) < equipment.maxLevel) {
-                        this.ctx.equipmentLevels[equipment.id] = this.ctx.getEquipmentLevel(equipment.id) + 1;
-                    } else {
-                        this.cs.shards += 10;
-                        this.cs.cores += 1;
-                    }
-                },
-            });
-        }
-
-        return this.ctx.shuffle(choices).slice(0, 3);
+        return createEquipmentLootChoiceSpecs({
+            ownedEquipment: this.ctx.ownedEquipment,
+            equipmentLevels: this.ctx.equipmentLevels,
+            battleIndex: this.cs.battleIndex,
+            getEquipmentLevel: (id: string) => this.ctx.getEquipmentLevel(id),
+            isEquipmentLootEligible: (equipment, rare) => this.ctx.isEquipmentLootEligible
+                ? this.ctx.isEquipmentLootEligible(equipment, rare)
+                : !this.ctx.ownedEquipment.has(equipment.id),
+        }, (items) => this.ctx.shuffle(items), true).map((spec) => this.toLootChoice(spec));
     }
 
+    private toLootChoice(spec: EquipmentLootChoiceSpec): LootChoice {
+        return {
+            title: spec.title,
+            desc: spec.desc,
+            color: spec.color,
+            apply: () => this.applyLootChoiceSpec(spec),
+        };
+    }
+
+    private applyLootChoiceSpec(spec: EquipmentLootChoiceSpec): void {
+        applyEquipmentLootChoiceSpec({
+            ownedEquipment: this.ctx.ownedEquipment,
+            equipmentLevels: this.ctx.equipmentLevels,
+            getEquipmentLevel: (id: string) => this.ctx.getEquipmentLevel(id),
+            addResources: (wallet: ResourceWallet) => {
+                this.cs.shards += wallet.shards;
+                this.cs.biomass += wallet.biomass;
+                this.cs.circuits += wallet.circuits;
+                this.cs.cores += wallet.cores;
+                this.cs.crystals += wallet.crystals;
+            },
+        }, spec);
+    }
+
+    public refreshHud(): void {
+        this.ctx.refreshHud();
+    }
     chooseLoot(index: number): void {
         if (this.cs.phase !== 'loot') return;
         const choice = this.pendingLootChoices[index];
