@@ -22,6 +22,7 @@ import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS, BOSS_SPECS, MINI_BOSS_SPECS } from 
 import type { CombatState } from '../state/combatState';
 
 import { periodicFollowPhase } from './enemyMovement';
+import { spawnCircle, spawnChargeWave, spawnCross } from './enemySpawnPatterns';
 
 import * as EnemyConst from "./enemyConstants";
 export * from "./enemyConstants";
@@ -491,6 +492,7 @@ export class EnemyManager {
                     moveSpeed = 0;
                 }
             }
+            let moveSpeed = enemy.speed;
             if (enemy.dashTimer > 0) {
                 enemy.dashTimer = Math.max(0, enemy.dashTimer - dt);
                 vx = enemy.dashVx;
@@ -1207,6 +1209,19 @@ export class EnemyManager {
         const ring = this.isBossWave() || this.cs.waveIndex % 3 === 0;
         const count = this.getWaveSpawnBatchCount();
         const fallback = this.isBossWave() ? ENEMY_SPECS : this.getUnlockedEnemySpecs();
+        // 波 6+：12% 概率触发"冲锋波" — 集中从一侧高速冲锋
+        if (!this.isBossWave() && this.cs.waveIndex >= 6 && Math.random() < 0.12 && count >= 3) {
+            const spec = this.pickWeightedEnemySpec(this.currentWaveSpecs.length > 0 ? this.currentWaveSpecs : fallback);
+            if (spec) {
+                const angle = Math.random() * Math.PI * 2;
+                spawnChargeWave(this, spec, Math.min(count + 2, 8), angle, 240, 0);
+                // 冲锋波还有额外正常出怪补充数量
+                const extra = Math.max(1, count - 3);
+                this.spawnPack(extra, ring, this.currentWaveSpecs, fallback);
+                this.maybeSpawnMiniBoss();
+                return;
+            }
+        }
         this.spawnPack(count, ring, this.currentWaveSpecs, fallback);
         // 无尽模式（波13+）有 30% 概率穿插小 Boss（不挡进度）
         this.maybeSpawnMiniBoss();
@@ -1425,6 +1440,11 @@ export class EnemyManager {
                     this.ctx.showToast('虚空巨像进入阶段三：狂暴！');
                     this.ctx.shakeIntensity = Math.max(this.ctx.shakeIntensity, 6);
                     this.ctx.playSfx('sfx_boss_warning', 0.9, 0.2);
+                    // 环形召唤蜂群包围玩家
+                    const swarmSpec = ENEMY_SPECS.find(s => s.family === 'swarm');
+                    if (swarmSpec) {
+                        spawnCircle(this, swarmSpec, 12, 450, 0.08);
+                    }
                 }
                 // 更新 phase
                 enemy.spec = { ...enemy.spec, variantIndex: newPhase };
@@ -1478,9 +1498,13 @@ export class EnemyManager {
                 this.ctx.showToast('冰霜女皇进入冰封领域！');
                 this.ctx.playSfx('sfx_boss_warning', 0.8, 0.3);
                 this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 2);
-                // 瞬间放一圈冰霜
+                // 瞬间放一圈冰霜 + 召唤追踪眼
                 const pos = this.getEnemyPosition(enemy);
                 this.ctx.drawAreaPulse(pos.x, pos.y, 200, '#93C5FD');
+                const seekerSpec = ENEMY_SPECS.find(s => s.family === 'seeker');
+                if (seekerSpec) {
+                    spawnCircle(this, seekerSpec, 6, 480, 0);
+                }
             }
             return;
         }

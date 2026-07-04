@@ -1,5 +1,6 @@
 import './core/gameTimer.test';
 import './enemy/enemyMovement.test';
+import './enemy/enemySpawnPatterns.test';
 import './core/resources.test';
 import './core/stats.test';
 import './core/eventBus.test';
