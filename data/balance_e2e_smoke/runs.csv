@@ -1,2 +1,2 @@
 weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
-storm-rifle,冲锋枪,novice,novice,1,57127,10,571.0,1184,13,454,11,combat,381.0,False,
+echo-bow-standard,回声弓,standard,standard,1,35479,6,327.06,585,9,413,8,paused,0.0,True,
