@@ -81,7 +81,7 @@ export function createBaseCharacterStats(): CharacterStats {
     return {
         attackPower: 16,
         attackSpeed: 0,
-        attackRange: 760,
+        attackRange: 420,
         critChance: 0.05,
         critDamage: 2,
         lethalChance: 0.006,

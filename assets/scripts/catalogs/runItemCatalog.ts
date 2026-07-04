@@ -32,16 +32,16 @@ export const RUN_ITEM_BLUEPRINTS: RunItemBlueprint[] = [
     // ── 攻击（12件）数值大幅提升，纯正面 ──────────────────────────
     { id: 'charged-magazine', name: '高能弹匣', category: '攻击', color: '#F94144', effects: [{ stat: 'weaponDamagePct', amount: 0.36 }, { stat: 'weaponFireRatePct', amount: 0.18 }] },
     { id: 'rapid-trigger', name: '急速扳机', category: '攻击', color: '#4CC9F0', effects: [{ stat: 'weaponFireRatePct', amount: 0.48 }] },
-    { id: 'longscope', name: '远距瞄具', category: '攻击', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 132 }, { stat: 'critChance', amount: 0.07 }] },
+    { id: 'longscope', name: '远距瞄具', category: '攻击', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 48 }, { stat: 'critChance', amount: 0.07 }] },
     { id: 'crit-lens', name: '暴击透镜', category: '攻击', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.12 }, { stat: 'critDamage', amount: 0.48 }] },
     { id: 'execution-protocol', name: '处决协议', category: '攻击', color: '#B5179E', effects: [{ stat: 'lethalChance', amount: 0.04 }, { stat: 'lethalDamage', amount: 0.72 }] },
     { id: 'fracture-warhead', name: '裂解弹头', category: '攻击', color: '#C084FC', effects: [{ stat: 'lethalMaxHpPct', amount: 0.03 }, { stat: 'weaponDamagePct', amount: 0.18 }] },
     { id: 'piercing-coil', name: '穿甲线圈', category: '攻击', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 1.8 }, { stat: 'pierceDamagePct', amount: 0.42 }] },
     { id: 'armor-piercing-round', name: '破甲弹', category: '攻击', color: '#E879F9', effects: [{ stat: 'pierceDamagePct', amount: 0.54 }, { stat: 'pierce', amount: 1.2 }] },
-    { id: 'superconductor-round', name: '超导弹体', category: '攻击', color: '#22D3EE', effects: [{ stat: 'bulletSpeed', amount: 96 }, { stat: 'attackRange', amount: 96 }] },
+    { id: 'superconductor-round', name: '超导弹体', category: '攻击', color: '#22D3EE', effects: [{ stat: 'bulletSpeed', amount: 96 }, { stat: 'attackRange', amount: 36 }] },
     { id: 'overload-reactor', name: '过载反应', category: '攻击', color: '#EF4444', effects: [{ stat: 'weaponDamagePct', amount: 0.48 }] },
-    { id: 'drone-uplink', name: '无人机上行链', category: '攻击', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 3.0 }, { stat: 'attackRange', amount: 60 }] },
-    { id: 'sniper-heuristic', name: '狙击演算', category: '攻击', color: '#577590', effects: [{ stat: 'critDamage', amount: 0.72 }, { stat: 'attackRange', amount: 168 }] },
+    { id: 'drone-uplink', name: '无人机上行链', category: '攻击', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 3.0 }, { stat: 'attackRange', amount: 24 }] },
+    { id: 'sniper-heuristic', name: '狙击演算', category: '攻击', color: '#577590', effects: [{ stat: 'critDamage', amount: 0.72 }, { stat: 'attackRange', amount: 60 }] },
 
     // ── 防御/生存（7件，替代原元素防） ────────────────────────────
     { id: 'composite-armor', name: '复合护甲', category: '防御', color: '#64748B', effects: [{ stat: 'maxHp', amount: 84 }, { stat: 'damageReduction', amount: 0.04 }] },
@@ -66,7 +66,7 @@ export const RUN_ITEM_BLUEPRINTS: RunItemBlueprint[] = [
     // ── 混合（2件） ────────────────────────────────────────────────
     { id: 'phase-thruster', name: '相位推进器', category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed', amount: 28 }, { stat: 'dodgeChance', amount: 0.06 }, { stat: 'pickupRange', amount: 36 }] },
     { id: 'stable-core', name: '稳态核心', category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp', amount: 96 }, { stat: 'shieldMax', amount: 48 }] },
-    { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.08 }, { stat: 'attackRange', amount: 108 }] },
+    { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.08 }, { stat: 'attackRange', amount: 40 }] },
     { id: 'frenzy-injector', name: '狂热注射', category: '攻击', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.60 }, { stat: 'moveSpeed', amount: 8 }] },
 ];
 
@@ -145,7 +145,7 @@ export const LEVEL_UP_BLUEPRINTS: StatUpgradeBlueprint[] = [
     { id: 'physique-toughness',  name: '坚韧体质', category: '体魄', color: '#475569', effects: [{ stat: 'damageReduction', min: 0.03, max: 0.06 }] },
 
     // ── 🎯 技巧（Technique） ─────────────────────────────────────
-    { id: 'technique-range',     name: '精准瞄准', category: '技巧', color: '#38BDF8', effects: [{ stat: 'attackRange', min: 55, max: 120 }] },
+    { id: 'technique-range',     name: '精准瞄准', category: '技巧', color: '#38BDF8', effects: [{ stat: 'attackRange', min: 20, max: 50 }] },
     { id: 'technique-pierce',    name: '穿透强化', category: '技巧', color: '#F9C74F', effects: [{ stat: 'pierceDamagePct', min: 0.12, max: 0.28 }] },
     { id: 'technique-drone',     name: '无人机指挥', category: '技巧', color: '#90BE6D', effects: [{ stat: 'dronePower', min: 1.0, max: 4.5 }] },
 ];

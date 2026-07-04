@@ -10,13 +10,13 @@ export const GEAR_RARITIES: GearRarityDef[] = [
 
 export const GEAR_BLUEPRINTS: GearBlueprint[] = [
     // ── Starter gear (kept intentionally modest) ───────────────────
-    { id: 'tactical-visor', name: '战术目镜', slot: 'hat', color: '#38BDF8', baseCost: 28, desc: '稳定强化索敌距离和弱点判断。', effects: [{ stat: 'attackRange', amount: 36 }, { stat: 'critChance', amount: 0.012 }] },
-    { id: 'phase-armor', name: '相位护甲', slot: 'armor', color: '#F8961E', baseCost: 46, desc: '均衡生命、物防、魔防和冷热抗性。', effects: [{ stat: 'maxHp', amount: 22 }, { stat: 'physicalDefense', amount: 2.2 }, { stat: 'magicDefense', amount: 1 }, { stat: 'fireDefense', amount: 1 }, { stat: 'iceDefense', amount: 1 }] },
+    { id: 'tactical-visor', name: '战术目镜', slot: 'hat', color: '#38BDF8', baseCost: 28, desc: '稳定强化索敌距离和弱点判断。', effects: [{ stat: 'attackRange', amount: 18 }, { stat: 'critChance', amount: 0.012 }] },
+    { id: 'phase-armor', name: '相位护甲', slot: 'armor', color: '#4CC9F0', baseCost: 30, desc: '均衡护甲，提高生存和抗性。', effects: [{ stat: 'maxHp', amount: 22 }, { stat: 'physicalDefense', amount: 2.2 }, { stat: 'magicDefense', amount: 1 }, { stat: 'fireDefense', amount: 1 }, { stat: 'iceDefense', amount: 1 }] },
     { id: 'kinetic-boots', name: '动能靴', slot: 'boots', color: '#43AA8B', baseCost: 42, desc: '提高移动速度和闪避空间。', effects: [{ stat: 'moveSpeed', amount: 17 }, { stat: 'dodgeChance', amount: 0.008 }] },
-    { id: 'magnet-coil', name: '磁吸线圈', slot: 'accessory', color: '#577590', baseCost: 34, desc: '扩大经验和资源拾取范围。', effects: [{ stat: 'pickupRange', amount: 22 }, { stat: 'luck', amount: 1.2 }] },
+    { id: 'magnet-coil', name: '磁吸线圈', slot: 'accessory', color: '#577590', baseCost: 30, desc: '扩大拾取半径并增加资源效率。', effects: [{ stat: 'pickupRange', amount: 22 }, { stat: 'luck', amount: 1.2 }] },
 
     // ── Endgame chase gear (stronger than starter gear; not in STARTER_EQUIPMENT_IDS) ──
-    { id: 'starfall-targeter', name: '星陨瞄准器', slot: 'hat', color: '#22D3EE', baseCost: 92, desc: '高阶输出头部装备，大幅强化暴击、暴伤和索敌。', effects: [{ stat: 'attackRange', amount: 58 }, { stat: 'critChance', amount: 0.028 }, { stat: 'critDamage', amount: 0.18 }, { stat: 'lethalChance', amount: 0.004 }] },
+    { id: 'starfall-targeter', name: '星陨瞄准器', slot: 'hat', color: '#22D3EE', baseCost: 92, desc: '高阶输出头部装备，大幅强化暴击、暴伤和索敌。', effects: [{ stat: 'attackRange', amount: 28 }, { stat: 'critChance', amount: 0.028 }, { stat: 'critDamage', amount: 0.18 }, { stat: 'lethalChance', amount: 0.004 }] },
     { id: 'singularity-armor', name: '奇点装甲', slot: 'armor', color: '#8B5CF6', baseCost: 118, desc: '高阶生存装甲，提供生命、护盾、减伤和护盾恢复。', effects: [{ stat: 'maxHp', amount: 46 }, { stat: 'shieldMax', amount: 28 }, { stat: 'damageReduction', amount: 0.020 }, { stat: 'shieldRegen', amount: 0.75 }] },
     { id: 'overdrive-boots', name: '超频战靴', slot: 'boots', color: '#2DD4BF', baseCost: 96, desc: '高阶机动装备，提高速度、闪避、微量回复和开火节奏。', effects: [{ stat: 'moveSpeed', amount: 36 }, { stat: 'dodgeChance', amount: 0.020 }, { stat: 'hpRegen', amount: 0.20 }, { stat: 'attackSpeed', amount: 0.025 }] },
     { id: 'growth-singularity', name: '成长奇点', slot: 'accessory', color: '#F59E0B', baseCost: 108, desc: '高阶成长饰品，扩大拾取并显著提高经验、资源与幸运。', effects: [{ stat: 'pickupRange', amount: 48 }, { stat: 'luck', amount: 4.5 }, { stat: 'xpGain', amount: 0.055 }, { stat: 'resourceGain', amount: 0.040 }] },
@@ -62,7 +62,7 @@ export const GEAR_BLUEPRINTS: GearBlueprint[] = [
     { id: 'shield-orb', name: '护盾宝珠', slot: 'accessory', color: '#22D3EE', baseCost: 50, desc: '增加护盾容量和回复。', effects: [{ stat: 'shieldMax', amount: 22 }, { stat: 'shieldRegen', amount: 0.45 }] },
     { id: 'salvage-charm', name: '拾荒护符', slot: 'accessory', color: '#F8961E', baseCost: 48, desc: '用少量攻击换取资源收益。', effects: [{ stat: 'resourceGain', amount: 0.035 }, { stat: 'luck', amount: 4 }, { stat: 'attackPower', amount: -1.5 }] },
     { id: 'learning-prism', name: '经验棱镜', slot: 'accessory', color: '#38BDF8', baseCost: 48, desc: '加快升级节奏，防御略低。', effects: [{ stat: 'xpGain', amount: 0.045 }, { stat: 'pickupRange', amount: 10 }, { stat: 'physicalDefense', amount: -1 }] },
-    { id: 'drone-relay', name: '无人机中继', slot: 'accessory', color: '#90BE6D', baseCost: 54, desc: '强化无人机电击和索敌半径。', effects: [{ stat: 'dronePower', amount: 0.7 }, { stat: 'attackRange', amount: 18 }, { stat: 'magicDefense', amount: -1 }] },
+    { id: 'drone-relay', name: '无人机中继', slot: 'accessory', color: '#90BE6D', baseCost: 54, desc: '强化无人机电击和索敌半径。', effects: [{ stat: 'dronePower', amount: 0.7 }, { stat: 'attackRange', amount: 8 }, { stat: 'magicDefense', amount: -1 }] },
     { id: 'element-signet', name: '元素徽记', slot: 'accessory', color: '#14B8A6', baseCost: 58, desc: '均衡四元素抗性和魔防。', effects: [{ stat: 'fireDefense', amount: 5 }, { stat: 'lightningDefense', amount: 5 }, { stat: 'poisonDefense', amount: 5 }, { stat: 'iceDefense', amount: 5 }, { stat: 'magicDefense', amount: 2 }] },
 ];
 function scaleGearEffects(effects: StatEffect[], rarity: GearRarityDef): StatEffect[] {
