@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died
+echo-bow-standard,回声弓,standard,standard,1,35479,7,353.92,276,7,117,2,paused,0.0,True

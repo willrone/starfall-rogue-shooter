@@ -1,43 +1,47 @@
 {
   "enemy_mite_walk": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 128,
+    "cell_size": 64,
     "fps": 8,
-    "prompt": "Game-ready 2D cartoon monster sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: small warm green shell bug enemy, lime shell, soft yellow highlights, tiny claw feet, playful but hostile. Create exactly 6 animation frames in one horizontal row, idle-walk loop: frame 1 neutral, frame 2 soft squash down, frame 3 lean forward, frame 4 gentle stretch up, frame 5 recoil back, frame 6 return to neutral. Same character, same size, same camera angle, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small 64px size. Character: small beetle-like enemy with dark brown metallic chitin shell (#4A3728), narrow orange glowing eye slits, 6 pointed segmented mechanical legs, aggressive stance. Create exactly 6 animation frames in one horizontal row, walking loop cycle. Same character, same size, consistent top-down view, centered in each cell. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
   "enemy_runner_walk": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 128,
-    "fps": 10,
-    "prompt": "Game-ready 2D cartoon monster sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: fast runner enemy, warm turquoise body with peach orange fins, small rounded feet, streamlined but cute, playful aggressive expression. Create exactly 6 animation frames in one horizontal row, fast run loop: frame 1 crouched ready, frame 2 left stride forward, frame 3 stretched hop, frame 4 right stride forward, frame 5 low recoil, frame 6 return to ready. Same character, same size, same camera angle, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: fast quadruped enemy with elongated dark blue (#1e3a5f) streamlined body, 4 legs in running pose, bright cyan glowing stripe along spine, small angular head with single red eye slit. Sleek, fast-looking silhouette. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
   "enemy_brute_walk": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
-    "frames": 4,
-    "cell_size": 160,
-    "fps": 6,
-    "prompt": "Game-ready 2D cartoon monster sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: heavy brute enemy, warm honey yellow armored blob, rounded orange plates, chunky soft square body, tiny stubby legs, tank-like but cute. Create exactly 4 animation frames in one horizontal row, heavy stomp loop: frame 1 neutral heavy stance, frame 2 body compresses with left stomp, frame 3 body rises and smiles/leans, frame 4 body compresses with right stomp. Same character, same size, same camera angle, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: heavy armored hexagon-shaped beetle with thick dark green (#14532d) chitin shell, lighter green (#4ade80) glowing circuit-like patterns on shell, 6 thick stubby legs, small head barely visible. Bulky, slow, heavily armored appearance. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
   "enemy_splitter_idle": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 7,
-    "prompt": "Game-ready 2D cartoon monster sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: splitting pod enemy, warm coral pink blob pod, soft magenta seams, simple rounded tendrils, looks bouncy and squishy, cute but dangerous. Create exactly 6 animation frames in one horizontal row, breathing pod idle loop: frame 1 neutral pod, frame 2 inflates slightly, frame 3 seam glow wider, frame 4 pod stretches upward, frame 5 membrane contracts, frame 6 returns neutral. Same character, same size, same camera angle, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: unstable purple (#6b21a8) crystalline sphere creature with visible bright purple (#c084fc) crack lines running across body surface, glowing core inside visible through cracks, 4 short crystalline legs. Looks like it's about to split apart. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
   "enemy_warden_idle": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 192,
+    "cell_size": 96,
     "fps": 8,
-    "prompt": "Game-ready 2D cartoon monster sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: floating warden enemy, warm pumpkin orange shell, soft amber core, tiny rounded magnet horns, simple teal electric spark accents, friendly toy sentinel silhouette but still hostile. Create exactly 6 animation frames in one horizontal row, hovering electric idle loop: frame 1 neutral hover, frame 2 amber core glows, frame 3 small spark on left, frame 4 hover rises, frame 5 small spark on right, frame 6 returns neutral. Same character, same size, same camera angle, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: large imposing hexagon-shaped elite enemy, electric blue (#1e40af) armored body with bright white-blue (#93c5fd) arcing lightning patterns along edges, 6 powerful mechanical legs, central bright core. Commands presence, looks dangerous. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
   "enemy_boss_idle": {
     "model": "gpt-image-2",
@@ -46,24 +50,6 @@
     "cell_size": 224,
     "fps": 8,
     "prompt": "Game-ready 2D cartoon boss monster sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: large alien hive boss, warm red orange rounded carapace, soft magenta glowing belly core, simple shell plates, chunky cute boss silhouette, intimidating through size not horror details. Create exactly 8 animation frames in one horizontal row, boss idle charge loop: frame 1 neutral, frame 2 core dim warm glow, frame 3 shell plates expand, frame 4 core bright glow, frame 5 body rises, frame 6 simple spark arcs around core, frame 7 shell contracts, frame 8 return neutral. Same boss, same size, same camera angle, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
-  },
-  "player_survivor_idle": {
-    "model": "gpt-image-2",
-    "size": "1536x1024",
-    "frames": 6,
-    "cell_size": 160,
-    "fps": 8,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing south / facing camera / front view. Create exactly 6 animation frames in one horizontal row, idle breathing loop: frame 1 neutral, frame 2 soft inhale, frame 3 scarf bounces, frame 4 visor glow, frame 5 soft exhale, frame 6 return neutral. Same character, same front direction, same size, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
-  },
-  "player_survivor_run": {
-    "model": "gpt-image-2",
-    "size": "1536x1024",
-    "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing south / facing camera / moving downward on screen, front view. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
   },
   "weapon_storm_rifle_icon": {
     "model": "gpt-image-2",
@@ -119,76 +105,139 @@
     "output_dir": "weapons",
     "prompt": "Game-ready 2D cartoon asset for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Object icon: ion lance weapon, sleek but rounded energy spear rifle, warm cream handle, peach orange guard, teal glowing tip, simple readable silhouette, centered icon, transparent background if supported. Create exactly one clean centered game inventory icon. No text, no labels, no watermark, no border, no UI."
   },
-  "player_survivor_run_south": {
+  "enemy_bomber_walk": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing south / facing camera / moving downward on screen, front view. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 64,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: small spider-like explosive enemy with dark red metallic body (#991b1b), bright orange glowing core center, 6 thin mechanical legs, pulsing unstable energy cracks visible on shell. Small size, dangerous look. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
-  "player_survivor_run_south_east": {
+  "enemy_swarm_walk": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing south-east / front-right diagonal view / moving down-right on screen. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 64,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: cluster of 5-6 tiny floating drone insects forming a loose swarm group, each drone is dark yellow-brown (#92400e) with small glowing cyan eyes, tiny wings as short line strokes. Group moves as one unit, slight position variation between frames. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
-  "player_survivor_run_east": {
+  "enemy_seeker_walk": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing east / right side view / moving right on screen. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: triangular cone-shaped floating eye creature, dark crimson (#9f1239) body, large central white eye with black iris that slightly shifts position between frames, two thin antenna on top. No legs, hovers slightly above ground. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
-  "player_survivor_run_north_east": {
+  "enemy_aura_idle": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing north-east / back-right diagonal view / moving up-right on screen. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: translucent ethereal floating sphere, pale blue (#0c4a6e) semi-transparent body with soft bright blue (#38bdf8) glowing aura ring around it, wavy internal energy patterns visible inside. Ghostly supportive presence, no legs. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
-  "player_survivor_run_north": {
+  "enemy_beacon_idle": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing north / back view / moving upward on screen. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 96,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: stationary diamond-shaped energy beacon, bright gold (#a16207) crystalline body with upward-pointing light beam (vertical line extending above), 4 stabilizing legs at base. Glowing pulsing core in center. Does not move, different frame shows subtle pulse/rotation. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
-  "player_survivor_run_north_west": {
+  "enemy_void_colossus_idle": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
-    "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing north-west / back-left diagonal view / moving up-left on screen. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "cell_size": 128,
+    "fps": 8,
+    "output_dir": "enemies",
+    "prompt": "Game-ready 2D monster sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark hostile sci-fi style, thick clean outlines, flat shading, high readability at small size. Character: massive void entity, large circular dark purple-black (#0f0a1a) body with 3 rotating concentric glowing cyan rings around it, a single large white eye at center that blinks between frames. Angular rune-like patterns glowing faintly on body. Huge, terrifying presence, takes up most of frame. Create exactly 6 animation frames in one horizontal row, walking/idle loop cycle. Same character, same size, consistent top-down orthographic view, centered in each cell, consistent colors across all frames. Solid very dark background (#1a1a2e). No text, no numbers, no labels, no watermark, no frame borders, no UI."
   },
-  "player_survivor_run_west": {
+  "player_idle": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
+    "cell_size": 80,
+    "fps": 8,
     "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing west / left side view / moving left on screen. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: idle standing pose, both hands holding weapon ready, upright position. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
   },
-  "player_survivor_run_south_west": {
+  "player_run_south": {
     "model": "gpt-image-2",
-    "size": "1536x1024",
+    "size": "1024x768",
     "frames": 6,
-    "cell_size": 160,
-    "fps": 10,
+    "cell_size": 80,
+    "fps": 8,
     "output_dir": "characters",
-    "prompt": "Game-ready 2D cartoon character sprite sheet for a cozy top-down roguelike shooter. Overall style: warm color palette, simple shapes, rounded silhouette, cute toy-like cartoon design, thick clean outline, flat cel shading, minimal details, high readability at small size, no gritty realism, no horror, no dark complex texture. Character: the player hero body only, a small chibi sci-fi survivor pilot, warm cream helmet, orange scarf, teal visor, compact rounded armor, tiny boots, brave and cute. IMPORTANT: no weapon in hands, no gun, no rifle, no sword, no held item; leave both small gloved hands visible and empty so a separate weapon sprite can be overlaid later. Direction: facing south-west / front-left diagonal view / moving down-left on screen. Create exactly 6 animation frames in one horizontal row, run loop for this direction only: frame 1 ready lean, frame 2 left step, frame 3 small hop, frame 4 right step, frame 5 scarf trails, frame 6 return ready. Same character identity, same body proportions, same warm cream helmet, orange scarf, teal visor, same size, same direction, centered in each cell, consistent colors and silhouette across all frames. Transparent background if supported, otherwise plain solid chroma key background. No text, no numbers, no labels, no watermark, no frame borders, no UI, no heavy shadow."
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running forward (toward camera), legs spread apart, body leaning slightly forward, weapon held forward. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
+  },
+  "player_run_south_east": {
+    "model": "gpt-image-2",
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "characters",
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running diagonally forward-right, legs in stride, body angled, weapon held diagonally. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
+  },
+  "player_run_east": {
+    "model": "gpt-image-2",
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "characters",
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running right (side view), legs in running stride, body leaning right, weapon pointed right. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
+  },
+  "player_run_north_east": {
+    "model": "gpt-image-2",
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "characters",
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running diagonally back-right, legs in stride, body angled away, weapon held diagonally back. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
+  },
+  "player_run_north": {
+    "model": "gpt-image-2",
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "characters",
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running away (back toward camera), legs spread, body leaning away, weapon pointed back over shoulder. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
+  },
+  "player_run_north_west": {
+    "model": "gpt-image-2",
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "characters",
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running diagonally back-left, mirror of north-east, legs in stride. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
+  },
+  "player_run_west": {
+    "model": "gpt-image-2",
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "characters",
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running left (side view), mirror of east, legs in running stride, weapon pointed left. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
+  },
+  "player_run_south_west": {
+    "model": "gpt-image-2",
+    "size": "1024x768",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 8,
+    "output_dir": "characters",
+    "prompt": "Game-ready 2D character sprite sheet for a top-down dark sci-fi survivor roguelike shooter. Dark sci-fi style, thick clean outlines, flat shading, high readability at small 80px size, transparent background (no background at all, just the character on transparent). Character: a human survivor wearing dark tactical armor (#1E293B dark slate blue-gray), small glowing cyan visor (#38BDF8), compact backpack, holding a futuristic rifle. The character is shown from top-down orthographic view. Animation: running diagonally forward-left, mirror of south-east, legs in stride, weapon held diagonally. All 6 animation frames in one horizontal row, consistent top-down view, identical size per frame, same character, same camera angle, centered in each cell. CRITICAL: MUST have TRANSPARENT BACKGROUND. No text, no numbers, no labels, no watermark, no frame borders, no UI, no solid background color."
   }
 }

@@ -6,8 +6,8 @@ function testCreateCombatState() {
     assert.equal(cs.phase, 'menu');
     assert.equal(cs.battleIndex, 1);
     assert.equal(cs.battlesWon, 0);
-    assert.equal(cs.playerHp, 180);
-    assert.equal(cs.playerMaxHp, 180);
+    assert.equal(cs.playerHp, 50);
+    assert.equal(cs.playerMaxHp, 50);
     assert.equal(cs.playerX, 0);
     assert.equal(cs.playerY, -170);
     assert.equal(cs.waveIndex, 0);

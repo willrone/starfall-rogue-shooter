@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+gravity-hammer-standard,重力锤,boss_clear,boss_clear,1,92836,10,576.2,316,7,87,3,combat,31.11,False,

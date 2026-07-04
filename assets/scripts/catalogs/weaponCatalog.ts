@@ -9,6 +9,7 @@ export interface WeaponFamily {
     pierce: number;
     drone: number;
     bulletSpeed: number;
+    attackRange: number;   // 武器基础攻击距离（像素），升级/道具加成叠加上去
     desc: string;
     mechanic?: string;
 }
@@ -28,36 +29,41 @@ export interface WeaponVariant {
 
 export const WEAPON_FAMILIES: WeaponFamily[] = [
     // ── Novice (3 把) ─────────────────────────────
-    { id: 'storm-rifle', name: '风暴步枪', color: '#4CC9F0', damage: 4.6, fireRate: 1.36, pierce: 0.0, drone: 0.0, bulletSpeed: 1.0, mechanic: 'crit_stacks', desc: '均衡型入门武器。暴击时叠加攻速, 5 层封顶。' },
-    { id: 'plague-sprayer', name: '瘟疫喷射器', color: '#84CC16', damage: 1.1, fireRate: 3.18, pierce: 0.0, drone: 0.0, bulletSpeed: 0.8, mechanic: 'poison', desc: '机关枪型毒液喷射, 命中叠 5 层毒 (每层 0.4% HP/秒流失)。' },
-    { id: 'frost-beamer', name: '霜束发射器', color: '#A7F3D0', damage: 2.2, fireRate: 2.55, pierce: 0.3, drone: 0.0, bulletSpeed: 1.4, mechanic: 'slow', desc: '高频冰弹, 命中减速目标 0.4 秒。' },
+    { id: 'storm-rifle', name: '冲锋枪', color: '#F97316', damage: 14, fireRate: 3.0, pierce: 0.0, drone: 0.0, bulletSpeed: 0.7, attackRange: 480, mechanic: 'overheat', desc: '冲锋枪，连续射击射速逐层提升（+50%），停火冷却。攻击距离短。' },
+    { id: 'plague-sprayer', name: '瘟疫喷射器', color: '#84CC16', damage: 6, fireRate: 8.0, pierce: 0.0, drone: 0.0, bulletSpeed: 0.0, attackRange: 380, mechanic: 'poison', desc: '扇形持续喷雾，每秒 8 次对范围内敌人造成毒伤+叠毒，近距离面伤。' },
+    { id: 'frost-beamer', name: '霜束发射器', color: '#A7F3D0', damage: 20, fireRate: 2.55, pierce: 0.3, drone: 0.0, bulletSpeed: 1.4, attackRange: 660, mechanic: 'slow', desc: '高频冰弹, 命中减速目标 0.4 秒。' },
 
     // ── Standard (4 把) ─────────────────────────────
-    { id: 'echo-bow', name: '回声弓', color: '#38BDF8', damage: 6.1, fireRate: 1.18, pierce: 1.0, drone: 0.0, bulletSpeed: 1.7, mechanic: 'pierce_stacks', desc: '暴击时穿透 +1, 适合打直线敌群。' },
-    { id: 'split-barrel', name: '裂变枪管', color: '#F15BB5', damage: 3.1, fireRate: 2.09, pierce: 0.4, drone: 0.0, bulletSpeed: 1.2, mechanic: 'multishot_3', desc: '每次射击同时 3 颗扇形分布, 适合清群。' },
-    { id: 'mirror-prism', name: '镜像棱镜', color: '#E879F9', damage: 4.3, fireRate: 1.27, pierce: 0.3, drone: 0.3, bulletSpeed: 1.0, mechanic: 'radial_5', desc: '5 颗 360° 全方向散射, 清屏型武器。' },
-    { id: 'quantum-loom', name: '量子织机', color: '#14B8A6', damage: 6.6, fireRate: 1.09, pierce: 0.6, drone: 0.4, bulletSpeed: 1.0, mechanic: 'split', desc: '子弹飞行 0.5 秒后分裂成 2 颗, 范围自动扩散。' },
+    { id: 'echo-bow', name: '回声弓', color: '#38BDF8', damage: 38, fireRate: 1.18, pierce: 1.0, drone: 0.0, bulletSpeed: 1.7, attackRange: 820, mechanic: 'pierce_stacks', desc: '暴击时穿透 +1, 适合打直线敌群。' },
+    { id: 'split-barrel', name: '裂变枪管', color: '#F15BB5', damage: 15, fireRate: 2.09, pierce: 0.4, drone: 0.0, bulletSpeed: 1.2, attackRange: 540, mechanic: 'multishot_3', desc: '每次射击同时 3 颗扇形分布, 适合清群。' },
+    { id: 'mirror-prism', name: '镜像棱镜', color: '#E879F9', damage: 22, fireRate: 1.27, pierce: 0.3, drone: 0.3, bulletSpeed: 1.0, attackRange: 620, mechanic: 'radial_5', desc: '5 颗 360° 全方向散射, 清屏型武器。' },
+    { id: 'quantum-loom', name: '量子织机', color: '#14B8A6', damage: 72, fireRate: 1.09, pierce: 0.6, drone: 0.4, bulletSpeed: 1.0, attackRange: 740, mechanic: 'split', desc: '子弹飞行 0.5 秒后分裂成 2 颗, 范围自动扩散。' },
 
     // ── Boss Gate (4 把) ─────────────────────────────
-    { id: 'ion-lance', name: '离子长枪', color: '#43AA8B', damage: 13.2, fireRate: 0.77, pierce: 1.5, drone: 0.0, bulletSpeed: 1.8, mechanic: 'straight', desc: '笔直弹道, 远距离命中不衰减。' },
-    { id: 'thorn-crossbow', name: '荆棘连弩', color: '#65A30D', damage: 6.6, fireRate: 1.64, pierce: 0.6, drone: 0.0, bulletSpeed: 1.6, mechanic: 'ricochet', desc: '子弹撞墙反弹 2 次, 死角反杀。' },
-    { id: 'rail-cannon', name: '磁轨炮', color: '#577590', damage: 15.6, fireRate: 0.64, pierce: 3.5, drone: 0.0, bulletSpeed: 2.5, mechanic: 'pierce_bonus', desc: '高速穿透, 每次穿透下次伤害 +8% (可叠加)。' },
-    { id: 'void-needle', name: '虚空针', color: '#B5179E', damage: 10.1, fireRate: 1.05, pierce: 1.2, drone: 0.0, bulletSpeed: 2.0, mechanic: 'crit_master', desc: '高暴击率+暴击伤害, 适合打 Boss。' },
+    { id: 'ion-lance', name: '离子长枪', color: '#43AA8B', damage: 82, fireRate: 0.77, pierce: 1.5, drone: 0.0, bulletSpeed: 1.8, attackRange: 960, mechanic: 'straight', desc: '笔直弹道, 远距离命中不衰减。' },
+    { id: 'thorn-crossbow', name: '荆棘连弩', color: '#65A30D', damage: 82, fireRate: 1.64, pierce: 0.6, drone: 0.0, bulletSpeed: 1.6, attackRange: 800, mechanic: 'ricochet', desc: '子弹撞墙反弹 2 次, 死角反杀。' },
+    { id: 'rail-cannon', name: '磁轨炮', color: '#577590', damage: 96, fireRate: 0.64, pierce: 3.5, drone: 0.0, bulletSpeed: 2.5, attackRange: 940, mechanic: 'pierce_bonus', desc: '高速穿透, 每次穿透下次伤害 +8% (可叠加)。' },
+    { id: 'void-needle', name: '虚空针', color: '#B5179E', damage: 62, fireRate: 1.05, pierce: 1.2, drone: 0.0, bulletSpeed: 2.0, attackRange: 880, mechanic: 'crit_master', desc: '高暴击率+暴击伤害, 适合打 Boss。' },
 
     // ── Boss Clear (3 把) ─────────────────────────────
-    { id: 'meteor-launcher', name: '流星发射器', color: '#EF4444', damage: 24.0, fireRate: 0.55, pierce: 1.0, drone: 0.0, bulletSpeed: 1.3, mechanic: 'aoe_burn', desc: '命中留下 3 秒燃烧区 (每秒 12% 攻击力的持续伤害)。' },
-    { id: 'orbital-drone', name: '轨道无人机', color: '#90BE6D', damage: 4.8, fireRate: 0.36, pierce: 0.0, drone: 2.8, bulletSpeed: 0.0, mechanic: 'drone_charge', desc: '击杀充能, 满 100% 召唤 1 个爆炸无人机。' },
-    { id: 'gravity-hammer', name: '重力锤', color: '#64748B', damage: 34.9, fireRate: 0.3, pierce: 1.0, drone: 0.5, bulletSpeed: 0.7, mechanic: 'knockback', desc: '极慢射重击, 命中强力击退, 暴击 2 倍击退。' },
+    { id: 'meteor-launcher', name: '流星发射器', color: '#EF4444', damage: 144, fireRate: 0.55, pierce: 1.0, drone: 0.0, bulletSpeed: 1.3, attackRange: 680, mechanic: 'aoe_burn', desc: '命中留下 3 秒燃烧区 (每秒 12% 攻击力的持续伤害)。' },
+    { id: 'orbital-drone', name: '轨道无人机', color: '#90BE6D', damage: 52, fireRate: 0.36, pierce: 0.0, drone: 2.8, bulletSpeed: 0.0, attackRange: 560, mechanic: 'drone_charge', desc: '击杀充能, 满 100% 召唤 1 个爆炸无人机。' },
+    { id: 'gravity-hammer', name: '重力锤', color: '#64748B', damage: 200, fireRate: 0.30, pierce: 1.0, drone: 0.5, bulletSpeed: 0.7, attackRange: 600, mechanic: 'knockback', desc: '极慢射重击, 命中强力击退, 暴击 2 倍击退。' },
+
+    // ── Legendary (3 把，传说武器，需要Boss材料合成) ─────────────────────────────
+    { id: 'void-tearer', name: '虚空撕裂者', color: '#22D3EE', damage: 64, fireRate: 2.2, pierce: 2.5, drone: 0.0, bulletSpeed: 1.8, attackRange: 720, mechanic: 'void_tearer', desc: '高速穿透型。子弹附带虚空撕裂，每穿透一层减目标防御，高射速清群。' },
+    { id: 'icefire-judge', name: '冰狱审判', color: '#7DD3FC', damage: 88, fireRate: 0.95, pierce: 1.2, drone: 0.0, bulletSpeed: 1.5, attackRange: 760, mechanic: 'icefire_judge', desc: '冰火交替爆发。冰弹减速 1 秒，火弹触发小范围爆炸，冰冻后燃烧伤害翻倍。' },
+    { id: 'webmaster', name: '织网支配者', color: '#FACC15', damage: 52, fireRate: 1.6, pierce: 0.5, drone: 1.2, bulletSpeed: 1.2, attackRange: 640, mechanic: 'webmaster_lifesteal', desc: '召唤续航型。子弹缓速，击杀小怪/蜘蛛时回复生命值，召唤无人机助战。' },
 ];
 
 export const WEAPON_VARIANTS: WeaponVariant[] = [
     { id: '', prefix: '', suffix: '', tier: 1, damage: 1, fireRate: 1, pierce: 1, drone: 1, speed: 1, cost: 1 },
     { id: 'light', prefix: '轻型', suffix: '', tier: 2, damage: 0.86, fireRate: 1.22, pierce: 0.8, drone: 0.9, speed: 1.16, cost: 1.08 },
-    { id: 'pulse', prefix: '脉冲', suffix: '', tier: 3, damage: 1.14, fireRate: 1.12, pierce: 1, drone: 1, speed: 1.1, cost: 1.18 },
+    { id: 'pulse', prefix: '脉冲', suffix: '', tier: 3, damage: 4.44, fireRate: 1.12, pierce: 1, drone: 1, speed: 1.1, cost: 1.18 },
     { id: 'accurate', prefix: '精准', suffix: '', tier: 4, damage: 1.22, fireRate: 0.92, pierce: 1.12, drone: 0.9, speed: 1.24, cost: 1.28 },
     { id: 'heavy', prefix: '重载', suffix: '', tier: 5, damage: 1.48, fireRate: 0.72, pierce: 1.18, drone: 0.85, speed: 0.92, cost: 1.42 },
     { id: 'rapid', prefix: '连射', suffix: '', tier: 6, damage: 0.94, fireRate: 1.55, pierce: 0.88, drone: 0.95, speed: 1.08, cost: 1.55 },
-    { id: 'piercing', prefix: '穿甲', suffix: '', tier: 7, damage: 1.18, fireRate: 0.96, pierce: 1.75, drone: 0.9, speed: 1.02, cost: 1.72 },
+    { id: 'piercing', prefix: '穿甲', suffix: '', tier: 7, damage: 4.48, fireRate: 0.96, pierce: 1.75, drone: 0.9, speed: 1.02, cost: 1.72 },
     { id: 'overclock', prefix: '超频', suffix: '', tier: 8, damage: 1.22, fireRate: 1.36, pierce: 1.1, drone: 1.18, speed: 1.18, cost: 1.9 },
     { id: 'resonance', prefix: '共振', suffix: '', tier: 9, damage: 1.36, fireRate: 1.08, pierce: 1.3, drone: 1.28, speed: 1.04, cost: 2.1 },
     { id: 'starfall', prefix: '星陨', suffix: '', tier: 10, damage: 1.68, fireRate: 1.18, pierce: 1.55, drone: 1.42, speed: 1.2, cost: 2.35 },
@@ -83,33 +89,40 @@ export function getRarityCostMultiplier(rarity: EquipmentRarity) {
 
 export function getWeaponAttackStyle(familyId: string): WeaponAttackStyle {
     switch (familyId) {
-        case 'split-barrel':
-        case 'nova-shotgun':
-            return 'shotgun';
-        case 'rail-cannon':
-        case 'ion-lance':
-        case 'void-needle':
-            return 'rail';
-        case 'orbital-drone':
-            return 'drone';
-        case 'frost-beamer':
-            return 'laser';
-        case 'sun-disc':
-            return 'disc';
+        case 'storm-rifle':
+            return 'smg';
         case 'plague-sprayer':
             return 'spray';
-        case 'meteor-launcher':
-        case 'gravity-hammer':
-            return 'meteor';
-        case 'pulse-fan':
-            return 'pulse';
-        case 'thorn-chain':
-            return 'chain';
-        case 'star-scythe':
-            return 'scythe';
+        case 'frost-beamer':
+            return 'frost';
         case 'echo-bow':
+            return 'echo';
+        case 'split-barrel':
+            return 'scatter';
         case 'mirror-prism':
-            return 'ricochet';
+            return 'prism';
+        case 'quantum-loom':
+            return 'quantum';
+        case 'ion-lance':
+            return 'ion';
+        case 'thorn-crossbow':
+            return 'thorn';
+        case 'rail-cannon':
+            return 'rail';
+        case 'void-needle':
+            return 'void_needle';
+        case 'meteor-launcher':
+            return 'meteor';
+        case 'orbital-drone':
+            return 'drone';
+        case 'gravity-hammer':
+            return 'gravity';
+        case 'void-tearer':
+            return 'void_tear';
+        case 'icefire-judge':
+            return 'icefire';
+        case 'webmaster':
+            return 'web';
         default:
             return 'rifle';
     }
@@ -117,17 +130,30 @@ export function getWeaponAttackStyle(familyId: string): WeaponAttackStyle {
 
 export function getWeaponStyleName(style: WeaponAttackStyle) {
     switch (style) {
-        case 'shotgun': return '近距宽弹道';
-        case 'rail': return '高速穿透';
+        case 'smg': return '高速曳光';
+        case 'spray': return '毒雾扇面';
+        case 'frost': return '冰晶光束';
+        case 'echo': return '回声穿箭';
+        case 'scatter':
+        case 'shotgun': return '近距三连';
+        case 'prism': return '镜像环射';
+        case 'quantum': return '量子分裂';
+        case 'ion': return '离子长枪';
+        case 'thorn': return '荆棘反弹';
+        case 'rail': return '磁轨贯穿';
+        case 'void_needle': return '虚空针刺';
+        case 'meteor': return '流星燃烧';
+        case 'drone': return '无人机电弧';
+        case 'gravity': return '重力冲击';
+        case 'void_tear':
+        case 'scythe': return '虚空裂刃';
+        case 'icefire': return '冰火审判';
+        case 'web':
+        case 'chain': return '织网链束';
         case 'laser': return '光束锁定';
-        case 'chain': return '链式跳跃';
         case 'pulse': return '扇形脉冲';
-        case 'drone': return '无人机电击';
         case 'disc': return '旋转飞盘';
-        case 'spray': return '喷射覆盖';
-        case 'meteor': return '重型爆发';
         case 'ricochet': return '弹射折返';
-        case 'scythe': return '成长镰刃';
         default: return '标准弹道';
     }
 }

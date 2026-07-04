@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "storm-rifle",
+    "weapon_name": "冲锋枪",
+    "tier": "novice",
+    "target_profile": "novice",
+    "runs": 1,
+    "p50": 10,
+    "p90": 10,
+    "avg_kills": 1796,
+    "avg_level": 15,
+    "passes": false
+  }
+]

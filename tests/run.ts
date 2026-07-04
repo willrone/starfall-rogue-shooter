@@ -1,3 +1,5 @@
+import './core/gameTimer.test';
+import './enemy/enemyMovement.test';
 import './core/resources.test';
 import './core/stats.test';
 import './core/eventBus.test';
@@ -11,6 +13,9 @@ import './catalogs/enemyCatalog.test';
 import './flows/settlementLootEntry.test';
 import './flows/battleFlow.test';
 import './flows/hostContextContract.test';
+import './ui/revivePanelWiring.test';
+import './visual/poisonSprayVfx.test';
+import './visual/weaponAttackPresentation.test';
 import './state/combatState.test';
 import './balance/combatBalance.test';
 

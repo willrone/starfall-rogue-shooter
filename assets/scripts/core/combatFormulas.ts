@@ -35,17 +35,21 @@ export function weaponBulletSpeedAtLevel(base: number, level: number): number {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Bullet damage / fire interval / pierce (纯函数版, 无 ctx.critStacks)
+// Bullet damage / fire interval / pierce (纯函数版)
 // ═══════════════════════════════════════════════════════════════════════
+// 所有百分比加成都是相对于武器基础值的加法，不复利：
+//   effective = base × (1 + 等级加成 + 道具%加成 + 机制加成)
+// 等级成长、道具%、overheat等全部在同一个 level 上加。
 
-/** 计算单发子弹伤害 (不含机制加成) */
+/** 计算单发子弹伤害 (不含暴击/机制) */
 export function calcBulletDamage(
     weaponDamage: number,
     level: number,
     stats: CharacterStats,
 ): number {
-    const base = weaponDamageAtLevel(weaponDamage, level)
-        * Math.max(0.1, 1 + stats.weaponDamagePct);
+    const levelScale = 1 + (level - 1) * 0.12;
+    const pctBonus = stats.weaponDamagePct || 0;
+    const base = Math.max(0.1, weaponDamage * (levelScale + pctBonus));
     const baseAttackPower = createBaseCharacterStats().attackPower;
     const attackDelta = stats.attackPower - baseAttackPower;
     return Math.max(2, base + baseAttackPower * 0.15 + attackDelta);
@@ -58,9 +62,10 @@ export function calcFireInterval(
     stats: CharacterStats,
     critStacks = 0,
 ): number {
+    const levelScale = 1 + (level - 1) * 0.10;
     const critBoost = critStacks * 0.01;
-    const baseRate = weaponFireRateAtLevel(weaponFireRate, level)
-        * Math.max(0.1, 1 + stats.weaponFireRatePct + critBoost);
+    const pctBonus = stats.weaponFireRatePct || 0;
+    const baseRate = Math.max(0.1, weaponFireRate * (levelScale + pctBonus + critBoost));
     return Math.max(0.07, 1 / Math.max(0.15, baseRate + stats.attackSpeed * 0.45));
 }
 
@@ -107,11 +112,13 @@ export function waveSpawnInterval(wave: number, endlessCycle = 1): number {
     const hardFloor = wave <= 1 ? 1.5 : wave === 2 ? 1.4 : wave === 3 ? 1.3
         : wave === 4 ? 1.2 : wave === 5 ? 1.1 : wave === 6 ? 1.0
             : wave <= 8 ? 0.95 : 0.95;
-    // 无尽模式: 11 波起间隔指数缩短
+    // 无尽模式: 11 波起间隔指数缩短（但比波10略慢给喘口气）
     let interval = Math.max(hardFloor, base + earlyRelief);
     if (wave >= 11) {
         const endlessScale = Math.pow(1.05, wave - 10);
-        interval = Math.max(0.5, (base + 0.2) / endlessScale);
+        // 喘口气系数: 波11略慢于波10(~5%下降), 之后快速变密
+        const breather = wave === 11 ? 0.08 : 0;
+        interval = Math.max(0.45, (base + breather) / endlessScale);
     }
     return interval;
 }
@@ -133,7 +140,8 @@ export function enemyCap(wave: number): number {
     if (wave in caps) return caps[wave];
     if (wave >= 11) {
         const endlessScale = Math.pow(1.05, wave - 10);
-        return Math.min(600, Math.round(168 * endlessScale));
+        // 不低于波10的240上限, 之后指数增长
+        return Math.min(600, Math.max(240, Math.round(200 * endlessScale)));
     }
     return 240;
 }

@@ -9,25 +9,23 @@ export interface EquipmentProgressionState {
 
 export const WEAPON_FAMILY_UNLOCK_BATTLES: Record<string, number> = {
     'storm-rifle': 0,
-    'ember-smg': 1,
-    'pulse-fan': 1,
     'plague-sprayer': 1,
+    'frost-beamer': 2,
     'echo-bow': 1,
     'split-barrel': 2,
-    'frost-beamer': 2,
-    'nova-shotgun': 2,
-    'sun-disc': 2,
-    'redline-carbine': 2,
-    'thorn-chain': 2,
-    'orbital-drone': 3,
-    'ion-lance': 3,
     'mirror-prism': 3,
     'quantum-loom': 3,
+    'ion-lance': 3,
+    'thorn-crossbow': 4,
     'rail-cannon': 4,
     'void-needle': 4,
     'meteor-launcher': 4,
-    'star-scythe': 5,
+    'orbital-drone': 3,
     'gravity-hammer': 5,
+    // ── Legendary（3 把，需 Boss 材料合成）────────────────────
+    'void-tearer': 8,
+    'icefire-judge': 8,
+    'webmaster': 8,
 };
 
 export const WEAPON_TIER_UNLOCK_BATTLES: Record<number, number> = {

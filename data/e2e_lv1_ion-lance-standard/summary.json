@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "ion-lance-standard",
+    "weapon_name": "离子长枪",
+    "tier": "boss_gate",
+    "target_profile": "boss_gate",
+    "runs": 1,
+    "p50": 10,
+    "p90": 10,
+    "avg_kills": 1355,
+    "avg_level": 15,
+    "passes": true
+  }
+]

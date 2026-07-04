@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tokenhub": {
+      "command": "npx -y @tokenhub-cash/mcp"
+    }
+  },
+  "imports": []
+}

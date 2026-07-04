@@ -1,0 +1,19 @@
+{
+  "name": "enemy_beacon_idle",
+  "raw_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/generated/enemy_beacon_idle_raw.png",
+  "final_path": "/Users/ronghui/Documents/game_dev_cocos/assets/resources/art/enemies/enemy_beacon_idle.png",
+  "preview_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/previews/enemy_beacon_idle.gif",
+  "frames": 6,
+  "cell_size": 96,
+  "fps": 8,
+  "output_dir": "enemies",
+  "raw_size": [
+    2172,
+    724
+  ],
+  "trimmed_size": [
+    2043,
+    563
+  ],
+  "generated_at": 1782724773
+}

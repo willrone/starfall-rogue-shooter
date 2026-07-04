@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+quantum-loom-standard,量子织机,standard,standard,1,78782,10,569.27,2007,15,889,16,combat,405.89,False,

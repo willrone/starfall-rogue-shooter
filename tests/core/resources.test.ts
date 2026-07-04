@@ -20,7 +20,11 @@ assert.equal(formatWallet(wallet), '核心 2  碎片 5', 'wallet formatting shou
 assert.equal(formatWallet(createEmptyWallet()), '无', 'empty wallet should be formatted as none');
 
 assert.equal(getResourceDef('crystals').name, '虚空晶体', 'resource lookup should return matching definition');
-assert.equal(RESOURCE_DEFS.length, 6, 'resource catalog should contain the six runtime resource types');
+assert.deepEqual(
+    RESOURCE_DEFS.map((resource) => resource.id),
+    ['alloy', 'cores', 'shards', 'biomass', 'circuits', 'crystals', 'voidFragment', 'energyCore', 'frostCore', 'infernoCore', 'webSilk'],
+    'resource catalog should contain base resources plus boss materials in definition order',
+);
 
 const inventory = createEmptyWallet();
 inventory.cores = 2;
@@ -30,12 +34,9 @@ cost.cores = 1;
 cost.shards = 4;
 assert.equal(hasResources(inventory, cost), true, 'wallet should report enough resources when all costs are covered');
 assert.deepEqual(spendResources(inventory, cost), {
-    alloy: 0,
+    ...RESOURCE_ZERO,
     cores: 1,
     shards: 1,
-    biomass: 0,
-    circuits: 0,
-    crystals: 0,
 }, 'spending resources should return a debited wallet');
 
 cost.crystals = 1;

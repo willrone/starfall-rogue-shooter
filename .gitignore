@@ -19,3 +19,11 @@ __pycache__/
 
 # Local runtime scratch
 *.pid
+
+# ── 美术原始源文件（不参与构建，只占 git 空间） ──
+assets/art_source/generated/
+assets/art_source/frames/
+assets/art_source/previews/
+assets/art_source/archive_*/
+assets/art_source/visual_upgrade_candidates/
+assets/art_source/yuz_generated_candidates/

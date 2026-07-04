@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+thorn-crossbow-standard,荆棘连弩,boss_gate,boss_gate,1,36529,10,570.18,1439,14,262,12,combat,420.0,False,

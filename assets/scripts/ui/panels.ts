@@ -25,6 +25,7 @@ export class PanelManager {
     toastLabel: Label | null = null;
     hpBar: Graphics | null = null;
     xpBar: Graphics | null = null;
+    shieldBar: Graphics | null = null;
 
     // Menu panel
     menuPanel: Node | null = null;
@@ -101,6 +102,19 @@ export class PanelManager {
     extractDoubleButton: ButtonView | null = null;
     buffLabel: Label | null = null;
 
+    // ── 副武器面板 ─────────────────────────────────────────────
+    offhandPanel: Node | null = null;
+    offhandTitleLabel: Label | null = null;
+    offhandListButtons: ButtonView[] = [];
+    offhandDetailLabel: Label | null = null;
+    offhandEquipButton: ButtonView | null = null;
+    offhandUpgradeButton: ButtonView | null = null;
+    offhandSynthesizeButton: ButtonView | null = null;
+    offhandBackButton: ButtonView | null = null;
+
+    // ── 复活遮罩（独立于 revivePanel 按钮面板） ─────────────
+    revivePanelShadow: Node | null = null;
+
     /** Hide all overlay panels (menu, pause, settings, info, level, shop, hangar). */
     hideAllOverlays(): void {
         this.setMenuPanelActive(false);
@@ -115,6 +129,9 @@ export class PanelManager {
         this.setShopPanelActive(false);
         if (this.hangarPanel) this.hangarPanel.active = false;
         if (this.hangarPanelShadow) this.hangarPanelShadow.active = false;
+        if (this.offhandPanel) this.offhandPanel.active = false;
+        if (this.revivePanel) this.revivePanel.active = false;
+        if (this.revivePanelShadow) this.revivePanelShadow.active = false;
     }
 
     // --- Menu panel ---

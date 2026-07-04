@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "mirror-prism-standard",
+    "weapon_name": "镜像棱镜",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 10,
+    "p90": 10,
+    "avg_kills": 1575,
+    "avg_level": 15,
+    "passes": false
+  }
+]

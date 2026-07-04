@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "gravity-hammer-standard",
+    "weapon_name": "重力锤",
+    "tier": "boss_clear",
+    "target_profile": "boss_clear",
+    "runs": 1,
+    "p50": 11,
+    "p90": 11,
+    "avg_kills": 1443,
+    "avg_level": 14,
+    "passes": true
+  }
+]

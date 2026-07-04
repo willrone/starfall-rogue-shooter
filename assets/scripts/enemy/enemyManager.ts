@@ -14,19 +14,35 @@ import {
     ENEMY_CROWD_MIN_COUNT, ENEMY_CROWD_REPEL_RADIUS, ENEMY_CROWD_MAX_NEIGHBORS,
     ENEMY_CROWD_REPEL_WEIGHT, ENEMY_CROWD_ORBIT_WEIGHT,
     FAR_CULL_DIST_SQ,
-    NORMAL_XP_DROP_CHANCE, ELITE_XP_DROP_CHANCE,
     NORMAL_ALLOY_DROP_MULTIPLIER, NORMAL_MATERIAL_DROP_CHANCE, ELITE_MATERIAL_DROP_CHANCE,
     ENEMY_VISUAL_SIZE_MULTIPLIER, ENEMY_STRIP_META,
 } from "./enemyConstants";
 
-import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS } from '../catalogs/enemyCatalog';
+import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS, BOSS_SPECS, MINI_BOSS_SPECS } from '../catalogs/enemyCatalog';
 import type { CombatState } from '../state/combatState';
+
+import { periodicFollowPhase } from './enemyMovement';
 
 import * as EnemyConst from "./enemyConstants";
 export * from "./enemyConstants";
 import type { SpriteStripAnimation, Enemy } from "./enemyTypes";
 export type { SpriteStripAnimation, Enemy } from "./enemyTypes";
 
+/** 同场次已选过的大 Boss（防止同一波刷出两个不同 Boss） */
+let _poolBossThisBattle: EnemySpec[] | null = null;
+
+function shuffleArray<T>(arr: T[]): T[] {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
+function resetBossPool(): void {
+    _poolBossThisBattle = shuffleArray(BOSS_SPECS);
+}
 
 export interface EnemyHostContext {
     cs: CombatState;
@@ -66,6 +82,7 @@ export interface EnemyHostContext {
     playSfx(name: string, volume?: number, cooldown?: number): void;
     spawnFloatingText(text: string, x: number, y: number, color: string, fontSize?: number): void;
     drawAreaPulse(x: number, y: number, radius: number, color: string): void;
+    drawAreaCircle(x: number, y: number, radius: number, color: string, duration?: number): void;
     addSpriteChild(parent: Node, name: string, frameName: string, width: number, height: number): Sprite | null;
     getActiveEquipmentLevel(id: string): number;
     healPlayer(amount: number): void;
@@ -89,6 +106,7 @@ export interface EnemyHostContext {
     drawZap(fromX: number, fromY: number, toX: number, toY: number): void;
     tryDropChest(type: ChestPickupType, x: number, y: number): boolean;
     tryDropEquipmentBlueprint?(): void;
+    gainXp(amount: number): void;
     getEnemyAnimation(spec: EnemySpec, boss: boolean): SpriteStripAnimation | null;
     getEnemyAnimationFrameName(spec: EnemySpec, boss: boolean): string;
     enemyArtName(spec: EnemySpec, boss: boolean): string;
@@ -134,6 +152,9 @@ export class EnemyManager {
         this.barLayer = new Node('BarLayer');
         worldNode.addChild(this.barLayer);
         this.barGfx = this.barLayer.addComponent(Graphics);
+        // 批量敌人绘制层
+        this._batchGfx = worldNode.addComponent(Graphics);
+        // 设ZOrder在敌人节点之上
     }
 
     public initGroundMarkPool(worldNode: Node): void {
@@ -226,6 +247,9 @@ export class EnemyManager {
         if (!this.barGfx) return;
         this.barGfx.clear();
         const now = this.cs.combatTime;
+        const totalEnemies = this.enemies.length;
+        // 移动端性能保护：怪数>150时只画血量<80%的怪（跳过满血怪的HP条绘制）
+        const renderThreshold = totalEnemies > 150 ? 0.5 : 1.0;
         // Boss HP bar — drawn in screen-space (top center)
         const bossEnemy = this.enemies.find((e) => e.boss && e.hp < e.maxHp);
         if (bossEnemy && this.enemySet.has(bossEnemy)) {
@@ -252,16 +276,21 @@ export class EnemyManager {
             this.barGfx.fill();
         }
         // Normal enemies
-        // Normal enemies
+        // 性能优化：limit drawn bar count; 怪多时降级为分组采样
+        const maxBars = totalEnemies > 200 ? 60 : (totalEnemies > 100 ? 120 : 999);
+        let barCount = 0;
         for (const enemy of this.enemies) {
             if (!this.enemySet.has(enemy)) continue;
             if (enemy.hp >= enemy.maxHp) continue;
+            const ratio = enemy.hp / enemy.maxHp;
+            if (ratio >= renderThreshold) continue;  // 满血怪跳过
             if (now - enemy.lastBarDrawTime < 0.15) continue;
+            if (barCount >= maxBars) break;  // 限制单帧绘制数
             enemy.lastBarDrawTime = now;
             const pos = this.getEnemyPosition(enemy);
-            const ratio = this.ctx.clamp(enemy.hp / enemy.maxHp, 0, 1);
             const r = enemy.radius || 14;
             if (enemy.boss) continue; // handled above
+            barCount++;
             const barW = r * 2;
             const barH = 5;
             const barY = pos.y + r + 8;
@@ -312,15 +341,23 @@ export class EnemyManager {
         }
 
         if (this.cs.waveElapsed < this.cs.waveDuration) return;
+        // Boss 波：超时后停止刷怪，让玩家专心打 Boss
         if (this.isBossWave() && !this.cs.bossDefeatedThisWave) {
-            this.cs.waveSpawnTimer = Math.min(this.cs.waveSpawnTimer, 0.6);
+            // 不减 spawnTimer → 不会触发 while 循环内的 spawnCurrentWaveBatch
             return;
         }
         this.startNextWave();
     }
     public enemyShoot(enemy: Enemy, dirX: number, dirY: number) {
         const type = enemy.damageType;
-        const spread = enemy.boss ? 5 : enemy.elite ? 3 : enemy.spec.variantId === 'prime' ? 3 : 1;
+        // 虚空巨像: 阶段越高散射越密
+        let spread = enemy.boss ? 5 : enemy.elite ? 3 : enemy.spec.variantId === 'prime' ? 3 : 1;
+        if (enemy.boss && enemy.spec.family === 'void-colossus') {
+            const phase = enemy.spec.variantIndex || 0;
+            if (phase >= 3) spread = 10;
+            else if (phase >= 2) spread = 8;
+            else spread = 5;
+        }
         const baseAngle = Math.atan2(dirY, dirX);
         const start = -(spread - 1) / 2;
         for (let i = 0; i < spread; i++) {
@@ -335,6 +372,13 @@ export class EnemyManager {
                 enemy.boss ? 290 : enemy.elite ? 260 : 230,
             );
         }
+    }
+    /** 往指定方向射击一发（单发版本，供 Boss 扇形攻击用） */
+    public enemyShootAt(enemy: Enemy, dirX: number, dirY: number) {
+        const d = Math.max(0.001, Math.sqrt(dirX * dirX + dirY * dirY));
+        const type = enemy.damageType;
+        const pos = this.getEnemyPosition(enemy);
+        this.ctx.createEnemyProjectile(pos.x, pos.y, Math.atan2(dirY, dirX), enemy.damage * 0.72, type, enemy.boss ? 295 : 245);
     }
     public buildEnemyGrid(cellSize: number) {
         const grid = new Map<string, Enemy[]>();
@@ -363,6 +407,8 @@ export class EnemyManager {
         const wobbleTime = this.cs.combatTime * 2.4;
         const wobbleBase = Math.sin(wobbleTime);
         const cosBase = Math.cos(wobbleTime);
+        // 帧计数器：远怪隔N帧更新一次以节省CPU
+        this._updateFrameCounter = (this._updateFrameCounter || 0) + 1;
 
         for (const enemy of this.enemies) {
             if (!this.enemySet.has(enemy)) continue;
@@ -389,6 +435,30 @@ export class EnemyManager {
                 continue;
             }
 
+            // ── 远怪降频优化：距离>600的怪不每帧跑完整AI/碰撞 ─────
+            const frame = this._updateFrameCounter;
+            const shouldSkipFullUpdate = !enemy.boss && !enemy.elite && (
+                (distSq > 1200 * 1200 && frame % 5 !== 0)
+                || (distSq > 600 * 600 && frame % 3 !== 0)
+            );
+            if (shouldSkipFullUpdate) {
+                // 简化移动：直接朝玩家方向走
+                const dist = Math.max(0.001, Math.sqrt(distSq));
+                const dirX = dx / dist;
+                const dirY = dy / dist;
+                let speed = enemy.speed;
+                if (enemy.slowTimer > 0) {
+                    speed *= enemy.slowFactor;
+                    enemy.slowTimer = Math.max(0, enemy.slowTimer - dt);
+                }
+                this.setEnemyPosition(
+                    enemy,
+                    this.ctx.clamp(ex + dirX * speed * dt, WORLD_LEFT + enemy.radius, WORLD_RIGHT - enemy.radius),
+                    this.ctx.clamp(ey + dirY * speed * dt, WORLD_BOTTOM + enemy.radius, WORLD_TOP - enemy.radius),
+                );
+                continue;
+            }
+
             const dist = Math.max(0.001, Math.sqrt(distSq));
             const dirX = dx / dist;
             const dirY = dy / dist;
@@ -407,12 +477,26 @@ export class EnemyManager {
                 vx += (-dirY) * orbitSign * orbitDistanceWeight * 0.45;
                 vy += (dirX) * orbitSign * orbitDistanceWeight * 0.45;
             }
-            let moveSpeed = enemy.speed;
+            // ── 远程怪"追→停→射"节奏 ──
+            // seeker / aura 等远程怪：追一阵→停住射击→再追
+            if (enemy.movementType === 'periodic-follow') {
+                const { isMoving, nextTimer } = periodicFollowPhase(dt, enemy.periodicFollowTimer, {
+                    followDuration: 2.0,
+                    pauseDuration: 1.5,
+                    shootDuringPause: true,
+                });
+                enemy.periodicFollowTimer = nextTimer;
+                if (!isMoving) {
+                    // Paused: 不移动, 但技能(射击)在 updateEnemySkill 中已触发
+                    moveSpeed = 0;
+                }
+            }
             if (enemy.dashTimer > 0) {
                 enemy.dashTimer = Math.max(0, enemy.dashTimer - dt);
                 vx = enemy.dashVx;
                 vy = enemy.dashVy;
                 moveSpeed = enemy.speed * (enemy.boss ? 2.15 : 2.9);
+                moveSpeed = Math.max(0, moveSpeed);
             } else if (crowdGrid) {
                 // ── 机制词条: 减速 (霜束) ───────────────────────────
                 if (enemy.slowTimer > 0) {
@@ -434,8 +518,8 @@ export class EnemyManager {
                 if (enemy.poisonStacks > 0) {
                     enemy.poisonTimer -= dt;
                     if (enemy.poisonTimer <= 0) {
-                        // tick: 扣 maxHp × stacks × 0.02
-                        const dot = enemy.maxHp * enemy.poisonStacks * 0.01;
+                        // tick: 固定伤害 per stack（由 onPoisonHit 基于子弹伤害计算）
+                        const dot = (enemy.poisonDps || 2) * enemy.poisonStacks;
                         enemy.hp -= dot;
                         if (enemy.hp <= 0) {
                             this.killEnemy(enemy);
@@ -594,6 +678,33 @@ export class EnemyManager {
             enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * (enemy.elite ? 0.007 : 0.0035) * dt);
             if (Math.random() < dt * 0.8) this.drawEnemy(enemy);
         }
+        // 灵能体 (aura): 光环 buff 附近友军
+        if (enemy.spec.family === 'aura' && enemy.hp > 0) {
+            const pos = this.getEnemyPosition(enemy);
+            this.ctx.drawAreaPulse(pos.x, pos.y, 80, '#38BDF8');
+            for (const other of this.enemies) {
+                if (other === enemy || !this.enemySet.has(other)) continue;
+                const oPos = this.getEnemyPosition(other);
+                const dx = pos.x - oPos.x;
+                const dy = pos.y - oPos.y;
+                if (dx * dx + dy * dy <= 80 * 80) {
+                    // 施加标记: 伤害+30%, 速度+20% (通过变体标记实现)
+                    // 实际用 enemy.dashTimer 作为"受buff"标记
+                    other.dashVx = 1; // 标记已受buff (非0 = buffed)
+                }
+            }
+        }
+        // 蜂群 (swarm): 组群移动, 接近玩家时分散环绕
+        if (enemy.spec.family === 'swarm') {
+            if (dist < 200) {
+                // 分散环绕: 给横向速度分量
+                const orbitSign = (enemy.id % 2 === 0) ? 1 : -1;
+                const orbitForce = (200 - dist) / 200 * 1.5;
+                enemy.dashVx += Math.cos(Math.atan2(dirY, dirX) + Math.PI/2 * orbitSign) * orbitForce * dt * 60;
+                enemy.dashVy += Math.sin(Math.atan2(dirY, dirX) + Math.PI/2 * orbitSign) * orbitForce * dt * 60;
+            }
+        }
+
         if (enemy.skillTimer > 0) return;
 
         const nextDelay = this.getEnemySkillDelay(enemy);
@@ -607,9 +718,53 @@ export class EnemyManager {
             return;
         }
 
+        // 追踪眼 (seeker): 保持距离射击
+        if (enemy.spec.family === 'seeker') {
+            if (dist < 200) {
+                // 后退
+                enemy.dashTimer = 0.3;
+                enemy.dashVx = -dirX;
+                enemy.dashVy = -dirY;
+            }
+        }
+
         if (this.shouldEnemyShoot(enemy, dist)) {
             this.enemyShoot(enemy, dirX, dirY);
             return;
+        }
+
+        // 信标 (beacon): 召唤怪
+        if (enemy.spec.family === 'beacon') {
+            const pos = this.getEnemyPosition(enemy);
+            this.ctx.spawnFloatingText('召唤', pos.x, pos.y + enemy.radius + 20, '#FCD34D', 18);
+            this.spawnPack(2, false, null, null);
+            return;
+        }
+
+        // 虚空巨像 Phase 3: 全屏脉冲
+        if (enemy.boss && enemy.spec.family === 'void-colossus' && (enemy.spec.variantIndex || 0) >= 3) {
+            enemy.skillTimer -= dt;
+            if (enemy.skillTimer <= 0) {
+                enemy.skillTimer = 3.0;
+                const pos = this.getEnemyPosition(enemy);
+                this.ctx.drawAreaPulse(pos.x, pos.y, 400, '#22D3EE');
+                // 对其它怪物造成伤害
+                for (const other of this.enemies) {
+                    if (!this.enemySet.has(other)) continue;
+                    const oPos = this.getEnemyPosition(other);
+                    const dx = pos.x - oPos.x;
+                    const dy = pos.y - oPos.y;
+                    if (dx * dx + dy * dy <= 400 * 400) {
+                        this.damageEnemy(other, enemy.damage * 0.6, '#22D3EE', '脉冲 ');
+                    }
+                }
+                // 对玩家造成范围伤害
+                const pdx = pos.x - this.cs.playerX;
+                const pdy = pos.y - this.cs.playerY;
+                if (pdx * pdx + pdy * pdy <= 400 * 400) {
+                    this.ctx.takeDamage(enemy.damage * 0.4, enemy.damageType);
+                }
+            }
         }
 
         if (enemy.spec.variantId === 'armored' || enemy.spec.family === 'brute' || enemy.spec.family === 'warden') {
@@ -617,6 +772,294 @@ export class EnemyManager {
             const pos = this.getEnemyPosition(enemy);
             this.ctx.spawnFloatingText('霸体', pos.x, pos.y + enemy.radius + 20, '#CBD5E1', 18);
             this.drawEnemy(enemy);
+        }
+
+        // ── 小 Boss AI ───────────────────────────────────────────────────────
+
+        // 狂暴重甲块 (brute-prime): 霸体+高接触伤+缓慢
+        if (enemy.spec.family === 'brute-prime') {
+            // 被动光环: 减速附近玩家
+            const pos = this.getEnemyPosition(enemy);
+            if (this.cs.slowTimer <= 0) {
+                this.ctx.spawnFloatingText('重压', pos.x, pos.y - enemy.radius - 20, '#78350F', 16);
+                this.cs.slowTimer = 0.5;
+                this.cs.slowFactor = 0.72;
+            }
+        }
+
+        // 电弧灵能体 (aura-arc): 连锁闪电
+        if (enemy.spec.family === 'aura-arc' && enemy.skillTimer <= 0) {
+            const pos = this.getEnemyPosition(enemy);
+            // 对玩家直接射击
+            const dx = this.cs.playerX - pos.x;
+            const dy = this.cs.playerY - pos.y;
+            const d = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+            this.enemyShoot(enemy, dx / d, dy / d);
+            // 连锁闪电: 弹射最多3个其他敌人
+            const chainTargets: Enemy[] = [];
+            for (const other of this.enemies) {
+                if (other === enemy || !this.enemySet.has(other)) continue;
+                const oPos = this.getEnemyPosition(other);
+                const odx = oPos.x - pos.x;
+                const ody = oPos.y - pos.y;
+                if (odx * odx + ody * ody <= 180 * 180) {
+                    chainTargets.push(other);
+                    if (chainTargets.length >= 3) break;
+                }
+            }
+            for (const target of chainTargets) {
+                const oPos2 = this.getEnemyPosition(target);
+                this.ctx.drawAreaPulse(oPos2.x, oPos2.y, 12, '#60A5FA');
+                this.damageEnemy(target, enemy.damage * 0.55, '#60A5FA', '闪电 ');
+            }
+            this.ctx.playSfx('sfx_boss_warning', 0.4, 0.5);
+            enemy.skillTimer = this.ctx.randomRange(1.6, 2.8);
+        }
+
+        // 自爆母体 (bomber-mother): 附近有敌人时开始倒计时 → 爆炸
+        if (enemy.spec.family === 'bomber-mother') {
+            // 检查附近是否有其他敌人
+            const pos = this.getEnemyPosition(enemy);
+            let nearbyCount = 0;
+            for (const other of this.enemies) {
+                if (other === enemy || !this.enemySet.has(other)) continue;
+                const oPos = this.getEnemyPosition(other);
+                const dx = oPos.x - pos.x;
+                const dy = oPos.y - pos.y;
+                if (dx * dx + dy * dy <= 200 * 200) nearbyCount++;
+            }
+            if (nearbyCount >= 2 && enemy.explodeTimer <= 0 && !(enemy as any)._minibossExploded) {
+                // 开始倒计时
+                enemy.explodeTimer = 2.5;
+                this.ctx.spawnFloatingText('自爆!', pos.x, pos.y + enemy.radius + 20, '#EF4444', 22);
+                this.ctx.playSfx('sfx_boss_warning', 0.8, 0.3);
+            }
+            if (enemy.explodeTimer > 0) {
+                enemy.explodeTimer -= dt;
+                // 闪烁效果: 每0.5s变色
+                const flash = Math.sin(this.cs.combatTime * 20) > 0;
+                enemy.hitFlash = flash ? 0.15 : 0;
+                this.drawEnemy(enemy);
+                if (enemy.explodeTimer <= 0 && !(enemy as any)._minibossExploded) {
+                    // 爆炸! 对范围内所有敌人和玩家造成伤害
+                    (enemy as any)._minibossExploded = true;
+                    this.ctx.drawAreaPulse(pos.x, pos.y, 220, '#FCA5A5');
+                    this.ctx.shakeIntensity = Math.max(this.ctx.shakeIntensity, 3);
+                    this.ctx.playSfx('sfx_boss_warning', 1.0, 0.2);
+                    // 对其他敌人
+                    for (const other of this.enemies) {
+                        if (other === enemy || !this.enemySet.has(other)) continue;
+                        const oPos2 = this.getEnemyPosition(other);
+                        const dx = oPos2.x - pos.x;
+                        const dy = oPos2.y - pos.y;
+                        if (dx * dx + dy * dy <= 220 * 220) {
+                            this.damageEnemy(other, enemy.damage * 0.8, '#FCA5A5', '自爆 ');
+                        }
+                    }
+                    // 对玩家
+                    const pdx = pos.x - this.cs.playerX;
+                    const pdy = pos.y - this.cs.playerY;
+                    if (pdx * pdx + pdy * pdy <= 220 * 220) {
+                        this.ctx.takeDamage(enemy.damage * 0.9, enemy.damageType);
+                    }
+                    // 母体自杀
+                    this.damageEnemy(enemy, enemy.hp, '#FCA5A5', '自爆 ');
+                }
+            }
+        }
+
+        // 迅捷分裂体 (splitter-swift): 高速+击杀时分裂成2个小体
+        // 分裂逻辑在 killEnemy 里处理，这里仅确保高速追击
+
+        // 再生巨兽 (warden-regen): 每秒回复 2% maxHp
+        if (enemy.spec.family === 'warden-regen') {
+            if (enemy.hp < enemy.maxHp) {
+                const regen = enemy.maxHp * 0.02 * dt;
+                enemy.hp = Math.min(enemy.maxHp, enemy.hp + regen);
+                // 每2秒显示一次回复
+                if (enemy.skillTimer <= 0 && enemy.hp < enemy.maxHp) {
+                    const pos = this.getEnemyPosition(enemy);
+                    this.ctx.spawnFloatingText('回复', pos.x, pos.y - enemy.radius - 20, '#34D399', 16);
+                    enemy.skillTimer = 2.0;
+                }
+            }
+        }
+
+        // ── 大 Boss 持续行为 ───────────────────────────────────────────
+
+        // 噬能蠕虫: 钻地消失 → 消失计时 → 冲锋硬直 → 重新出现
+        if (enemy.spec.family === 'energy-worm' && enemy.boss) {
+            if (enemy.burrowedTimer > 0) {
+                // 钻地中: 隐藏视觉，缓慢恢复HP
+                enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * 0.008 * dt);
+                if (enemy.burrowedTimer <= 0) {
+                    // 破土出现
+                    const pos = this.getEnemyPosition(enemy);
+                    this.ctx.drawAreaPulse(pos.x, pos.y, 80, '#A3E635');
+                    this.ctx.spawnFloatingText('破土!', pos.x, pos.y, '#A3E635', 20);
+                    this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 2);
+                }
+                return; // 钻地时不执行其他行为
+            }
+            if (enemy.stunTimer > 0) {
+                // 硬直中: 不动
+                return;
+            }
+            // 正常移动，每4-6秒钻地消失
+            if (enemy.skillTimer <= 0) {
+                enemy.burrowedTimer = 1.8;
+                enemy.stunTimer = 0;
+                const pos = this.getEnemyPosition(enemy);
+                this.ctx.spawnFloatingText('钻地!', pos.x, pos.y, '#A3E635', 20);
+                this.ctx.playSfx('sfx_boss_warning', 0.6, 0.4);
+                enemy.skillTimer = this.ctx.randomRange(4.5, 6.5);
+                return;
+            }
+            // 钻地计时
+            if (enemy.burrowedTimer > 0) {
+                enemy.burrowedTimer -= dt;
+                if (enemy.burrowedTimer <= 0) {
+                    // 破土后立即冲向玩家方向
+                    enemy.burrowedTimer = 0;
+                    enemy.stunTimer = 0.9;
+                    const px = this.cs.playerX;
+                    const py = this.cs.playerY;
+                    const pos = this.getEnemyPosition(enemy);
+                    const dx = px - pos.x;
+                    const dy = py - pos.y;
+                    const d = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+                    enemy.dashTimer = 0.55;
+                    enemy.dashVx = dx / d * 3.2;
+                    enemy.dashVy = dy / d * 3.2;
+                    this.ctx.spawnFloatingText('冲锋!', pos.x, pos.y, '#A3E635', 22);
+                    this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3);
+                    return;
+                }
+            }
+        }
+
+        // 冰霜女皇: 冰霜光环减速 + 扇形冰刺(Phase1)
+        if (enemy.spec.family === 'frost-queen' && enemy.boss) {
+            const pos = this.getEnemyPosition(enemy);
+            // 被动光环: 玩家减速
+            if (this.cs.slowTimer <= 0) {
+                this.cs.slowTimer = 0.4;
+                this.cs.slowFactor = enemy.spec.variantIndex >= 1 ? 0.55 : 0.78;
+            }
+            // Phase 1+: 扇形冰刺
+            if (enemy.spec.variantIndex >= 1 && enemy.skillTimer <= 0) {
+                const pdx = this.cs.playerX - pos.x;
+                const pdy = this.cs.playerY - pos.y;
+                const baseAngle = Math.atan2(pdy, pdx);
+                const coneCount = 5;
+                const coneSpread = Math.PI * 0.35;
+                for (let i = 0; i < coneCount; i++) {
+                    const angle = baseAngle - coneSpread / 2 + (coneSpread / (coneCount - 1)) * i;
+                    this.enemyShootAt(enemy, Math.cos(angle), Math.sin(angle));
+                }
+                this.ctx.drawAreaPulse(pos.x, pos.y, 120, '#93C5FD');
+                this.ctx.spawnFloatingText('冰刺!', pos.x, pos.y + enemy.radius + 20, '#93C5FD', 20);
+                this.ctx.playSfx('sfx_boss_warning', 0.6, 0.35);
+                enemy.skillTimer = this.ctx.randomRange(2.5, 4.0);
+            }
+        }
+
+        // 狱炎领主: 扇形旋转火焰(Phase1)
+        if (enemy.spec.family === 'inferno-lord' && enemy.boss) {
+            if (enemy.spec.variantIndex >= 1) {
+                enemy.rotationTimer = (enemy.rotationTimer || 0) + dt;
+                // 旋转火球: 每0.4秒从4个方向射出
+                if (enemy.skillTimer <= 0) {
+                    const pos = this.getEnemyPosition(enemy);
+                    const baseAngle = enemy.rotationTimer * 1.8;
+                    for (let i = 0; i < 4; i++) {
+                        const angle = baseAngle + (Math.PI / 2) * i;
+                        this.enemyShootAt(enemy, Math.cos(angle), Math.sin(angle));
+                    }
+                    this.ctx.drawAreaPulse(pos.x, pos.y, 60, '#EF4444');
+                    enemy.skillTimer = 0.4;
+                }
+                // 场地持续火焰: 每3秒放一个火圈
+                if (enemy.skillTimer <= 0 && Math.floor((enemy.rotationTimer) * 10) % 30 === 0) {
+                    const pos = this.getEnemyPosition(enemy);
+                    this.ctx.drawAreaPulse(pos.x, pos.y, 180, '#F97316');
+                }
+            }
+        }
+
+        // 虚空织网者: 护盾 + 召唤小蜘蛛
+        if (enemy.spec.family === 'void-weaver' && enemy.boss) {
+            // 初始化护盾
+            if (enemy.shieldMaxHp <= 0) {
+                enemy.shieldMaxHp = Math.round(enemy.maxHp * 0.5);
+                enemy.shieldHp = enemy.shieldMaxHp;
+                enemy.spiderCount = 0;
+            }
+            // 护盾持续回复(阶段0)
+            if (enemy.spec.variantIndex === 0 && enemy.shieldHp < enemy.shieldMaxHp) {
+                enemy.shieldHp = Math.min(enemy.shieldMaxHp, enemy.shieldHp + enemy.shieldMaxHp * 0.003 * dt);
+            }
+            // Phase 0: 定期召唤小蜘蛛
+            if (enemy.spec.variantIndex === 0 && enemy.skillTimer <= 0) {
+                const pos = this.getEnemyPosition(enemy);
+                for (let i = 0; i < 2; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const offset = enemy.radius + 30;
+                    const sx = this.ctx.clamp(pos.x + Math.cos(angle) * offset, WORLD_LEFT + 60, WORLD_RIGHT - 60);
+                    const sy = this.ctx.clamp(pos.y + Math.sin(angle) * offset, WORLD_BOTTOM + 60, WORLD_TOP - 60);
+                    const scale = this.getEndlessScale();
+                    this.createEnemy({
+                        id: 'spider-minion',
+                        name: '蛛网幼虫',
+                        family: 'swarm',
+                        artId: 'swarm',
+                        hp: Math.round(80 * scale),
+                        speed: 130,
+                        damage: enemy.damage * 0.25,
+                        radius: 12,
+                        xp: 0,
+                        alloyChance: 0,
+                        color: '#4C1D95',
+                        accent: '#C4B5FD',
+                        spawnAfter: 50,
+                        weight: 0,
+                    }, sx, sy, false, false);
+                    enemy.spiderCount++;
+                }
+                this.ctx.spawnFloatingText('召唤!', pos.x, pos.y + enemy.radius + 20, '#C4B5FD', 20);
+                enemy.skillTimer = this.ctx.randomRange(3.5, 5.5);
+            }
+            // Phase 1+: 更频繁召唤
+            if (enemy.spec.variantIndex >= 1 && enemy.skillTimer <= 0) {
+                const pos = this.getEnemyPosition(enemy);
+                for (let i = 0; i < 4; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const offset = enemy.radius + 30;
+                    const sx = this.ctx.clamp(pos.x + Math.cos(angle) * offset, WORLD_LEFT + 60, WORLD_RIGHT - 60);
+                    const sy = this.ctx.clamp(pos.y + Math.sin(angle) * offset, WORLD_BOTTOM + 60, WORLD_TOP - 60);
+                    const scale = this.getEndlessScale();
+                    this.createEnemy({
+                        id: 'spider-minion',
+                        name: '蛛网幼虫',
+                        family: 'swarm',
+                        artId: 'swarm',
+                        hp: Math.round(80 * scale),
+                        speed: 150,
+                        damage: enemy.damage * 0.3,
+                        radius: 12,
+                        xp: 0,
+                        alloyChance: 0,
+                        color: '#4C1D95',
+                        accent: '#C4B5FD',
+                        spawnAfter: 50,
+                        weight: 0,
+                    }, sx, sy, false, false);
+                    enemy.spiderCount++;
+                }
+                this.ctx.spawnFloatingText('蛛群!', pos.x, pos.y + enemy.radius + 20, '#C4B5FD', 22);
+                this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 2);
+                enemy.skillTimer = this.ctx.randomRange(2.0, 3.5);
+            }
         }
     }
     public getEnemySkillDelay(enemy: Enemy) {
@@ -635,18 +1078,20 @@ export class EnemyManager {
         if (dist < 120 || dist > 760) return false;
         return enemy.boss
             || enemy.spec.family === 'warden'
+            || enemy.spec.family === 'seeker'
             || enemy.spec.variantId === 'acid'
             || enemy.spec.variantId === 'arc'
+            || enemy.spec.family === 'aura-arc'        // 电弧灵能体 (小Boss)
             || enemy.spec.variantId === 'crystal'
             || enemy.spec.variantId === 'venom'
             || enemy.spec.variantId === 'shade'
-            || enemy.spec.variantId === 'prime';
+            || enemy.spec.family === 'brute-prime'      // 狂暴重甲块 (小Boss);
     }
     public separateEnemies() {
         if (this.enemies.length < 6) return;
         const px = this.cs.playerX;
         const py = this.cs.playerY;
-        const distSqThreshold = ENEMY_SEP_PLAYER_DIST * ENEMY_SEP_PLAYER_DIST;
+        const distSqThreshold = 480 * 480; // 只处理480单位内的敌人（性能优化）
         const buckets = new Map<string, Enemy[]>();
         for (const enemy of this.enemies) {
             const enemyStart = this.getEnemyPosition(enemy);
@@ -763,14 +1208,38 @@ export class EnemyManager {
         const count = this.getWaveSpawnBatchCount();
         const fallback = this.isBossWave() ? ENEMY_SPECS : this.getUnlockedEnemySpecs();
         this.spawnPack(count, ring, this.currentWaveSpecs, fallback);
+        // 无尽模式（波13+）有 30% 概率穿插小 Boss（不挡进度）
+        this.maybeSpawnMiniBoss();
+    }
+
+    /** 小 Boss 穿插：无尽模式波13+，30%概率出现1只 */
+    private maybeSpawnMiniBoss(): void {
+        if (this.cs.waveIndex < 13) return;
+        if (this.isBossWave()) return;
+        if (Math.random() > 0.30) return;
+        // 场上已存在小 Boss 则不刷
+        const hasMini = this.enemies.some(e => e.boss === false && e.elite && MINI_BOSS_SPECS.some(s => s.family === e.spec.family));
+        if (hasMini) return;
+        const spec = MINI_BOSS_SPECS[Math.floor(Math.random() * MINI_BOSS_SPECS.length)];
+        const cycle = this.cs.endlessCycle || 1;
+        const scaledHp = Math.round(spec.hp * this.getEndlessScale() * (1 + (cycle - 1) * 0.2));
+        const point = this.getSpawnPointAroundPlayer(720, Math.random() * Math.PI * 2);
+        this.createEnemy({
+            ...spec,
+            id: spec.id,
+            name: `${spec.name} Lv.${cycle}`,
+            hp: scaledHp,
+            damage: Math.round(spec.damage * this.getEndlessScale() * (1 + (cycle - 1) * 0.15)),
+        }, point.x, point.y, true, false);
     }
     public getWaveSpawnInterval() {
         const slot = this.getWaveSlot();
         const base = 1.62 - slot * 0.035 - (this.cs.endlessCycle - 1) * 0.06 - Math.min(0.12, this.cs.waveElapsed / 420);
-        // 11 波后：间隔指数缩短（5% compound）
+        // 11 波后：间隔指数缩短（5% compound），波11略慢给喘口气
         if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
             const endlessFactor = this.getEndlessScale();
-            return Math.max(0.5, (base + 0.2) / endlessFactor);
+            const breather = this.cs.waveIndex === ENDLESS_START_WAVE ? 0.08 : 0;
+            return Math.max(0.45, (base + breather) / endlessFactor);
         }
         // Early waves are where new players learn the loop.  Keep pressure lower
         // so starter weapons can actually kill, collect XP, and reach upgrades
@@ -782,9 +1251,11 @@ export class EnemyManager {
                     : this.cs.waveIndex === 3 ? 0.4
                         : this.cs.waveIndex === 4 ? 0.3
                             : this.cs.waveIndex === 5 ? 0.2
-                                : this.cs.waveIndex === 6 ? 0.1
-                                    : this.cs.waveIndex >= 7 ? 0.05
-                                        : 0
+                                : this.cs.waveIndex === 6 ? 0.15
+                                    : this.cs.waveIndex === 7 ? 0.15
+                                        : this.cs.waveIndex === 8 ? 0.15
+                                            : this.cs.waveIndex === 9 ? 0.10
+                                                : 0
             : 0;
         return Math.max(this.cs.waveIndex <= 1 ? 1.5 : this.cs.waveIndex === 2 ? 1.4 : this.cs.waveIndex === 3 ? 1.3 : this.cs.waveIndex === 4 ? 1.2 : this.cs.waveIndex === 5 ? 1.1 : this.cs.waveIndex === 6 ? 1.0 : this.cs.waveIndex <= 8 ? 0.95 : 0.95, base + earlyRelief);
     }
@@ -818,13 +1289,17 @@ export class EnemyManager {
         return Math.min(22, Math.max(2, pressure + bossBonus + randomBonus));
     }
     public getEnemyCap() {
+        // Boss 波：场上限砍到 60，给玩家空间打 Boss
+        if (this.isBossWave()) {
+            return 60 + this.cs.endlessCycle * 10;
+        }
         // 11 波后：上限指数增长
         if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
             const endlessFactor = this.getEndlessScale();
-            return Math.min(600, Math.round(168 * endlessFactor));
+            return Math.min(600, Math.max(240, Math.round(200 * endlessFactor)));
         }
         if (this.cs.endlessCycle === 1) {
-            const earlyCaps: Record<number, number> = { 1: 40, 2: 55, 3: 75, 4: 95, 5: 130, 6: 170, 7: 200, 8: 240 };
+            const earlyCaps: Record<number, number> = { 1: 40, 2: 55, 3: 75, 4: 95, 5: 130, 6: 170, 7: 200, 8: 240, 9: 240 };
             const cap = earlyCaps[this.cs.waveIndex];
             if (cap) return cap + this.cs.battleIndex * 2;
         }
@@ -851,7 +1326,11 @@ export class EnemyManager {
         return Math.pow(1 + ENDLESS_SCALE_RATE, wave - (ENDLESS_START_WAVE - 1));
     }
     public isBossWave(wave = this.cs.waveIndex) {
-        return wave > 0 && wave % WAVES_PER_CYCLE === 0;
+        // 波 10: 第一个 Boss 波
+        if (wave === 10) return true;
+        // 波 10 之后: 每 3 波一个 Boss (13, 16, 19, 22, ...)
+        if (wave > 10) return (wave - 10) % 3 === 0;
+        return false;
     }
     public spawnPack(count: number, ring: boolean, preferredSpecs: EnemySpec[] | null = null, fallbackSpecs: EnemySpec[] | null = null) {
         const cap = this.getEnemyCap();
@@ -877,37 +1356,163 @@ export class EnemyManager {
             this.createEnemy(spec, point.x, point.y, Math.random() < eliteChance, false);
         }
     }
+    /** 随机 Boss 池，同一场战斗波次间不重复 */
+    public initBossPool(): void {
+        resetBossPool();
+    }
+
     public spawnBoss() {
-        const spec: EnemySpec = {
-            id: 'boss',
-            name: '星核巨像',
-            family: 'boss',
-            artId: 'boss',
-            hp: 680,
-            speed: 64,
-            damage: 22,
-            radius: 42,
-            xp: 45,
-            alloyChance: 1,
-            color: '#F94144',
-            accent: '#7F1D1D',
-            spawnAfter: 0,
-            weight: 1,
-        };
-        const point = this.getSpawnPointAroundPlayer(760, Math.random() * Math.PI * 2);
-        this.createEnemy(spec, point.x, point.y, true, true);
+        const cycle = this.cs.endlessCycle || 1;
+
+        // 从 shuffled 池 pop 一个 Boss（保证同 Boss 波不重复）
+        if (!_poolBossThisBattle || _poolBossThisBattle.length === 0) {
+            resetBossPool();
+        }
+        const bossSpec = _poolBossThisBattle!.pop()!;
+
+        const scaledHp = Math.round(bossSpec.hp * (1 + (cycle - 1) * 0.25));
+        const point = this.getSpawnPointAroundPlayer(700, Math.random() * Math.PI * 2);
+        this.createEnemy({
+            ...bossSpec,
+            id: bossSpec.id,
+            name: `${bossSpec.name} Lv.${cycle}`,
+            hp: scaledHp,
+            speed: bossSpec.speed,
+            damage: bossSpec.damage + (cycle - 1) * 5,
+            radius: bossSpec.radius,
+            xp: bossSpec.xp * cycle,
+            bossMaterial: bossSpec.bossMaterial,
+        }, point.x, point.y, true, true);
     }
 
     public updateBossPhase(enemy: Enemy, hpRatio: number): void {
         if (!enemy.boss) return;
-        // Phase 2: enrage at 50% HP
+
+        // 虚空巨像 3 阶段
+        if (enemy.spec.family === 'void-colossus') {
+            const currentPhase = enemy.spec.variantIndex || 0;
+            let newPhase = currentPhase;
+
+            if (hpRatio <= 0.33 && currentPhase < 3) {
+                newPhase = 3;
+            } else if (hpRatio <= 0.66 && currentPhase < 2) {
+                newPhase = 2;
+            }
+
+            if (newPhase !== currentPhase) {
+                this.ctx.rumbleVfx('bossWarning');
+                this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 4);
+
+                if (newPhase === 2) {
+                    // Phase 2: 加速 + 召唤追踪眼
+                    enemy.speed *= 1.30;
+                    enemy.damage *= 1.25;
+                    this.ctx.showToast('虚空巨像进入阶段二：召唤！');
+                    this.ctx.playSfx('sfx_boss_warning', 0.7, 0.3);
+                    // 召唤 2 只追踪眼
+                    const seekerSpec = ENEMY_SPECS.find(s => s.family === 'seeker');
+                    if (seekerSpec) {
+                        for (let i = 0; i < 2; i++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const sp = this.getSpawnPointAroundPlayer(500, angle);
+                            this.createEnemy(seekerSpec, sp.x, sp.y, false, false);
+                        }
+                    }
+                } else if (newPhase === 3) {
+                    // Phase 3: 狂暴 — 速度大幅提升, 伤害翻倍
+                    enemy.speed *= 1.50;
+                    enemy.damage *= 1.60;
+                    this.ctx.showToast('虚空巨像进入阶段三：狂暴！');
+                    this.ctx.shakeIntensity = Math.max(this.ctx.shakeIntensity, 6);
+                    this.ctx.playSfx('sfx_boss_warning', 0.9, 0.2);
+                }
+                // 更新 phase
+                enemy.spec = { ...enemy.spec, variantIndex: newPhase };
+            }
+
+            // Phase 3: 全屏脉冲 (在 updateEnemySkill 里处理)
+            return;
+        }
+
+        // 旧 Boss (星核巨像) 原有阶段逻辑
         if (hpRatio <= 0.5 && enemy.speed < 130) {
             enemy.speed *= 1.45;
             enemy.damage *= 1.35;
             this.ctx.showToast('星核巨像进入狂暴状态！');
             this.ctx.playSfx('sfx_boss_warning', 0.7, 0.3);
-            // Phase 2 visual: shake + extra death particle color
             this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 2);
+        }
+
+        // ── 大 Boss 阶段触发 ───────────────────────────────────────────
+
+        // 噬能蠕虫: 3阶段(burrowed=0→charging=1→stunned=2→burrowed...)
+        if (enemy.spec.family === 'energy-worm') {
+            const phase = enemy.spec.variantIndex || 0;
+            // Phase 1: HP ≤ 66% → 加速
+            if (hpRatio <= 0.66 && phase < 1) {
+                enemy.spec = { ...enemy.spec, variantIndex: 1 };
+                enemy.speed *= 1.4;
+                enemy.damage *= 1.2;
+                this.ctx.showToast('噬能蠕虫进入狂暴形态！');
+                this.ctx.playSfx('sfx_boss_warning', 0.8, 0.3);
+            }
+            // Phase 2: HP ≤ 33% → 极快
+            if (hpRatio <= 0.33 && phase < 2) {
+                enemy.spec = { ...enemy.spec, variantIndex: 2 };
+                enemy.speed *= 1.6;
+                enemy.damage *= 1.4;
+                this.ctx.showToast('噬能蠕虫进入极限形态！');
+                this.ctx.playSfx('sfx_boss_warning', 0.9, 0.2);
+                this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3);
+            }
+            return;
+        }
+
+        // 冰霜女皇: 阶段=HP≤50%
+        if (enemy.spec.family === 'frost-queen') {
+            const phase = enemy.spec.variantIndex || 0;
+            if (hpRatio <= 0.5 && phase < 1) {
+                enemy.spec = { ...enemy.spec, variantIndex: 1 };
+                enemy.speed *= 1.35;
+                enemy.damage *= 1.25;
+                this.ctx.showToast('冰霜女皇进入冰封领域！');
+                this.ctx.playSfx('sfx_boss_warning', 0.8, 0.3);
+                this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 2);
+                // 瞬间放一圈冰霜
+                const pos = this.getEnemyPosition(enemy);
+                this.ctx.drawAreaPulse(pos.x, pos.y, 200, '#93C5FD');
+            }
+            return;
+        }
+
+        // 狱炎领主: 阶段=HP≤66%
+        if (enemy.spec.family === 'inferno-lord') {
+            const phase = enemy.spec.variantIndex || 0;
+            if (hpRatio <= 0.66 && phase < 1) {
+                enemy.spec = { ...enemy.spec, variantIndex: 1 };
+                enemy.speed *= 1.3;
+                enemy.damage *= 1.2;
+                enemy.rotationTimer = 0;
+                this.ctx.showToast('狱炎领主进入火焰风暴！');
+                this.ctx.playSfx('sfx_boss_warning', 0.8, 0.3);
+                this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3);
+            }
+            return;
+        }
+
+        // 虚空织网者: 阶段=护盾耗尽
+        if (enemy.spec.family === 'void-weaver') {
+            const phase = enemy.spec.variantIndex || 0;
+            if (enemy.shieldHp <= 0 && phase < 1) {
+                // 护盾被打破 → 进入下一阶段
+                enemy.spec = { ...enemy.spec, variantIndex: 1 };
+                enemy.speed *= 1.5;
+                enemy.damage *= 1.3;
+                this.ctx.showToast('虚空织网者护盾破碎！');
+                this.ctx.playSfx('sfx_boss_warning', 0.8, 0.3);
+                this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3);
+            }
+            return;
         }
     }
     public getSpawnPointAroundPlayer(radius: number, angle: number): Vec2 {
@@ -976,12 +1581,24 @@ export class EnemyManager {
             dashVx: 0,
             dashVy: 0,
             armorTimer: 0,
+            // ── 移动策略 ─────────────────────────────────────────────
+            movementType: (spec.family === 'seeker' || spec.family === 'aura') ? 'periodic-follow' : 'follow',
+            periodicFollowTimer: 0,
+            // ── 机制词条状态字段 (Phase 2) ─────────────────────────────────
             slowTimer: 0,
             slowFactor: 0,
             poisonStacks: 0,
             poisonTimer: 0,
+            poisonDps: 0,
             knockbackVx: 0,
             knockbackVy: 0,
+            burrowedTimer: 0,
+            stunTimer: 0,
+            rotationTimer: 0,
+            shieldHp: 0,
+            shieldMaxHp: 0,
+            spiderCount: 0,
+            explodeTimer: 0,
             animSeed: Math.random() * Math.PI * 2,
             hitFlash: 0,
             visualStateKey: '',
@@ -1103,10 +1720,44 @@ export class EnemyManager {
         } else if (isCrit) {
             this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 1.5);
         }
+        // 虚空织网者: 护盾先扣，护盾归零触发阶段切换
+        if (enemy.spec.family === 'void-weaver' && enemy.boss && enemy.shieldMaxHp > 0 && enemy.shieldHp > 0) {
+            if (enemy.shieldHp > 0) {
+                enemy.shieldHp = Math.max(0, enemy.shieldHp - finalAmount);
+                const pos2 = this.getEnemyPosition(enemy);
+                this.ctx.spawnFloatingText(`盾${Math.ceil(finalAmount)}`, pos2.x + this.ctx.randomRange(-8, 8), pos2.y - enemy.radius - 10, '#C4B5FD', 18);
+                enemy.hitFlash = ENEMY_HIT_FLASH_DURATION;
+                if (enemy.shieldHp <= 0) {
+                    // 护盾破碎 → updateBossPhase 会在这里检测到 shieldHp<=0 并触发阶段切换
+                    const pos3 = this.getEnemyPosition(enemy);
+                    this.ctx.drawAreaPulse(pos3.x, pos3.y, enemy.radius * 2, '#C4B5FD');
+                    this.ctx.spawnFloatingText('护盾破碎!', pos3.x, pos3.y + enemy.radius + 20, '#C4B5FD', 24);
+                    this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3);
+                    this.ctx.playSfx('sfx_boss_warning', 0.9, 0.25);
+                }
+                return; // 护盾期间不扣HP
+            }
+        }
         enemy.hitFlash = ENEMY_HIT_FLASH_DURATION;
-        this.ctx.playSfx('sfx_hit_enemy', enemy.boss ? 0.46 : 0.32, 0.035);
+        this.ctx.playSfx('sfx_hit_enemy', enemy.boss ? 0.55 : 0.38, 0.03);
         enemy.hp -= finalAmount;
         if (enemy.hp <= 0) {
+            // 自爆虫 (bomber): 死亡时爆炸
+            if (enemy.spec.family === 'bomber') {
+                const pos = this.getEnemyPosition(enemy);
+                const explosionDmg = enemy.spec.damage * 2;
+                const explosionRadius = enemy.radius * 2.5;
+                for (const other of this.enemies) {
+                    if (other === enemy || !this.enemySet.has(other)) continue;
+                    const otherPos = this.getEnemyPosition(other);
+                    const dx = pos.x - otherPos.x;
+                    const dy = pos.y - otherPos.y;
+                    if (dx * dx + dy * dy <= explosionRadius * explosionRadius) {
+                        this.damageEnemy(other, explosionDmg * 0.5, '#EF4444', '爆炸 ');
+                    }
+                }
+                this.ctx.drawAreaPulse(pos.x, pos.y, explosionRadius, '#EF4444');
+            }
             this.killEnemy(enemy);
         } else {
             this.drawEnemy(enemy);
@@ -1140,7 +1791,31 @@ export class EnemyManager {
         if (index >= 0) this.enemies.splice(index, 1);
         this.enemySet.delete(enemy);
         const { x, y } = this.getEnemyPosition(enemy);
-        this.ctx.bus.emit('enemy-killed', { x, y, drops: true, isBoss: enemy.boss, isSplitter: enemy.spec.family === 'splitter', damageType: enemy.damageType });
+        this.ctx.bus.emit('enemy-killed', { x, y, drops: true, isBoss: enemy.boss, isSplitter: enemy.spec.family === 'splitter' || enemy.spec.family === 'splitter-swift', damageType: enemy.damageType });
+
+        // 迅捷分裂体死亡时分裂成2个小体（子体不再分裂）
+        if ((enemy.spec.family === 'splitter' || enemy.spec.family === 'splitter-swift') && !enemy.boss && !enemy.spec.id.endsWith('-child')) {
+            const scale = this.getEndlessScale();
+            const childHp = Math.round(enemy.maxHp * 0.45 * scale);
+            for (let i = 0; i < 2; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const offset = 45;
+                const cx = this.ctx.clamp(x + Math.cos(angle) * offset, WORLD_LEFT + 60, WORLD_RIGHT - 60);
+                const cy = this.ctx.clamp(y + Math.sin(angle) * offset, WORLD_BOTTOM + 60, WORLD_TOP - 60);
+                this.createEnemy({
+                    ...enemy.spec,
+                    id: `${enemy.spec.id}-child`,
+                    name: `${enemy.spec.name}-幼体`,
+                    hp: childHp,
+                    damage: enemy.damage * 0.5,
+                    speed: enemy.speed * 1.2,
+                    radius: Math.round(enemy.radius * 0.6),
+                    xp: 0,
+                    alloyChance: 0,
+                }, cx, cy, false, false);
+            }
+            this.ctx.drawAreaPulse(x, y, 60, '#C4B5FD');
+        }
         if (enemy.boss) {
             this.ctx.bus.emit('boss-defeated', {});
             if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('bossDeath');
@@ -1154,10 +1829,11 @@ export class EnemyManager {
         this.cs.killCount += 1;
         this.cs.waveKillCount += 1;
 
-        const xpDropChance = enemy.boss ? 1 : enemy.elite ? ELITE_XP_DROP_CHANCE : NORMAL_XP_DROP_CHANCE;
-        if (Math.random() < xpDropChance) {
+        // XP — always given directly, no orbs to pick up
+        {
             const xpMultiplier = enemy.boss ? 3 : enemy.elite ? 2.4 : 2.6;
-            this.ctx.dropPickup('xp', Math.max(1, Math.round(enemy.spec.xp * xpMultiplier)), x, y);
+            const xpAmount = Math.max(1, Math.round(enemy.spec.xp * xpMultiplier));
+            this.ctx.gainXp(xpAmount);
         }
 
         const normalAlloyChance = Math.min(0.32, enemy.spec.alloyChance * NORMAL_ALLOY_DROP_MULTIPLIER + this.cs.waveIndex * 0.004);
@@ -1166,7 +1842,7 @@ export class EnemyManager {
                 ? 18 + this.cs.endlessCycle * 3
                 : enemy.elite
                     ? 6 + Math.floor(this.cs.endlessCycle / 2)
-                    : this.ctx.randomInt(1, 2) + Math.floor(this.cs.waveIndex / 10);
+                    : this.ctx.randomInt(2, 4) + Math.floor(this.cs.waveIndex / 8);
             this.ctx.dropPickup('alloy', alloyAmount, x + this.ctx.randomRange(-20, 20), y + this.ctx.randomRange(-20, 20));
         }
         if (Math.random() < (enemy.elite ? ELITE_MATERIAL_DROP_CHANCE : NORMAL_MATERIAL_DROP_CHANCE)) {
@@ -1185,11 +1861,23 @@ export class EnemyManager {
             this.ctx.addShieldFragment();
         }
         if (enemy.boss) {
-            this.ctx.dropPickup('cores', 1 + Math.floor(this.cs.endlessCycle / 3), x, y);
-            this.ctx.dropPickup('shards', 7 + this.cs.endlessCycle * 2, x + 18, y + 8);
-            this.ctx.dropPickup('crystals', 1 + Math.floor(this.cs.endlessCycle / 2), x - 18, y + 8);
-            this.ctx.dropPickup('alloy', 18 + this.cs.endlessCycle * 4, x + 4, y + 36);
+            // Boss 奖励随波次递增：波10base，波13↑，波16↑↑...
+            this.ctx.dropPickup('cores', 1 + Math.floor(this.cs.waveIndex / 6), x, y);
+            this.ctx.dropPickup('shards', 4 + this.cs.waveIndex * 1, x + 18, y + 8);
+            this.ctx.dropPickup('crystals', 1 + Math.floor(this.cs.waveIndex / 5), x - 18, y + 8);
+            this.ctx.dropPickup('alloy', 12 + this.cs.waveIndex * 2, x + 4, y + 36);
             this.ctx.tryDropChest('chest-rare', x, y + 32);
+            // 大 Boss 掉落专属材料（1~3个）
+            const mat = enemy.spec.bossMaterial;
+            if (mat) {
+                const count = this.ctx.randomInt(1, 3);
+                const matName: Record<string, string> = {
+                    voidFragment: '虚空碎片', energyCore: '噬能核心',
+                    frostCore: '永冻结晶', infernoCore: '狱炎之核', webSilk: '织网丝线',
+                };
+                this.ctx.dropPickup(mat, count, x + this.ctx.randomRange(-20, 20), y + this.ctx.randomRange(-20, 20));
+                this.ctx.showToast(`获得 ${matName[mat] || mat} ×${count}！`);
+            }
             this.cs.bossKills += 1;
             if (this.ctx.tryDropEquipmentBlueprint) this.ctx.tryDropEquipmentBlueprint();
             this.cs.bossDefeatedThisWave = true;
@@ -1199,13 +1887,6 @@ export class EnemyManager {
         }
         if (this.shouldEnemyExplodeOnDeath(enemy)) {
             this.enemyExplode(x, y, enemy.radius * (enemy.boss ? 3.2 : enemy.elite ? 2.45 : 2.15), enemy.damage * (enemy.boss ? 1.5 : 1.05), enemy.damageType);
-        }
-        if (enemy.spec.family === 'splitter' && !enemy.elite && !enemy.boss) {
-            const room = Math.max(0, this.getEnemyCap() - this.enemies.length);
-            const children = Math.min(2, room);
-            for (let i = 0; i < children; i++) {
-                this.createEnemy(ENEMY_SPECS[0], x + this.ctx.randomRange(-34, 34), y + this.ctx.randomRange(-34, 34), false, false);
-            }
         }
 
         const chip = this.ctx.getActiveEquipmentLevel('vampire-chip');
@@ -1286,50 +1967,57 @@ export class EnemyManager {
     }
     public drawEnemy(enemy: Enemy) {
         this.ctx.perfDrawEnemy += 1;
-        enemy.gfx.clear();
+        // ── Batch drawing: draw to the shared batchGfx instead of per-enemy gfx ──
+        // Per-enemy gfx is kept for backward compat but left clear.
+        // The actual rendering is done once per frame in drawAllEnemiesBatch().
+        // We still need to update sprite state for sprite-based enemies.
         if (enemy.sprite) {
-            const visualRadius = enemy.visualRadius || enemy.radius + 8;
             const tint = this.getEnemyTint(enemy, 255);
             enemy.sprite.color = enemy.hitFlash > 0
                 ? this.ctx.hex('#FFFFFF', 255)
                 : tint;
-            // Thin border around sprite only — no shadow, no glow ring
-            enemy.gfx.strokeColor = this.ctx.hex(enemy.hitFlash > 0 ? '#FFFFFF' : enemy.spec.accent, enemy.boss ? 140 : 120);
-            enemy.gfx.lineWidth = enemy.boss ? 2 : 1.5;
-            enemy.gfx.circle(0, 0, enemy.radius + 2);
-            enemy.gfx.stroke();
-            this.drawEnemyVariantMark(enemy);
-            // Armor/Dash indicator (functional)
+        }
+    }
+
+    /** 批量绘制所有敌人——单Graphics组件, 1个draw call渲染全屏200+怪 */
+    private _batchGfx: Graphics | null = null;
+    /** 帧计数器（远怪降频用） */
+    private _updateFrameCounter = 0;
+    public drawAllEnemiesBatch(): void {
+        if (!this._batchGfx) return;
+        const gfx = this._batchGfx;
+        gfx.clear();
+        const px = this.ctx.cs.playerX;
+        const py = this.ctx.cs.playerY;
+        const VIEW_HALF_W = 560;   // 720/2 + margin
+        const VIEW_HALF_H = 840;   // 1280/2 + margin
+        for (const enemy of this.enemies) {
+            if (!this.enemySet.has(enemy)) continue;
+            const pos = this.getEnemyPosition(enemy);
+            const dx = pos.x - px;
+            const dy = pos.y - py;
+            // 屏幕外裁剪：超出视角范围+200像素的怪不画
+            if (Math.abs(dx) > VIEW_HALF_W + 200 || Math.abs(dy) > VIEW_HALF_H + 200) continue;
+            const r = enemy.radius;
+            // 主体
+            gfx.fillColor = enemy.hitFlash > 0
+                ? this.ctx.hex('#FFFFFF', 255)
+                : this.getEnemyTint(enemy, enemy.elite ? 255 : 230);
+            gfx.circle(pos.x, pos.y, r);
+            gfx.fill();
+            // 边框
+            gfx.strokeColor = this.ctx.hex(enemy.spec.accent, enemy.boss ? 140 : 120);
+            gfx.lineWidth = enemy.boss ? 2 : 1.5;
+            gfx.circle(pos.x, pos.y, r + 2);
+            gfx.stroke();
+            // 精英/闪避/护甲标记
             if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
-                enemy.gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 160);
-                enemy.gfx.lineWidth = 2;
-                enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 6 : 4));
-                enemy.gfx.stroke();
+                gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 160);
+                gfx.lineWidth = enemy.armorTimer > 0 ? 2 : 2;
+                gfx.circle(pos.x, pos.y, r + (enemy.armorTimer > 0 ? 6 : 4));
+                gfx.stroke();
             }
-            // Health bar drawn by shared barLayer — skip here
-            return;
         }
-        // Fallback non-sprite rendering
-        enemy.gfx.fillColor = enemy.hitFlash > 0
-            ? this.ctx.hex('#FFFFFF', 255)
-            : this.getEnemyTint(enemy, enemy.elite ? 255 : 230);
-        enemy.gfx.circle(0, 0, enemy.radius);
-        enemy.gfx.fill();
-        enemy.gfx.fillColor = this.ctx.hex(enemy.spec.accent, 210);
-        enemy.gfx.circle(-enemy.radius * 0.3, enemy.radius * 0.12, enemy.radius * 0.35);
-        enemy.gfx.fill();
-        this.drawEnemyVariantMark(enemy);
-        enemy.gfx.strokeColor = this.ctx.hex(enemy.elite ? '#F8FAFC' : '#0F172A', enemy.boss ? 180 : 140);
-        enemy.gfx.lineWidth = enemy.boss ? 2 : enemy.elite ? 1.5 : 1;
-        enemy.gfx.circle(0, 0, enemy.radius);
-        enemy.gfx.stroke();
-        if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
-            enemy.gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 180);
-            enemy.gfx.lineWidth = enemy.armorTimer > 0 ? 2.5 : 2;
-            enemy.gfx.circle(0, 0, enemy.radius + (enemy.armorTimer > 0 ? 8 : 5));
-            enemy.gfx.stroke();
-        }
-        // Health bar drawn by shared barLayer — skip here
     }
     public getEnemyTint(enemy: Enemy, alpha = 255) {
         if (enemy.boss) return this.ctx.hex(enemy.spec.color, alpha);

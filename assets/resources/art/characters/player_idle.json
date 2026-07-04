@@ -1,0 +1,19 @@
+{
+  "name": "player_idle",
+  "raw_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/generated/player_idle_raw.png",
+  "final_path": "/Users/ronghui/Documents/game_dev_cocos/assets/resources/art/characters/player_idle.png",
+  "preview_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/previews/player_idle.gif",
+  "frames": 6,
+  "cell_size": 80,
+  "fps": 8,
+  "output_dir": "characters",
+  "raw_size": [
+    2067,
+    761
+  ],
+  "trimmed_size": [
+    2067,
+    761
+  ],
+  "generated_at": 1782726693
+}

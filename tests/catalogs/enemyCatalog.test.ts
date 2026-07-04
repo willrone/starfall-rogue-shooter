@@ -3,7 +3,8 @@ import {
     BASE_ENEMY_ARCHETYPES,
     ENEMY_VARIANTS,
     ENEMY_SPECS,
-    BOSS_ENEMY_COUNT,
+    BOSS_SPECS,
+    MINI_BOSS_SPECS,
     TOTAL_ENEMY_TYPES,
     buildEnemyCatalog,
 } from '../../assets/scripts/catalogs/enemyCatalog';
@@ -13,8 +14,9 @@ function testEnemyCatalogCount() {
     const expected = BASE_ENEMY_ARCHETYPES.length * ENEMY_VARIANTS.length;
     assert(ENEMY_SPECS.length === expected,
         `ENEMY_SPECS should have ${expected} entries, got ${ENEMY_SPECS.length}`);
-    assert(TOTAL_ENEMY_TYPES === ENEMY_SPECS.length + BOSS_ENEMY_COUNT,
-        `TOTAL_ENEMY_TYPES should be ENEMY_SPECS + BOSS_ENEMY_COUNT`);
+    assert(TOTAL_ENEMY_TYPES === ENEMY_SPECS.length + BOSS_SPECS.length,
+        `TOTAL_ENEMY_TYPES should be ENEMY_SPECS + BOSS_SPECS`);
+    assert.equal(MINI_BOSS_SPECS.length, 5, 'mini boss catalog should contain 5 endless mini bosses');
 }
 
 function testEnemyIdsAreUnique() {

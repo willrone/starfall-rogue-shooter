@@ -80,7 +80,7 @@ WEAPON_TIER_MAP = {
 class RunResult:
     weapon_id: str
     weapon_name: str
-    tier: str  # 'novice' / 'standard' / 'boss_gate' / 'boss_clear'
+    tier: str
     target_profile: str
     run: int
     seed: int
@@ -89,12 +89,14 @@ class RunResult:
     kills: int
     level: int
     alloy: int
+    items: int
     phase: str
     hp: float
     died: bool
+    error: str = ""
 
 
-def js_json(cdp: CDPClient, expression: str, timeout: float = 5.0) -> Any:
+def js_json(cdp: CDPClient, expression: str, timeout: float = 10.0) -> Any:
     raw = cdp.evaluate(expression, timeout=timeout)
     if raw is None:
         return None
@@ -146,24 +148,27 @@ def weapon_catalog(cdp: CDPClient) -> List[Dict[str, Any]]:
 
     # Fallback: derive base weapon families from the TypeScript catalog.  The
     # runtime EquipmentManager does not expose WEAPON_CATALOG as an instance
-    # field, so CDP cannot always read it through g.shop.
+    # field, so CDP cannot always read it through g.shop.  The generated base
+    # equipment id is `${family}-standard`, except legacy starter ids that stay
+    # unsuffixed for save compatibility.
     catalog_ts = ROOT / "assets" / "scripts" / "catalogs" / "weaponCatalog.ts"
     if catalog_ts.exists():
         text = catalog_ts.read_text(encoding="utf-8")
         rows: List[Dict[str, Any]] = []
-        for match in re.finditer(
-            r"\{\s*id:\s*'([^']+)'\s*,\s*name:\s*'([^']+)'[\s\S]*?cost:\s*(\d+)",
-            text,
-        ):
-            wid, name, cost = match.groups()
-            rows.append({
-                "id": wid,
-                "name": name,
-                "cost": int(cost),
-                "kind": "weapon",
-                "family": wid,
-                "base_family": True,
-            })
+        legacy_base_ids = {"storm-rifle", "split-barrel", "orbital-drone"}
+        family_block = re.search(r"export const WEAPON_FAMILIES: WeaponFamily\[\] = \[([\s\S]*?)\n\];", text)
+        if family_block:
+            for match in re.finditer(r"\{\s*id:\s*'([^']+)'\s*,\s*name:\s*'([^']+)'", family_block.group(1)):
+                family_id, name = match.groups()
+                wid = family_id if family_id in legacy_base_ids else f"{family_id}-standard"
+                rows.append({
+                    "id": wid,
+                    "name": name,
+                    "cost": 0,
+                    "kind": "weapon",
+                    "family": family_id,
+                    "base_family": True,
+                })
         if rows:
             return rows
 
@@ -212,9 +217,36 @@ def select_weapon_runtime(cdp: CDPClient, weapon_id: str) -> None:
         raise RuntimeError(f"Failed to select weapon {weapon_id}: {result}")
 
 
+def select_offhand_runtime(cdp: CDPClient, offhand_id: str = 'orbit-blade') -> None:
+    """Synthesize and equip an offhand weapon for CDP testing."""
+    result = cdp.evaluate(
+        f"""
+(function(){{
+  var g = window.__starfallGame;
+  if (!g || !g.shop) return 'missing game/shop';
+  var shop = g.shop;
+  // Give enough alloy to synthesize
+  g.cs.alloy = Math.max(g.cs.alloy || 0, 200);
+  // Synthesize if not owned
+  if (!shop.offhandLevels || !shop.offhandLevels['{offhand_id}']) {{
+    if (!shop.synthesizeOffhand('{offhand_id}')) return 'synth failed';
+  }}
+  // Equip
+  shop.equipOffhand('{offhand_id}');
+  return 'ok';
+}})()
+""",
+        timeout=5,
+    )
+    if result != "ok":
+        # Non-fatal: offhand is best-effort
+        print(f"[balance-cdp] WARN: offhand equip failed: {result}")
+
+
 def start_real_run(cdp: CDPClient, weapon_id: str, seed: int) -> None:
     set_runtime_seed(cdp, seed)
     select_weapon_runtime(cdp, weapon_id)
+    select_offhand_runtime(cdp)  # auto-equip offhand for CDP testing
     result = cdp.evaluate(
         """
 (function(){
@@ -236,7 +268,7 @@ def start_real_run(cdp: CDPClient, weapon_id: str, seed: int) -> None:
   } catch(e) { return 'err: ' + e.message; }
 })()
 """,
-        timeout=5,
+        timeout=10,
     )
     if result != "ok":
         raise RuntimeError(f"Failed to start run: {result}")
@@ -258,13 +290,14 @@ def read_state(cdp: CDPClient) -> Dict[str, Any]:
       kills: cs.killCount || 0,
       level: cs.level || 0,
       alloy: cs.battleAlloy || 0,
+      items: g.pickupMgr && g.pickupMgr.acquiredRunItemIds ? g.pickupMgr.acquiredRunItemIds.size : 0,
       enemies: mgr && mgr.enemies ? mgr.enemies.length : 0,
       bossKills: cs.bossKills || 0
     });
   } catch(e) { return JSON.stringify({phase:'error', error:e.message}); }
 })()
 """,
-        timeout=3,
+        timeout=10,
     )
     return state if isinstance(state, dict) else {"phase": "unknown"}
 
@@ -273,29 +306,106 @@ def handle_modal_choices(cdp: CDPClient, state: Dict[str, Any]) -> None:
     phase = state.get("phase")
     if phase in {"level-up", "item-choice"}:
         cdp.evaluate(
-            "(function(){try{window.__starfallGame.pickupMgr.choosePanelChoice(0);return 'ok'}catch(e){return e.message}})()",
-            timeout=2,
+            "(function(){try{window.__starfallGame.pickupMgr.choosePanelChoice(0);return'ok'}catch(e){return e.message}})()",
+            timeout=5,
+        )
+    elif phase == "discard":
+        # 道具满→丢弃第0个(最旧的)腾出格子
+        cdp.evaluate(
+            "(function(){try{window.__starfallGame.pickupMgr.chooseDiscard(0);return'ok'}catch(e){return e.message}})()",
+            timeout=5,
         )
     elif phase == "shop":
-        # Buy first item if affordable/available, otherwise close shop.
+        # Buy first affordable item, then close shop.
         cdp.evaluate(
-            "(function(){try{var g=window.__starfallGame; if(g.shop.chooseShopItemByIndex) g.shop.chooseShopItemByIndex(0); if(g.shop.closeShop) g.shop.closeShop(); return 'ok'}catch(e){return e.message}})()",
-            timeout=2,
+            "(function(){try{var g=window.__starfallGame;if(g.shop.chooseShopItemByIndex)g.shop.chooseShopItemByIndex(0);if(g.shop.closeShop)g.shop.closeShop();return'ok'}catch(e){return e.message}})()",
+            timeout=5,
         )
     elif phase == "paused":
-        # Death revive panel: decline revive so final run state settles.
         cdp.evaluate(
-            "(function(){try{window.__starfallGame.declineRevive();return 'ok'}catch(e){return e.message}})()",
-            timeout=2,
+            "(function(){try{window.__starfallGame.declineRevive();return'ok'}catch(e){return e.message}})()",
+            timeout=5,
         )
 
 
-def tick_real_game(cdp: CDPClient, frames: int) -> None:
-    # One JS loop is much faster and less flaky than 60 separate CDP calls.
-    cdp.evaluate(
-        f"(function(){{for(var i=0;i<{frames};i++) window.__starfallTick(1/60); return 'ok';}})()",
-        timeout=max(5, frames / 300),
-    )
+def trigger_shop(cdp: CDPClient) -> None:
+    """Open the in-game shop from combat. Silently skips on timeout."""
+    try:
+        cdp.evaluate(
+            "(function(){try{var g=window.__starfallGame;if(g&&g.pickupMgr&&g.pickupMgr.autoCollectAll)g.pickupMgr.autoCollectAll();if(g.shop&&g.shop.openShop)g.shop.openShop();return'ok'}catch(e){return e.message}})()",
+            timeout=3,
+        )
+    except Exception:
+        pass  # late-game WebSocket slowdown — skip this shop tick
+
+
+def _safe_read_state(cdp: CDPClient) -> Dict[str, Any]:
+    """read_state wrapper with timeout fallback — never raises."""
+    try:
+        return read_state(cdp)
+    except Exception:
+        return {"phase": "unknown", "wave": 0, "hp": 0, "kills": 0, "level": 0}
+
+
+def chase_boss(cdp: CDPClient) -> None:
+    """If a boss is alive, move player close to it to focus fire."""
+    cdp.evaluate("""(function(){
+        try {
+            var g = window.__starfallGame, mgr = g.enemyMgr, cs = g.cs;
+            if (!mgr || !mgr.enemies) return;
+            var boss = null;
+            for (var i = 0; i < mgr.enemies.length; i++) {
+                if (mgr.enemies[i].boss) { boss = mgr.enemies[i]; break; }
+            }
+            if (!boss) return;
+            // Get boss position — Cocos node world position
+            var bx = boss.node._x, by = boss.node._y;
+            // Get player position
+            var px = cs.playerX, py = cs.playerY;
+            var dx = bx - px, dy = by - py;
+            var dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 120) {
+                // Move toward boss — stop short so we don't overlap
+                var speed = cs.moveSpeed || 280;
+                var step = Math.min(speed * 0.5, dist - 60);
+                cs.playerX += (dx/dist) * step;
+                cs.playerY += (dy/dist) * step;
+            }
+        } catch(e) {}
+    })()""", timeout=5)
+
+
+def tick_real_game(cdp: CDPClient, frames: int, max_retries: int = 3) -> int:
+    """
+    Advance the real Cocos game by `frames` frames using bulk ticks.
+    Returns the number of frames actually ticked (may be < frames if game ended).
+    Handles WebSocket timeouts gracefully.
+    """
+    frames_done = 0
+    batch = 500  # ~8.3s game time per CDP call — good balance of overhead vs responsiveness
+    for attempt in range(max_retries):
+        try:
+            while frames_done < frames:
+                rem = min(batch, frames - frames_done)
+                # timeout: generous for late-game computation spikes (up to ~110s for large batches)
+                t = max(60, rem / 5 + 10)
+                result = cdp.evaluate(
+                    f"(function(){{return (window.__starfallBulkTick({rem}) || 0);}})()",
+                    timeout=t,
+                )
+                ran = int(result) if isinstance(result, (int, float)) else 0
+                frames_done += ran
+                # game ended (died / wave cleared) — stop early
+                if ran < rem:
+                    break
+            return frames_done  # success
+        except Exception as e:
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(1)
+                continue
+            raise  # re-raise so run_weapon_once can catch it
+    return frames_done  # never reached — kept for pyright
 
 
 def stable_weapon_seed_offset(weapon_id: str) -> int:
@@ -328,14 +438,59 @@ def run_weapon_once(cdp: CDPClient, weapon: Dict[str, Any], run_idx: int, max_se
         set_weapon_level_runtime(cdp, weapon["id"], weapon_level)
     start_real_run(cdp, weapon["id"], seed)
     final_state: Dict[str, Any] = {}
+    # 每隔 N 秒打开商店买道具
+    shop_interval = 28
+    next_shop_at = shop_interval
 
-    for _ in range(max_seconds):
-        tick_real_game(cdp, 60)
-        state = read_state(cdp)
+    for elapsed in range(max_seconds):
+        try:
+            tick_real_game(cdp, 60)
+        except Exception as tick_err:
+            # WebSocket timeout mid-run — read final state and return gracefully
+            import traceback
+            traceback.print_exception(type(tick_err), tick_err, tick_err.__traceback__)
+            final_state = _safe_read_state(cdp)
+            wave = int(final_state.get("wave") or 0)
+            hp = float(final_state.get("hp") or 0)
+            return RunResult(
+                weapon_id=weapon["id"],
+                weapon_name=weapon.get("name", weapon["id"]),
+                tier=WEAPON_TIER_MAP.get(weapon.get("family", weapon["id"]), WEAPON_TIER_MAP.get(weapon["id"].replace("-standard", ""), "standard")),
+                target_profile=WEAPON_TIER_MAP.get(weapon.get("family", weapon["id"]), WEAPON_TIER_MAP.get(weapon["id"].replace("-standard", ""), "standard")),
+                run=run_idx,
+                seed=seed,
+                final_wave=wave,
+                combat_time=float(final_state.get("combatTime") or 0),
+                kills=int(final_state.get("kills") or 0),
+                level=int(final_state.get("level") or 0),
+                alloy=int(final_state.get("alloy") or 0),
+                items=int(final_state.get("items") or 0),
+                phase=str(final_state.get("phase") or "timeout"),
+                hp=hp,
+                died=hp <= 0,
+                error=str(tick_err),
+            )
+        try:
+            state = read_state(cdp)
+        except Exception:
+            # Late-game CDP slowdown — use whatever we last saw
+            state = final_state or {"phase": "unknown", "wave": 0, "hp": 0}
         final_state = state
-        handle_modal_choices(cdp, state)
-
+        try:
+            handle_modal_choices(cdp, state)
+        except Exception:
+            pass  # non-critical, skip and continue
         phase = state.get("phase")
+
+        # 定期打开商店（仅在 combat 阶段有效）
+        if phase == "combat" and elapsed >= next_shop_at and elapsed < max_seconds - 10:
+            next_shop_at = elapsed + shop_interval
+            trigger_shop(cdp)
+
+        # 追 Boss 集火秒杀
+        if phase == "combat":
+            chase_boss(cdp)
+
         hp = float(state.get("hp") or 0)
         if hp <= 0 or phase in {"settlement", "hangar", "menu"}:
             break
@@ -354,6 +509,7 @@ def run_weapon_once(cdp: CDPClient, weapon: Dict[str, Any], run_idx: int, max_se
         kills=int(final_state.get("kills") or 0),
         level=int(final_state.get("level") or 0),
         alloy=int(final_state.get("alloy") or 0),
+        items=int(final_state.get("items") or 0),
         phase=str(final_state.get("phase") or "unknown"),
         hp=hp,
         died=hp <= 0,
@@ -456,9 +612,25 @@ def main() -> int:
         weapon_seed_base = args.seed + stable_weapon_seed_offset(str(w["id"])) + weapon_index * 1000
         for i in range(args.runs):
             run_seed = weapon_seed_base + i + 1
-            r = run_weapon_once(cdp, w, i + 1, args.max_seconds, run_seed, args.weapon_level)
+            # Guard: Chrome may have crashed between runs — reconnect if needed
+            if not cdp.is_connected():
+                import time
+                time.sleep(1)
+                cdp.connect(target_url_filter=args.target_filter)
+            try:
+                r = run_weapon_once(cdp, w, i + 1, args.max_seconds, run_seed, args.weapon_level)
+            except Exception as run_err:
+                import traceback
+                traceback.print_exception(type(run_err), run_err, run_err.__traceback__)
+                r = RunResult(
+                    weapon_id=w["id"], weapon_name=w.get("name", w["id"]),
+                    tier=WEAPON_TIER_MAP.get(w.get("family", w["id"]), WEAPON_TIER_MAP.get(w["id"].replace("-standard", ""), "standard")),
+                    target_profile=WEAPON_TIER_MAP.get(w.get("family", w["id"]), WEAPON_TIER_MAP.get(w["id"].replace("-standard", ""), "standard")),
+                    run=i + 1, seed=run_seed, final_wave=0, combat_time=0.0,
+                    kills=0, level=0, items=0, alloy=0, hp=0.0, phase="error", died=True,
+                )
             results.append(r)
-            print(f"run {i+1}/{args.runs}: seed={run_seed} wave={r.final_wave} time={r.combat_time}s kills={r.kills} level={r.level} phase={r.phase} hp={r.hp}")
+            print(f"run {i+1}/{args.runs}: seed={run_seed} wave={r.final_wave} time={r.combat_time}s kills={r.kills} level={r.level} items={r.items} alloy={r.alloy} hp={r.hp}")
 
     with (out / "runs.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(asdict(results[0]).keys()) if results else [])

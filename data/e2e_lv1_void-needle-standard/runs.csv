@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+void-needle-standard,虚空针,boss_gate,boss_gate,1,5261,10,566.27,1558,15,939,16,combat,388.0,False,

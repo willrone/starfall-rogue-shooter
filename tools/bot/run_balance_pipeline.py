@@ -226,7 +226,7 @@ def stage_wait_game_ready(cdp: Any) -> bool:
 class RunResult:
     weapon_id: str
     weapon_name: str
-    tier: str  # 'novice' / 'standard' / 'boss_gate' / 'boss_clear'
+    tier: str
     run: int
     seed: int
     final_wave: int
@@ -234,6 +234,7 @@ class RunResult:
     kills: int
     level: int
     alloy: int
+    items: int
     hp: float
     died: bool
     phase: str
@@ -316,14 +317,20 @@ def set_seed(cdp: Any, seed: int) -> bool:
     return bool(result)
 
 
-def select_weapon(cdp: Any, weapon_id: str) -> bool:
+def select_weapon(cdp: Any, weapon_id: str, gear_ids: List[str]) -> bool:
+    equipped = [weapon_id] + list(gear_ids)
+    equipped_json = json.dumps(equipped, ensure_ascii=False)
+    gear_json = json.dumps(list(gear_ids), ensure_ascii=False)
     result = evaluate(cdp, f"""(function(){{
         var g = window.__starfallGame;
         if (!g || !g.shop) return false;
         window.__starfallBotMode = true;
         var s = g.shop;
-        if (s.ownedEquipment && s.ownedEquipment.add) s.ownedEquipment.add("{weapon_id}");
-        s.equippedEquipment = ["{weapon_id}", "tactical-visor", "phase-armor", "kinetic-boots", "magnet-coil"];
+        if (s.ownedEquipment && s.ownedEquipment.add) {{
+            s.ownedEquipment.add("{weapon_id}");
+            for (var gearId of {gear_json}) s.ownedEquipment.add(gearId);
+        }}
+        s.equippedEquipment = {equipped_json};
         return true;
     }})()""", timeout=3)
     return bool(result)
@@ -337,9 +344,26 @@ def set_weapon_level(cdp: Any, weapon_id: str, level: int) -> bool:
     safe_level = max(1, int(level))
     result = evaluate(cdp, f"""(function(){{
         var g = window.__starfallGame;
-        if (!g || !g.shop || !g.shop.equipmentLevels) return false;
-        g.shop.equipmentLevels["{weapon_id}"] = {safe_level};
-        if (g.shop.saveProgress) g.shop.saveProgress();
+        if (!g || !g.shop) return false;
+        g.shop.equipmentLevels['{weapon_id}'] = {safe_level};
+        g.shop.saveProgress();
+        return true;
+    }})()""", timeout=3)
+    return bool(result)
+
+
+def set_gear_level(cdp: Any, level: int, gear_ids: List[str]) -> bool:
+    """将指定装备的机库等级推送到游戏内存。"""
+    safe_level = max(1, int(level))
+    gear_json = json.dumps(list(gear_ids), ensure_ascii=False)
+    result = evaluate(cdp, f"""(function(){{
+        var g = window.__starfallGame;
+        if (!g || !g.shop) return false;
+        for (var gearId of {gear_json}) {{
+            if (g.shop.ownedEquipment && g.shop.ownedEquipment.add) g.shop.ownedEquipment.add(gearId);
+            g.shop.equipmentLevels[gearId] = {safe_level};
+        }}
+        g.shop.saveProgress();
         return true;
     }})()""", timeout=3)
     return bool(result)
@@ -379,6 +403,7 @@ def read_state(cdp: Any) -> Dict[str, Any]:
                 kills: cs.killCount || 0,
                 level: cs.level || 0,
                 alloy: cs.battleAlloy || 0,
+                items: g.pickupMgr && g.pickupMgr.acquiredRunItemIds ? g.pickupMgr.acquiredRunItemIds.size : 0,
                 enemies: mgr && mgr.enemies ? mgr.enemies.length : 0,
                 bossKills: cs.bossKills || 0,
                 xp: +(cs.xp || 0).toFixed(1),
@@ -399,6 +424,11 @@ def handle_modal(cdp: Any, state: Dict[str, Any]) -> None:
             try{ var g = window.__starfallGame;
                 if (g.pickupMgr && g.pickupMgr.choosePanelChoice) g.pickupMgr.choosePanelChoice(0);
             }catch(e){} })()""", timeout=2)
+    elif phase == "discard":
+        evaluate(cdp, """(function(){
+            try{ var g = window.__starfallGame;
+                if (g.pickupMgr && g.pickupMgr.chooseDiscard) g.pickupMgr.chooseDiscard(0);
+            }catch(e){} })()""", timeout=2)
     elif phase == "shop":
         evaluate(cdp, """(function(){
             try{ var g = window.__starfallGame;
@@ -414,6 +444,31 @@ def handle_modal(cdp: Any, state: Dict[str, Any]) -> None:
             }catch(e){} })()""", timeout=2)
 
 
+def chase_boss(cdp: Any) -> None:
+    """If a boss is alive, move player close to it to focus fire."""
+    evaluate(cdp, """(function(){
+        try {
+            var g = window.__starfallGame, mgr = g.enemyMgr, cs = g.cs;
+            if (!mgr || !mgr.enemies) return;
+            var boss = null;
+            for (var i = 0; i < mgr.enemies.length; i++) {
+                if (mgr.enemies[i].boss) { boss = mgr.enemies[i]; break; }
+            }
+            if (!boss) return;
+            var bx = boss.node._x, by = boss.node._y;
+            var px = cs.playerX, py = cs.playerY;
+            var dx = bx - px, dy = by - py;
+            var dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 120) {
+                var speed = cs.moveSpeed || 280;
+                var step = Math.min(speed * 0.5, dist - 60);
+                cs.playerX += (dx/dist) * step;
+                cs.playerY += (dy/dist) * step;
+            }
+        } catch(e) {}
+    })()""", timeout=1)
+
+
 def tick_game(cdp: Any, frames: int) -> None:
     timeout = max(5, frames / 300)
     evaluate(cdp, f"(function(){{for(var i=0;i<{frames};i++) window.__starfallTick(1/60); return 'ok';}})()", timeout=timeout)
@@ -426,25 +481,43 @@ def stable_seed_offset(weapon_id: str) -> int:
     return value % 100_000
 
 
-def run_once(cdp: Any, weapon: Dict[str, Any], run_idx: int, max_seconds: int, seed: int, weapon_level: int = 1) -> RunResult:
+def run_once(cdp: Any, weapon: Dict[str, Any], run_idx: int, max_seconds: int, seed: int, weapon_level: int = 1, gear_level: int = 1, gear_ids: List[str] | None = None) -> RunResult:
+    gear_ids = gear_ids or ["tactical-visor", "phase-armor", "kinetic-boots", "magnet-coil"]
     if not set_seed(cdp, seed):
         raise RuntimeError(f"failed to set seed {seed}")
-    if not select_weapon(cdp, weapon["id"]):
+    if not select_weapon(cdp, weapon["id"], gear_ids):
         raise RuntimeError(f"failed to select weapon {weapon['id']}")
     if weapon_level > 1:
         if not set_weapon_level(cdp, weapon["id"], weapon_level):
             raise RuntimeError(f"failed to set weapon {weapon['id']} level {weapon_level}")
+    if gear_level > 1:
+        if not set_gear_level(cdp, gear_level, gear_ids):
+            raise RuntimeError(f"failed to set gear level to {gear_level}")
     if not start_battle(cdp):
         raise RuntimeError(f"failed to start battle for {weapon['id']}")
 
     final_state: Dict[str, Any] = {}
-    for _ in range(max_seconds):
+    shop_interval = 28
+    next_shop_at = shop_interval
+    for elapsed in range(max_seconds):
         tick_game(cdp, 60)
         state = read_state(cdp)
         final_state = state
         handle_modal(cdp, state)
 
         phase = state.get("phase")
+
+        if phase == "combat" and elapsed >= next_shop_at and elapsed < max_seconds - 10:
+            next_shop_at = elapsed + shop_interval
+            evaluate(cdp, """(function(){
+                try{ var g = window.__starfallGame;
+                    if (g.shop && g.shop.openShop) g.shop.openShop();
+                }catch(e){} })()""", timeout=2)
+
+        # 追 Boss 集火秒杀
+        if phase == "combat":
+            chase_boss(cdp)
+
         hp = float(state.get("hp") or 0)
         if hp <= 0 or phase in {"settlement", "hangar", "menu"}:
             break
@@ -460,6 +533,7 @@ def run_once(cdp: Any, weapon: Dict[str, Any], run_idx: int, max_seconds: int, s
         kills=int(final_state.get("kills") or 0),
         level=int(final_state.get("level") or 0),
         alloy=int(final_state.get("alloy") or 0),
+        items=int(final_state.get("items") or 0),
         hp=float(final_state.get("hp") or 0),
         died=final_state.get("phase") in {"settlement", "hangar", "menu"} or float(final_state.get("hp") or 0) <= 0,
         phase=str(final_state.get("phase") or "unknown"),
@@ -494,6 +568,7 @@ def summarize(results: List[RunResult]) -> List[Dict[str, Any]]:
             "p90": p90,
             "avg_kills": round(statistics.mean(r.kills for r in runs), 1),
             "avg_level": round(statistics.mean(r.level for r in runs), 1),
+            "avg_items": round(statistics.mean(r.items for r in runs), 1),
             "avg_time": round(statistics.mean(r.combat_time for r in runs), 1),
             "passes": t[0] <= p50 <= t[1] and p90 <= t[2],
         })
@@ -526,6 +601,8 @@ def main() -> int:
     ap.add_argument("--check-only", action="store_true", help="only check environment")
     ap.add_argument("--skip-build", action="store_true", help="skip build check")
     ap.add_argument("--weapon-level", type=int, default=1, help="override hangar level of equipped weapon (1..N); keep ≤ weapon maxLevel to stay realistic")
+    ap.add_argument("--gear-level", type=int, default=1, help="override hangar level of equipped gear (1..N); common maxLevel=6, mythic maxLevel=14")
+    ap.add_argument("--gear-ids", nargs="*", default=["tactical-visor", "phase-armor", "kinetic-boots", "magnet-coil"], help="gear ids to equip with the weapon (default: starter 4-piece)")
     args = ap.parse_args()
 
     cdp: Any = None
@@ -560,6 +637,10 @@ def main() -> int:
         weapons = read_weapon_catalog()
         if args.weapons:
             wanted = set(args.weapons)
+            # 精确 ID 匹配 — 支持变体 ID (如 storm-rifle-starfall)
+            explicit = [w for w in args.weapons if '-' in w and not any(w == x["family_id"] or w == x["id"] or w == x["id"].replace("-standard", "") for x in weapons)]
+            for eid in explicit:
+                weapons.append({"id": eid, "family_id": eid.split('-')[0], "name": eid, "color": "#4CC9F0", "base_family": False})
             weapons = [w for w in weapons if w["id"] in wanted or w["family_id"] in wanted or w["id"].replace("-standard", "") in wanted]
             if not weapons:
                 print(f"✗ 找不到请求的武器: {wanted}")
@@ -578,6 +659,9 @@ def main() -> int:
         print(f"每武器 {args.runs} runs × {args.max_seconds} 秒")
         if args.weapon_level > 1:
             print(f"武器机库等级 override: Lv.{args.weapon_level}")
+        if args.gear_level > 1:
+            print(f"装备机库等级 override: Lv.{args.gear_level}")
+            print(f"装备组合: {args.gear_ids}")
 
         results: List[RunResult] = []
         for weapon_index, w in enumerate(weapons):
@@ -587,11 +671,11 @@ def main() -> int:
             weapon_seed_base = args.seed + stable_seed_offset(str(w["id"])) + weapon_index * 1000
             for i in range(args.runs):
                 run_seed = weapon_seed_base + i + 1
-                r = run_once(cdp, w, i + 1, args.max_seconds, run_seed, args.weapon_level)
+                r = run_once(cdp, w, i + 1, args.max_seconds, run_seed, args.weapon_level, args.gear_level, args.gear_ids)
                 results.append(r)
                 status = "💀" if r.died else f"HP={r.hp:.0f}"
                 print(f"  run {i+1}/{args.runs}: seed={run_seed} wave={r.final_wave} "
-                      f"time={r.combat_time:.0f}s kills={r.kills} level={r.level} {status}")
+                      f"time={r.combat_time:.0f}s kills={r.kills} level={r.level} items={r.items} alloy={r.alloy} {status}")
 
         print_summary(summarize(results))
         DATA_DIR.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,19 @@ export const GEAR_RARITIES: GearRarityDef[] = [
 ];
 
 export const GEAR_BLUEPRINTS: GearBlueprint[] = [
+    // ── Starter gear (kept intentionally modest) ───────────────────
     { id: 'tactical-visor', name: '战术目镜', slot: 'hat', color: '#38BDF8', baseCost: 28, desc: '稳定强化索敌距离和弱点判断。', effects: [{ stat: 'attackRange', amount: 36 }, { stat: 'critChance', amount: 0.012 }] },
+    { id: 'phase-armor', name: '相位护甲', slot: 'armor', color: '#F8961E', baseCost: 46, desc: '均衡生命、物防、魔防和冷热抗性。', effects: [{ stat: 'maxHp', amount: 22 }, { stat: 'physicalDefense', amount: 2.2 }, { stat: 'magicDefense', amount: 1 }, { stat: 'fireDefense', amount: 1 }, { stat: 'iceDefense', amount: 1 }] },
+    { id: 'kinetic-boots', name: '动能靴', slot: 'boots', color: '#43AA8B', baseCost: 42, desc: '提高移动速度和闪避空间。', effects: [{ stat: 'moveSpeed', amount: 17 }, { stat: 'dodgeChance', amount: 0.008 }] },
+    { id: 'magnet-coil', name: '磁吸线圈', slot: 'accessory', color: '#577590', baseCost: 34, desc: '扩大经验和资源拾取范围。', effects: [{ stat: 'pickupRange', amount: 22 }, { stat: 'luck', amount: 1.2 }] },
+
+    // ── Endgame chase gear (stronger than starter gear; not in STARTER_EQUIPMENT_IDS) ──
+    { id: 'starfall-targeter', name: '星陨瞄准器', slot: 'hat', color: '#22D3EE', baseCost: 92, desc: '高阶输出头部装备，大幅强化暴击、暴伤和索敌。', effects: [{ stat: 'attackRange', amount: 58 }, { stat: 'critChance', amount: 0.028 }, { stat: 'critDamage', amount: 0.18 }, { stat: 'lethalChance', amount: 0.004 }] },
+    { id: 'singularity-armor', name: '奇点装甲', slot: 'armor', color: '#8B5CF6', baseCost: 118, desc: '高阶生存装甲，提供生命、护盾、减伤和护盾恢复。', effects: [{ stat: 'maxHp', amount: 46 }, { stat: 'shieldMax', amount: 28 }, { stat: 'damageReduction', amount: 0.020 }, { stat: 'shieldRegen', amount: 0.75 }] },
+    { id: 'overdrive-boots', name: '超频战靴', slot: 'boots', color: '#2DD4BF', baseCost: 96, desc: '高阶机动装备，提高速度、闪避、微量回复和开火节奏。', effects: [{ stat: 'moveSpeed', amount: 36 }, { stat: 'dodgeChance', amount: 0.020 }, { stat: 'hpRegen', amount: 0.20 }, { stat: 'attackSpeed', amount: 0.025 }] },
+    { id: 'growth-singularity', name: '成长奇点', slot: 'accessory', color: '#F59E0B', baseCost: 108, desc: '高阶成长饰品，扩大拾取并显著提高经验、资源与幸运。', effects: [{ stat: 'pickupRange', amount: 48 }, { stat: 'luck', amount: 4.5 }, { stat: 'xpGain', amount: 0.055 }, { stat: 'resourceGain', amount: 0.040 }] },
+
+    // ── Hats ───────────────────────────────────────────────────────
     { id: 'ember-crown', name: '燃焰头冠', slot: 'hat', color: '#F3722C', baseCost: 34, desc: '适合对抗火焰怪潮的进攻头冠。', effects: [{ stat: 'fireDefense', amount: 8 }, { stat: 'attackPower', amount: 3 }, { stat: 'iceDefense', amount: -1.5 }] },
     { id: 'storm-hood', name: '雷鸣兜帽', slot: 'hat', color: '#4CC9F0', baseCost: 36, desc: '把雷抗转成更快的武器节奏。', effects: [{ stat: 'lightningDefense', amount: 8 }, { stat: 'attackSpeed', amount: 0.025 }, { stat: 'physicalDefense', amount: -1.5 }] },
     { id: 'venom-mask', name: '防毒面罩', slot: 'hat', color: '#84CC16', baseCost: 32, desc: '降低毒系持续压制并提供少量续航。', effects: [{ stat: 'poisonDefense', amount: 10 }, { stat: 'hpRegen', amount: 0.12 }] },
@@ -20,7 +32,7 @@ export const GEAR_BLUEPRINTS: GearBlueprint[] = [
     { id: 'fortress-helm', name: '堡垒头盔', slot: 'hat', color: '#64748B', baseCost: 40, desc: '重型头盔，提升生存但拖慢移动。', effects: [{ stat: 'physicalDefense', amount: 5 }, { stat: 'maxHp', amount: 8 }, { stat: 'moveSpeed', amount: -3 }] },
     { id: 'prism-helm', name: '棱光头盔', slot: 'hat', color: '#C084FC', baseCost: 46, desc: '提高魔防和暴击倍率，但节奏略慢。', effects: [{ stat: 'magicDefense', amount: 6 }, { stat: 'critDamage', amount: 0.08 }, { stat: 'attackSpeed', amount: -0.01 }] },
 
-    { id: 'phase-armor', name: '相位护甲', slot: 'armor', color: '#F8961E', baseCost: 46, desc: '均衡生命、物防、魔防和冷热抗性。', effects: [{ stat: 'maxHp', amount: 22 }, { stat: 'physicalDefense', amount: 2.2 }, { stat: 'magicDefense', amount: 1 }, { stat: 'fireDefense', amount: 0.8 }, { stat: 'iceDefense', amount: 0.8 }] },
+    // ── Armors ─────────────────────────────────────────────────────
     { id: 'bulwark-carapace', name: '壁垒甲壳', slot: 'armor', color: '#64748B', baseCost: 52, desc: '重型减伤护甲，牺牲机动换硬度。', effects: [{ stat: 'maxHp', amount: 34 }, { stat: 'damageReduction', amount: 0.008 }, { stat: 'moveSpeed', amount: -4 }] },
     { id: 'ember-mail', name: '灼焰胸甲', slot: 'armor', color: '#F3722C', baseCost: 48, desc: '针对火焰远程怪和爆炸怪。', effects: [{ stat: 'fireDefense', amount: 12 }, { stat: 'physicalDefense', amount: 4 }, { stat: 'iceDefense', amount: -2 }] },
     { id: 'storm-mail', name: '雷纹胸甲', slot: 'armor', color: '#4CC9F0', baseCost: 50, desc: '抵御雷电和电弧怪，并加快护盾恢复。', effects: [{ stat: 'lightningDefense', amount: 12 }, { stat: 'shieldRegen', amount: 0.25 }, { stat: 'poisonDefense', amount: -1.5 }] },
@@ -31,7 +43,7 @@ export const GEAR_BLUEPRINTS: GearBlueprint[] = [
     { id: 'titan-frame', name: '泰坦骨架', slot: 'armor', color: '#475569', baseCost: 60, desc: '极重护甲，大幅抗压但降低节奏。', effects: [{ stat: 'physicalDefense', amount: 9 }, { stat: 'maxHp', amount: 18 }, { stat: 'attackSpeed', amount: -0.015 }, { stat: 'moveSpeed', amount: -5 }] },
     { id: 'living-armor', name: '活体装甲', slot: 'armor', color: '#90BE6D', baseCost: 56, desc: '偏回复和毒抗的生存护甲。', effects: [{ stat: 'hpRegen', amount: 0.35 }, { stat: 'maxHp', amount: 14 }, { stat: 'poisonDefense', amount: 4 }] },
 
-    { id: 'kinetic-boots', name: '动能靴', slot: 'boots', color: '#43AA8B', baseCost: 42, desc: '提高移动速度和闪避空间。', effects: [{ stat: 'moveSpeed', amount: 17 }, { stat: 'dodgeChance', amount: 0.008 }] },
+    // ── Boots ──────────────────────────────────────────────────────
     { id: 'phase-greaves', name: '相位胫甲', slot: 'boots', color: '#2DD4BF', baseCost: 48, desc: '高闪避位移装备，牺牲少量护盾。', effects: [{ stat: 'moveSpeed', amount: 12 }, { stat: 'dodgeChance', amount: 0.014 }, { stat: 'shieldMax', amount: -3 }] },
     { id: 'magnet-treads', name: '磁吸足具', slot: 'boots', color: '#577590', baseCost: 40, desc: '扩大拾取半径并增加资源效率。', effects: [{ stat: 'pickupRange', amount: 28 }, { stat: 'resourceGain', amount: 0.018 }, { stat: 'moveSpeed', amount: -2 }] },
     { id: 'storm-runners', name: '雷暴跑鞋', slot: 'boots', color: '#4CC9F0', baseCost: 46, desc: '雷抗和射击节奏兼顾。', effects: [{ stat: 'lightningDefense', amount: 8 }, { stat: 'attackSpeed', amount: 0.022 }] },
@@ -42,7 +54,7 @@ export const GEAR_BLUEPRINTS: GearBlueprint[] = [
     { id: 'scout-sandals', name: '侦察轻履', slot: 'boots', color: '#38BDF8', baseCost: 38, desc: '偏经验和幸运的轻装鞋。', effects: [{ stat: 'xpGain', amount: 0.025 }, { stat: 'luck', amount: 2.5 }, { stat: 'maxHp', amount: -3 }] },
     { id: 'blink-soles', name: '闪现鞋底', slot: 'boots', color: '#C084FC', baseCost: 52, desc: '高闪避鞋底，但防御略低。', effects: [{ stat: 'dodgeChance', amount: 0.02 }, { stat: 'moveSpeed', amount: 10 }, { stat: 'physicalDefense', amount: -2 }] },
 
-    { id: 'magnet-coil', name: '磁吸线圈', slot: 'accessory', color: '#577590', baseCost: 34, desc: '扩大经验和资源拾取范围。', effects: [{ stat: 'pickupRange', amount: 22 }, { stat: 'luck', amount: 1.2 }] },
+    // ── Accessories ────────────────────────────────────────────────
     { id: 'reactor-core', name: '反应堆芯', slot: 'accessory', color: '#F94144', baseCost: 68, desc: '提高弹速、伤害和后期上限。', effects: [{ stat: 'attackPower', amount: 3.4 }, { stat: 'bulletSpeed', amount: 22 }, { stat: 'maxHp', amount: 9 }, { stat: 'lightningDefense', amount: 1.2 }] },
     { id: 'vampire-chip', name: '汲能芯片', slot: 'accessory', color: '#B5179E', baseCost: 64, desc: '提供回复和毒抗，击杀时仍会少量回血。', effects: [{ stat: 'hpRegen', amount: 0.22 }, { stat: 'poisonDefense', amount: 1.1 }, { stat: 'maxHp', amount: 5 }] },
     { id: 'crit-lattice', name: '暴击晶格', slot: 'accessory', color: '#F15BB5', baseCost: 52, desc: '强化暴击率和暴击倍率。', effects: [{ stat: 'critChance', amount: 0.018 }, { stat: 'critDamage', amount: 0.08 }] },
@@ -53,7 +65,6 @@ export const GEAR_BLUEPRINTS: GearBlueprint[] = [
     { id: 'drone-relay', name: '无人机中继', slot: 'accessory', color: '#90BE6D', baseCost: 54, desc: '强化无人机电击和索敌半径。', effects: [{ stat: 'dronePower', amount: 0.7 }, { stat: 'attackRange', amount: 18 }, { stat: 'magicDefense', amount: -1 }] },
     { id: 'element-signet', name: '元素徽记', slot: 'accessory', color: '#14B8A6', baseCost: 58, desc: '均衡四元素抗性和魔防。', effects: [{ stat: 'fireDefense', amount: 5 }, { stat: 'lightningDefense', amount: 5 }, { stat: 'poisonDefense', amount: 5 }, { stat: 'iceDefense', amount: 5 }, { stat: 'magicDefense', amount: 2 }] },
 ];
-
 function scaleGearEffects(effects: StatEffect[], rarity: GearRarityDef): StatEffect[] {
     const rarityIndex = GEAR_RARITIES.indexOf(rarity);
     const hasTradeoff = effects.some((effect) => effect.amount < 0);
