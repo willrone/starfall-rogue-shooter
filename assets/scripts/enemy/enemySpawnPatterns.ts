@@ -10,7 +10,7 @@ import type { Vec2 } from 'cc';
 import { WORLD_LEFT, WORLD_RIGHT, WORLD_BOTTOM, WORLD_TOP } from './enemyConstants';
 
 /** Spawn formation type for debug / tooltip */
-export type SpawnFormation = 'random' | 'ring' | 'charge' | 'cross';
+export type SpawnFormation = 'random' | 'ring' | 'charge' | 'cross' | 'pincer';
 
 /**
  * Spawn `count` enemies of `spec` evenly around the player in a ring at `radius`.
@@ -104,6 +104,50 @@ export function spawnCross(
             const r = radius + mgr['ctx'].randomRange(-30, 80);
             const point = mgr.getSpawnPointAroundPlayer(r, angle);
             mgr.createEnemy(spec, point.x, point.y, false, false);
+        }
+    }
+}
+
+/**
+ * Spawn Pincer (双向夹击) — two charge waves from opposite directions,
+ * creating a "surrounded! get out of the pocket" moment.
+ * Enemies charge from angle and angle+π simultaneously.
+ */
+export function spawnPincer(
+    mgr: EnemyManager,
+    spec: EnemySpec,
+    countPerWave: number,
+    angle: number,
+    spread: number = 300,
+    speedOverride: number = 0,
+): void {
+    const cap = mgr.getEnemyCap();
+    const room = Math.max(0, cap - mgr.enemies.length);
+    const total = Math.min(countPerWave * 2, room);
+    const perWave = Math.max(1, Math.floor(total / 2));
+    if (perWave <= 0) return;
+
+    const spawnDist = Math.max(WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM) * 0.65;
+    const px = mgr['ctx'].playerX;
+    const py = mgr['ctx'].playerY;
+    const padding = 40;
+
+    for (let side = 0; side < 2; side++) {
+        const sideAngle = angle + Math.PI * side;
+        const originX = px + Math.cos(sideAngle) * spawnDist;
+        const originY = py + Math.sin(sideAngle) * spawnDist;
+
+        const perpX = -Math.sin(sideAngle);
+        const perpY = Math.cos(sideAngle);
+
+        for (let i = 0; i < perWave; i++) {
+            const offset = (i / Math.max(1, perWave - 1) - 0.5) * spread + (Math.random() - 0.5) * 30;
+            const x = mgr['ctx'].clamp(originX + perpX * offset, WORLD_LEFT + padding, WORLD_RIGHT - padding);
+            const y = mgr['ctx'].clamp(originY + perpY * offset, WORLD_BOTTOM + padding, WORLD_TOP - padding);
+            mgr.createEnemy(
+                { ...spec, speed: speedOverride > 0 ? speedOverride : spec.speed * 2.2 },
+                x, y, false, false,
+            );
         }
     }
 }

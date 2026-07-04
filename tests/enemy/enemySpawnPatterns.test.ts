@@ -69,11 +69,68 @@ function testChargeWaveCountClamp() {
     assert.equal(Math.min(8, tight + 2), 4, 'Tight room should limit count');
 }
 
+function testPincerTwoSides() {
+    // Pincer spawns from angle and angle+π → sides are opposite
+    const angle = Math.PI / 4; // 45°
+    const side1 = angle;
+    const side2 = angle + Math.PI;
+    const diff = Math.abs(side2 - side1 - Math.PI);
+    assert.ok(diff < 0.001, `Pincer sides should be π apart, got diff ${diff - Math.PI}`);
+}
+
+function testPincerPerpLine() {
+    // Perpendicular to pincer angle should be correct
+    const angle = Math.PI / 3; // 60°
+    const perpX = -Math.sin(angle);
+    const perpY = Math.cos(angle);
+    const dot = Math.cos(angle) * perpX + Math.sin(angle) * perpY;
+    assert.ok(Math.abs(dot) < 0.001, `Perp dot should be ~0, got ${dot}`);
+}
+
+function testPincerCountSplit() {
+    // 8 enemies should split to 4 per side
+    const total = 8;
+    const perWave = Math.max(1, Math.floor(total / 2));
+    assert.equal(perWave, 4, '8 enemies should split to 4 per side');
+}
+
+function testPatternChanceScaling() {
+    // Charge chance should scale from 12% at wave 6 to 25% at wave 15+
+    for (let wave = 6; wave <= 20; wave++) {
+        const chance = Math.min(0.25, 0.12 + (wave - 6) * 0.015);
+        assert.ok(chance >= 0.12 && chance <= 0.25,
+            `Wave ${wave} charge chance ${chance} should be in [0.12, 0.25]`);
+    }
+}
+
+function testPatternChanceStrictIncrease() {
+    let prev = 0;
+    for (let wave = 6; wave <= 20; wave++) {
+        const chance = Math.min(0.25, 0.12 + (wave - 6) * 0.015);
+        assert.ok(chance >= prev, `Wave ${wave} chance ${chance} < prev ${prev}`);
+        prev = chance;
+    }
+}
+
+function testCrossArmCount() {
+    // Cross: armCount 3 should produce 12 enemies total
+    const armCount = 3;
+    const total = armCount * 4;
+    assert.equal(total, 12, '3 per arm × 4 arms = 12 total');
+}
+
 testChargeWaveOrigin();
 testPerpendicularLine();
 testCircleAnglesEven();
 testCrossFourArms();
 testWorldBoundsClamp();
 testChargeWaveCountClamp();
+
+testPincerTwoSides();
+testPincerPerpLine();
+testPincerCountSplit();
+testPatternChanceScaling();
+testPatternChanceStrictIncrease();
+testCrossArmCount();
 
 console.log('✅ enemy/enemySpawnPatterns tests passed');

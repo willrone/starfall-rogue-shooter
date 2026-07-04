@@ -22,7 +22,7 @@ import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS, BOSS_SPECS, MINI_BOSS_SPECS } from 
 import type { CombatState } from '../state/combatState';
 
 import { periodicFollowPhase } from './enemyMovement';
-import { spawnCircle, spawnChargeWave, spawnCross } from './enemySpawnPatterns';
+import { spawnCircle, spawnChargeWave, spawnCross, spawnPincer } from './enemySpawnPatterns';
 
 import * as EnemyConst from "./enemyConstants";
 export * from "./enemyConstants";
@@ -1209,13 +1209,38 @@ export class EnemyManager {
         const ring = this.isBossWave() || this.cs.waveIndex % 3 === 0;
         const count = this.getWaveSpawnBatchCount();
         const fallback = this.isBossWave() ? ENEMY_SPECS : this.getUnlockedEnemySpecs();
-        // 波 6+：12% 概率触发"冲锋波" — 集中从一侧高速冲锋
-        if (!this.isBossWave() && this.cs.waveIndex >= 6 && Math.random() < 0.12 && count >= 3) {
-            const spec = this.pickWeightedEnemySpec(this.currentWaveSpecs.length > 0 ? this.currentWaveSpecs : fallback);
-            if (spec) {
+        const spec = this.pickWeightedEnemySpec(this.currentWaveSpecs.length > 0 ? this.currentWaveSpecs : fallback);
+
+        // ── 出怪模式选择（概率随波次递增）────────────────────────
+        if (!this.isBossWave() && spec) {
+            const wave = this.cs.waveIndex;
+
+            // 十字阵：波 8+，6% 概率，4 方向各出 2-3 只
+            if (wave >= 8 && Math.random() < 0.06 && count >= 5) {
+                const armCount = Math.min(3, Math.max(2, Math.floor(count / 3)));
+                spawnCross(this, spec, armCount, 400);
+                const extra = Math.max(1, count - armCount * 2);
+                this.spawnPack(extra, ring, this.currentWaveSpecs, fallback);
+                this.maybeSpawnMiniBoss();
+                return;
+            }
+
+            // 夹击波（pincer）：波 10+，8% 概率，双向高速冲锋
+            if (wave >= 10 && Math.random() < 0.08 && count >= 4) {
+                const perWave = Math.min(5, Math.max(2, Math.floor(count / 2)));
+                const angle = Math.random() * Math.PI * 2;
+                spawnPincer(this, spec, perWave, angle, 260, 0);
+                const extra = Math.max(1, count - perWave * 2);
+                this.spawnPack(extra, ring, this.currentWaveSpecs, fallback);
+                this.maybeSpawnMiniBoss();
+                return;
+            }
+
+            // 冲锋波：波 6+，概率从 12% 递增到 25%
+            const chargeChance = Math.min(0.25, 0.12 + (wave - 6) * 0.015);
+            if (wave >= 6 && Math.random() < chargeChance && count >= 3) {
                 const angle = Math.random() * Math.PI * 2;
                 spawnChargeWave(this, spec, Math.min(count + 2, 8), angle, 240, 0);
-                // 冲锋波还有额外正常出怪补充数量
                 const extra = Math.max(1, count - 3);
                 this.spawnPack(extra, ring, this.currentWaveSpecs, fallback);
                 this.maybeSpawnMiniBoss();
