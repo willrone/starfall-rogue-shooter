@@ -388,6 +388,7 @@ export class RogueShooterGame extends Component {
           return 'ok';
         };
         view.setDesignResolutionSize(DESIGN_WIDTH, DESIGN_HEIGHT, 2);
+        view.enableRetina(true);
         this.createCanvas();
         this.shop.loadProgress();
         this.buildScene();
