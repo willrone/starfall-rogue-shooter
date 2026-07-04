@@ -388,7 +388,6 @@ export class RogueShooterGame extends Component {
           return 'ok';
         };
         view.setDesignResolutionSize(DESIGN_WIDTH, DESIGN_HEIGHT, 2);
-        view.enableRetina(true);
         this.createCanvas();
         this.shop.loadProgress();
         this.buildScene();
@@ -1879,38 +1878,46 @@ export class RogueShooterGame extends Component {
     }
 
     private resolvePlayerEnemyCollision(x: number, y: number): Vec2 {
-        let nextX = x;
-        let nextY = y;
-        for (let pass = 0; pass < 2; pass++) {
-            for (const enemy of this.enemyMgr.enemies) {
-                const { x: ex, y: ey } = this.enemyMgr.getEnemyPosition(enemy);
-                const minDist = this.cs.playerRadius + enemy.radius + ENEMY_PLAYER_PADDING;
-                const dx = nextX - ex;
-                const dy = nextY - ey;
-                if (Math.abs(dx) > minDist || Math.abs(dy) > minDist) continue;
-                const distSq = dx * dx + dy * dy;
-                if (distSq >= minDist * minDist) continue;
-
-                const dist = Math.sqrt(Math.max(0.001, distSq));
-                const angle = (enemy.id * 7.17) % (Math.PI * 2);
-                const nx = dist > 0.01 ? dx / dist : Math.cos(angle);
-                const ny = dist > 0.01 ? dy / dist : Math.sin(angle);
-                nextX = this.clamp(ex + nx * minDist, WORLD_LEFT + 42, WORLD_RIGHT - 42);
-                nextY = this.clamp(ey + ny * minDist, WORLD_BOTTOM + 42, WORLD_TOP - 42);
-            }
+        // 玩家主动移动时不受碰撞推挤影响，确保操作感优先
+        const move = this.getMoveVector();
+        if (Math.abs(move.x) > 0.1 || Math.abs(move.y) > 0.1) {
+            return new Vec2(x, y);
         }
-        return new Vec2(nextX, nextY);
+        // 不动时才轻微推挤防止怪物堆叠
+        const speed = this.getMoveSpeed();
+        let pushX = 0;
+        let pushY = 0;
+        let pushCount = 0;
+        for (const enemy of this.enemyMgr.enemies) {
+            const { x: ex, y: ey } = this.enemyMgr.getEnemyPosition(enemy);
+            const minDist = this.cs.playerRadius + enemy.radius + ENEMY_PLAYER_PADDING;
+            const dx = x - ex;
+            const dy = y - ey;
+            if (Math.abs(dx) > minDist || Math.abs(dy) > minDist) continue;
+            const distSq = dx * dx + dy * dy;
+            if (distSq >= minDist * minDist) continue;
+            const dist = Math.sqrt(Math.max(0.001, distSq));
+            const nx = dist > 0.01 ? dx / dist : 0;
+            const ny = dist > 0.01 ? dy / dist : 0;
+            pushX += nx;
+            pushY += ny;
+            pushCount++;
+        }
+        if (pushCount > 0) {
+            const rawDist = Math.sqrt(pushX * pushX + pushY * pushY);
+            if (rawDist > 0.001) {
+                pushX /= rawDist;
+                pushY /= rawDist;
+            }
+            const maxPush = Math.max(1.5, speed * 0.016) * 0.7;
+            x = this.clamp(x + pushX * maxPush, WORLD_LEFT + 42, WORLD_RIGHT - 42);
+            y = this.clamp(y + pushY * maxPush, WORLD_BOTTOM + 42, WORLD_TOP - 42);
+        }
+        return new Vec2(x, y);
     }
 
     private resolvePlayerAfterEnemyMovement() {
-        const resolved = this.resolvePlayerEnemyCollision(this.cs.playerX, this.cs.playerY);
-        if (Math.abs(resolved.x - this.cs.playerX) < 0.01 && Math.abs(resolved.y - this.cs.playerY) < 0.01) return;
-        this.cs.playerX = resolved.x;
-        this.cs.playerY = resolved.y;
-        if (this.playerNode) {
-            this.playerNode.setPosition(this.cs.playerX, this.cs.playerY, 10);
-        }
-        this.drawPlayer();
+        // 不在此额外推挤，玩家位置完全由 updatePlayer 控制
     }
 
     private updateCamera(dt: number, snap = false) {

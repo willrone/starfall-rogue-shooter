@@ -13,7 +13,7 @@
     },
     "web-mobile": {
       "useWebGPU": false,
-      "orientation": "auto",
+      "orientation": "portrait",
       "embedWebDebugger": false
     }
   },
