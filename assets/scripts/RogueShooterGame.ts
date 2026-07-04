@@ -691,6 +691,14 @@ export class RogueShooterGame extends Component {
         return this.shop.isEquipmentLootEligible(equipment, rare);
     }
 
+    private saveProgress(): void {
+        this.shop.saveProgress();
+    }
+
+    private showHangar(message: string): void {
+        this.shop.showHangar(message);
+    }
+
     private dropPickup(type: PickupType, amount: number, x: number, y: number) {
         this.pickupMgr.dropPickup(type, amount, x, y);
     }
