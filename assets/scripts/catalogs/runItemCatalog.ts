@@ -47,27 +47,27 @@ export const RUN_ITEM_BLUEPRINTS: RunItemBlueprint[] = [
     { id: 'composite-armor', name: '复合护甲', category: '防御', color: '#64748B', effects: [{ stat: 'maxHp', amount: 84 }, { stat: 'damageReduction', amount: 0.04 }] },
     { id: 'arcane-film', name: '秘法隔膜', category: '防御', color: '#8B5CF6', effects: [{ stat: 'shieldMax', amount: 72 }, { stat: 'shieldRegen', amount: 3.6 }] },
     { id: 'warmog-heart', name: '狂徒之心', category: '生存', color: '#F3722C', effects: [{ stat: 'hpRegen', amount: 3.6 }, { stat: 'maxHp', amount: 48 }] },
-    { id: 'evasion-field', name: '闪避力场', category: '机动', color: '#4CC9F0', effects: [{ stat: 'dodgeChance', amount: 0.08 }, { stat: 'moveSpeed', amount: 36 }] },
+    { id: 'evasion-field', name: '闪避力场', category: '机动', color: '#4CC9F0', effects: [{ stat: 'dodgeChance', amount: 0.08 }, { stat: 'moveSpeed', amount: 12 }] },
     { id: 'bullet-time', name: '子弹时间', category: '攻击', color: '#84CC16', effects: [{ stat: 'weaponFireRatePct', amount: 0.22 }, { stat: 'attackSpeed', amount: 0.05 }] },
-    { id: 'cryo-field', name: '冰霜力场', category: '机动', color: '#A7F3D0', effects: [{ stat: 'moveSpeed', amount: 60 }, { stat: 'shieldMax', amount: 36 }] },
+    { id: 'cryo-field', name: '冰霜力场', category: '机动', color: '#A7F3D0', effects: [{ stat: 'moveSpeed', amount: 20 }, { stat: 'shieldMax', amount: 36 }] },
     { id: 'deflector-shield', name: '偏转护盾', category: '防御', color: '#14B8A6', effects: [{ stat: 'shieldMax', amount: 96 }, { stat: 'shieldRegen', amount: 3.6 }] },
 
     // ── 机动/生存（3件） ───────────────────────────────────────────
-    { id: 'evasion-servo', name: '闪避伺服', category: '机动', color: '#43AA8B', effects: [{ stat: 'dodgeChance', amount: 0.10 }, { stat: 'moveSpeed', amount: 42 }, { stat: 'shieldMax', amount: 24 }] },
+    { id: 'evasion-servo', name: '闪避伺服', category: '机动', color: '#43AA8B', effects: [{ stat: 'dodgeChance', amount: 0.10 }, { stat: 'moveSpeed', amount: 16 }, { stat: 'shieldMax', amount: 24 }] },
     { id: 'regen-vat', name: '再生培养仓', category: '生存', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 3.6 }, { stat: 'maxHp', amount: 60 }] },
     { id: 'bulwark-protocol', name: '坚壁协议', category: '防御', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.07 }, { stat: 'maxHp', amount: 60 }] },
 
     // ── 资源/成长/其他（4件） ──────────────────────────────────────
     { id: 'lucky-dice', name: '幸运骰', category: '其他', color: '#F9C74F', effects: [{ stat: 'luck', amount: 30 }, { stat: 'critChance', amount: 0.06 }] },
-    { id: 'scavenger-field', name: '拾荒磁场', category: '资源', color: '#577590', effects: [{ stat: 'pickupRange', amount: 108 }, { stat: 'resourceGain', amount: 0.14 }, { stat: 'moveSpeed', amount: 18 }] },
+    { id: 'scavenger-field', name: '拾荒磁场', category: '资源', color: '#577590', effects: [{ stat: 'pickupRange', amount: 108 }, { stat: 'resourceGain', amount: 0.14 }, { stat: 'moveSpeed', amount: 8 }] },
     { id: 'xp-prism', name: '经验棱镜', category: '成长', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.30 }, { stat: 'luck', amount: 10 }] },
     { id: 'greed-converter', name: '贪婪转换器', category: '资源', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.42 }, { stat: 'xpGain', amount: 0.10 }] },
 
     // ── 混合（2件） ────────────────────────────────────────────────
-    { id: 'phase-thruster', name: '相位推进器', category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed', amount: 72 }, { stat: 'dodgeChance', amount: 0.06 }, { stat: 'pickupRange', amount: 36 }] },
+    { id: 'phase-thruster', name: '相位推进器', category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed', amount: 28 }, { stat: 'dodgeChance', amount: 0.06 }, { stat: 'pickupRange', amount: 36 }] },
     { id: 'stable-core', name: '稳态核心', category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp', amount: 96 }, { stat: 'shieldMax', amount: 48 }] },
     { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.08 }, { stat: 'attackRange', amount: 108 }] },
-    { id: 'frenzy-injector', name: '狂热注射', category: '攻击', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.60 }, { stat: 'moveSpeed', amount: 18 }] },
+    { id: 'frenzy-injector', name: '狂热注射', category: '攻击', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.60 }, { stat: 'moveSpeed', amount: 8 }] },
 ];
 
 // ── RUN_ITEM (chest/shop) catalog ──────────────────────────────────
@@ -136,7 +136,7 @@ export const LEVEL_UP_BLUEPRINTS: StatUpgradeBlueprint[] = [
 
     // ── ⚡ 敏捷（Agility） ───────────────────────────────────────
     { id: 'agility-reflex',      name: '神经反射', category: '敏捷', color: '#4CC9F0', effects: [{ stat: 'attackSpeed', min: 0.05, max: 0.12 }] },
-    { id: 'agility-speed',       name: '移速强化', category: '敏捷', color: '#43AA8B', effects: [{ stat: 'moveSpeed', min: 18, max: 42 }] },
+    { id: 'agility-speed',       name: '移速强化', category: '敏捷', color: '#43AA8B', effects: [{ stat: 'moveSpeed', min: 8, max: 18 }] },
     { id: 'agility-dodge',       name: '身法训练', category: '敏捷', color: '#2DD4BF', effects: [{ stat: 'dodgeChance', min: 0.04, max: 0.07 }] },
 
     // ── ❤️ 体魄（Physique） ──────────────────────────────────────

@@ -3,10 +3,10 @@
  */
 
 // ── World boundaries ──────────────────────────────────────────────
-export const WORLD_LEFT = -1400;
-export const WORLD_RIGHT = 1400;
-export const WORLD_BOTTOM = -1800;
-export const WORLD_TOP = 1800;
+export const WORLD_LEFT = -900;
+export const WORLD_RIGHT = 900;
+export const WORLD_BOTTOM = -1200;
+export const WORLD_TOP = 1200;
 export const WAVES_PER_CYCLE = 10;
 export const ORDINARY_WAVES_PER_CYCLE = WAVES_PER_CYCLE - 1;
 export const WAVE_MIN_DURATION = 50;
@@ -35,7 +35,7 @@ export const ENEMY_CROWD_REPEL_RADIUS = 96;
 export const ENEMY_CROWD_MAX_NEIGHBORS = 8;
 export const ENEMY_CROWD_REPEL_WEIGHT = 1.45;
 export const ENEMY_CROWD_ORBIT_WEIGHT = 0.35;
-export const FAR_CULL_DIST_SQ = 3240000; // 1800²: enemies farther than this get simplified movement
+export const FAR_CULL_DIST_SQ = 1440000; // 1200²: enemies farther than this get simplified movement
 
 // ── Drop rates ────────────────────────────────────────────────────
 export const NORMAL_ALLOY_DROP_MULTIPLIER = 0.75;
