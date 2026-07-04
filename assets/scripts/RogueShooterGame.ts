@@ -934,20 +934,20 @@ export class RogueShooterGame extends Component {
         this.rect(root, 'HudShadow', 14, top + 6, 692, HUD_H, RogueShooterGame.UI.panelShadow, 12);
         this.rect(root, 'HudPanel', 10, top, 700, HUD_H, RogueShooterGame.UI.hudBg, RogueShooterGame.UI.cardRadius, RogueShooterGame.UI.hudBorder);
         this.rect(root, 'HudAccent', 14, top + 6, 4, HUD_H - 12, RogueShooterGame.UI.hudAccent, 2);
-        this.panels.titleLabel = this.label(root, 'Title', '星坠幸存者', 26, top + 2, 280, 24, 15, RogueShooterGame.UI.title, Label.HorizontalAlign.LEFT);
-        this.panels.timerLabel = this.label(root, 'Timer', '', 440, top + 2, 250, 24, 14, RogueShooterGame.UI.cyanText, Label.HorizontalAlign.RIGHT);
-        // HP bar — full width thin strip
-        this.label(root, 'HpLabel', 'HP', 26, top + 14, 22, 14, 10, RogueShooterGame.UI.barLabel);
-        const hpNode = this.rect(root, 'HpBar', 26, top + 13, 668, 6, RogueShooterGame.UI.hpBarBg, 3);
+        this.panels.titleLabel = this.label(root, 'Title', '星坠幸存者', 26, top + 3, 280, 28, 18, RogueShooterGame.UI.title, Label.HorizontalAlign.LEFT);
+        this.panels.timerLabel = this.label(root, 'Timer', '', 460, top + 4, 230, 26, 16, RogueShooterGame.UI.cyanText, Label.HorizontalAlign.RIGHT);
+        // HP bar
+        this.label(root, 'HpLabel', 'HP', 26, top + 30, 22, 18, 12, RogueShooterGame.UI.barLabel);
+        const hpNode = this.rect(root, 'HpBar', 52, top + 32, 260, 8, RogueShooterGame.UI.hpBarBg, 4);
         this.panels.hpBar = hpNode.getComponent(Graphics);
-        // XP bar — left half
-        this.label(root, 'XpLabel', 'XP', 26, top + 25, 22, 14, 10, RogueShooterGame.UI.barLabel);
-        const xpNode = this.rect(root, 'XpBar', 26, top + 24, 334, 5, RogueShooterGame.UI.xpBarBg, 3);
-        this.panels.xpBar = xpNode.getComponent(Graphics);
-        // Shield bar — right half
-        this.label(root, 'ShieldLabel', '盾', 374, top + 25, 22, 14, 10, RogueShooterGame.UI.barLabel);
-        const shieldNode = this.rect(root, 'ShieldBar', 374, top + 24, 334, 5, RogueShooterGame.UI.hpBarBg, 3);
+        // Shield bar
+        this.label(root, 'ShieldLabel', '盾', 316, top + 30, 20, 18, 12, RogueShooterGame.UI.barLabel);
+        const shieldNode = this.rect(root, 'ShieldBar', 340, top + 32, 150, 8, RogueShooterGame.UI.hpBarBg, 4);
         this.panels.shieldBar = shieldNode.getComponent(Graphics);
+        // XP bar
+        this.label(root, 'XpLabel', 'EXP', 28, top + 43, 24, 14, 10, RogueShooterGame.UI.barLabel);
+        const xpNode = this.rect(root, 'XpBar', 56, top + 44, 420, 4, RogueShooterGame.UI.xpBarBg, 2);
+        this.panels.xpBar = xpNode.getComponent(Graphics);
         this.panels.debugLabel = this.label(root, 'DebugHud', '', 54, top + 52, 612, 16, 11, '#64748B', Label.HorizontalAlign.LEFT);
         this.panels.debugLabel.node.active = false;
 
@@ -955,24 +955,18 @@ export class RogueShooterGame extends Component {
         const BOT_Y = DESIGN_HEIGHT - UI_SAFE_BOTTOM - 56;
         this.rect(root, 'BottomBarShadow', 14, BOT_Y + 4, 692, 52, RogueShooterGame.UI.panelShadow, 10);
         this.rect(root, 'BottomBar', 10, BOT_Y, 700, 52, RogueShooterGame.UI.hudBg, RogueShooterGame.UI.cardRadius, RogueShooterGame.UI.hudBorder);
-        // Left: weapon + alloy
-        this.panels.equipmentLabel = this.label(root, 'EquipmentLabel', '', 18, BOT_Y + 4, 260, 22, 14, RogueShooterGame.UI.title, Label.HorizontalAlign.LEFT);
-        // Alloy display
-        this.panels.statLabel = this.label(root, 'StatInfo', '', 18, BOT_Y + 28, 260, 20, 13, RogueShooterGame.UI.alloyOrange, Label.HorizontalAlign.LEFT);
-        // Buff display
-        this.panels.buffLabel = this.label(root, 'BuffLabel', '', 240, BOT_Y + 4, 80, 20, 11, '#F97316', Label.HorizontalAlign.LEFT);
-        // 4 action buttons — compact row on the right
-        const BTN_W = 68;
-        const BTN_GAP = 6;
-        const btnStartX = 720 - 24 - BTN_W * 4 - BTN_GAP * 3;
-        this.panels.switchWeaponButton = this.button(root, 'SwitchWeapon', btnStartX, BOT_Y + 4, BTN_W, 44, '#B5179E', '#475569', () => this.switchActiveWeapon());
+        this.panels.equipmentLabel = this.label(root, 'EquipmentLabel', '', 18, BOT_Y + 2, 220, 22, 13, RogueShooterGame.UI.body, Label.HorizontalAlign.LEFT);
+        this.panels.buffLabel = this.label(root, 'BuffLabel', '', 18, BOT_Y + 26, 260, 20, 12, '#F97316', Label.HorizontalAlign.LEFT);
+        const BTN_W = 78;
+        this.panels.switchWeaponButton = this.button(root, 'SwitchWeapon', 300, BOT_Y + 4, BTN_W, 44, '#B5179E', '#475569', () => this.switchActiveWeapon());
         this.panels.switchWeaponButton.label.string = '切';
-        this.panels.shopButton = this.button(root, 'ShopBtn', btnStartX + (BTN_W + BTN_GAP), BOT_Y + 4, BTN_W, 44, '#22D3EE', '#475569', () => this.shop.openShop());
+        this.panels.shopButton = this.button(root, 'ShopBtn', 386, BOT_Y + 4, BTN_W, 44, '#22D3EE', '#475569', () => this.shop.openShop());
         this.panels.shopButton.label.string = '商店';
-        this.panels.extractButton = this.button(root, 'ExtractBtn', btnStartX + (BTN_W + BTN_GAP) * 2, BOT_Y + 4, BTN_W, 44, '#F59E0B', '#475569', () => this.extractBattle());
+        this.panels.extractButton = this.button(root, 'ExtractBtn', 472, BOT_Y + 4, BTN_W, 44, '#F59E0B', '#475569', () => this.extractBattle());
         this.panels.extractButton.label.string = '撤离';
-        this.panels.pauseButton = this.button(root, 'PauseBtn', btnStartX + (BTN_W + BTN_GAP) * 3, BOT_Y + 4, BTN_W, 44, '#475569', '#475569', () => this.pauseCombat());
+        this.panels.pauseButton = this.button(root, 'PauseBtn', 558, BOT_Y + 4, BTN_W, 44, '#475569', '#475569', () => this.pauseCombat());
         this.panels.pauseButton.label.string = '暂停';
+        this.panels.statLabel = this.label(root, 'StatInfo', '', 18, BOT_Y + 2, 360, 48, 11, '#94A3B8', Label.HorizontalAlign.LEFT);
 
         // Toast
         const toastTop = BOT_Y - 70;
@@ -2866,19 +2860,22 @@ export class RogueShooterGame extends Component {
         if (this.panels.statLabel) {
             const stats = this.getCharacterStats();
             const enemyPoolCount = inRun ? this.enemyMgr.getAvailableEnemySpecs().length + 5 : TOTAL_ENEMY_TYPES;
+            const droneText = inRun && stats.dronePower > 0
+                ? ` | 机${this.shop.formatStat(stats.dronePower)}×${this.getDroneStrikeCount(stats.dronePower)}`
+                : '';
             this.panels.statLabel.string = inRun
-                ? `合金 ${this.cs.battleAlloy} · Lv.${this.cs.level} · 暴${Math.round(stats.critChance * 100)}%${stats.dronePower > 0 ? ` 机${this.shop.formatStat(stats.dronePower)}` : ''}`
+                ? `存活 ${this.formatTime(this.cs.combatTime)} | Lv.${this.cs.level} | 合金 ${this.cs.battleAlloy} | HP ${Math.ceil(this.cs.playerHp)}/${Math.ceil(this.cs.playerMaxHp)} 护${Math.ceil(this.cs.playerShield)} | 暴${Math.round(stats.critChance * 100)}%${droneText} | 怪${this.enemyMgr.enemies.length} 池${enemyPoolCount}/${TOTAL_ENEMY_TYPES}`
                 : `永久资源：${this.formatWallet(this.getInventoryWallet())}`;
         }
         if (this.panels.equipmentLabel) {
             const activeWeapon = this.shop.getActiveWeapon();
             const stats = this.getCharacterStats();
             const weaponText = activeWeapon ? `${activeWeapon.name} Lv.${this.shop.getEquipmentLevel(activeWeapon.id)}` : '无武器';
-            const hpShieldText = inRun
-                ? `HP ${Math.ceil(this.cs.playerHp)}/${Math.ceil(this.cs.playerMaxHp)} 盾${Math.ceil(this.cs.playerShield)}`
+            const droneHint = inRun && stats.dronePower > 0
+                ? `  无人机 ${this.shop.formatStat(this.getDroneStrikeInterval(stats.dronePower))}s/轮`
                 : '';
             this.panels.equipmentLabel.string = inRun
-                ? `${weaponText}   ${hpShieldText}`
+                ? `当前 ${weaponText}${droneHint}  装备 ${this.shop.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}  H调试`
                 : `出战 ${this.shop.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}武  装备 ${this.shop.getEquippedGear().length}/${MAX_EQUIPPED_GEAR}`;
         }
         if (this.panels.switchWeaponButton) {
@@ -2919,51 +2916,32 @@ export class RogueShooterGame extends Component {
     }
 
     private drawBars() {
-        // HP bar — full-width thin strip (26..694, 6px tall)
         if (this.panels.hpBar) {
             const ratio = this.cs.playerMaxHp > 0 ? this.cs.playerHp / this.cs.playerMaxHp : 0;
             const shieldRatio = this.cs.playerShieldMax > 0 ? this.cs.playerShield / this.cs.playerShieldMax : 0;
             this.panels.hpBar.clear();
-            // Background
-            this.panels.hpBar.fillColor = this.hex('#0F172A', 160);
-            this.panels.hpBar.roundRect(-334, -3, 668, 6, 3);
+            this.panels.hpBar.fillColor = this.hex('#1E293B');
+            this.panels.hpBar.roundRect(-146, -9, 292, 18, 9);
             this.panels.hpBar.fill();
-            // Shield overlay (on top of HP bar for dual-layer effect)
             if (shieldRatio > 0) {
-                this.panels.hpBar.fillColor = this.hex('#38BDF8', 110);
-                this.panels.hpBar.roundRect(-334, -3, 668 * this.clamp(shieldRatio, 0, 1), 6, 3);
+                this.panels.hpBar.fillColor = this.hex('#4CC9F0', 185);
+                this.panels.hpBar.roundRect(-146, -9, 292 * this.clamp(shieldRatio, 0, 1), 18, 9);
                 this.panels.hpBar.fill();
             }
-            // HP fill
-            const hpColor = ratio > 0.45 ? '#22D3EE' : (ratio > 0.2 ? '#F97316' : '#F43F5E');
-            this.panels.hpBar.fillColor = this.hex(hpColor);
-            this.panels.hpBar.roundRect(-334, -2, 668 * this.clamp(ratio, 0, 1), 4, 2);
+            this.panels.hpBar.fillColor = this.hex(ratio > 0.45 ? '#43AA8B' : '#F94144');
+            this.panels.hpBar.roundRect(-146, -6, 292 * this.clamp(ratio, 0, 1), 12, 6);
             this.panels.hpBar.fill();
-            // HP text label inline
-            this.panels.hpBar.strokeColor = this.hex('#F8FAFC', 200);
-            this.panels.hpBar.lineWidth = 1;
         }
-        // XP bar — thin strip (26..360, 5px tall)
+
         if (this.panels.xpBar) {
             const ratio = this.cs.xpToNext > 0 ? this.cs.xp / this.cs.xpToNext : 0;
             this.panels.xpBar.clear();
-            this.panels.xpBar.fillColor = this.hex('#0F172A', 120);
-            this.panels.xpBar.roundRect(-167, -3, 334, 6, 3);
+            this.panels.xpBar.fillColor = this.hex('#1E293B');
+            this.panels.xpBar.roundRect(-146, -9, 292, 18, 9);
             this.panels.xpBar.fill();
-            this.panels.xpBar.fillColor = this.hex('#A78BFA');
-            this.panels.xpBar.roundRect(-167, -2, 334 * this.clamp(ratio, 0, 1), 4, 2);
+            this.panels.xpBar.fillColor = this.hex('#4CC9F0');
+            this.panels.xpBar.roundRect(-146, -9, 292 * this.clamp(ratio, 0, 1), 18, 9);
             this.panels.xpBar.fill();
-        }
-        // Shield bar — thin strip (374..708, 5px tall)
-        if (this.panels.shieldBar) {
-            const ratio = this.cs.playerShieldMax > 0 ? this.cs.playerShield / this.cs.playerShieldMax : 0;
-            this.panels.shieldBar.clear();
-            this.panels.shieldBar.fillColor = this.hex('#0F172A', 120);
-            this.panels.shieldBar.roundRect(-167, -3, 334, 6, 3);
-            this.panels.shieldBar.fill();
-            this.panels.shieldBar.fillColor = this.hex('#38BDF8');
-            this.panels.shieldBar.roundRect(-167, -2, 334 * this.clamp(ratio, 0, 1), 4, 2);
-            this.panels.shieldBar.fill();
         }
     }
 
