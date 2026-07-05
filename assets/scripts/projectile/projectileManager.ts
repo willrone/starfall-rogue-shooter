@@ -720,7 +720,7 @@ export class ProjectileManager {
         };
     }
 
-    private drawBulletTrail(gfx: Graphics, trail: { x: number; y: number }[], style: WeaponAttackStyle, color: string, accent: string, r: number): void {
+    private drawBulletTrail(gfx: Graphics, trail: { x: number; y: number }[], px: number, py: number, style: WeaponAttackStyle, color: string, accent: string, r: number): void {
         const t = trail;
         const n = t.length;
 
@@ -729,8 +729,8 @@ export class ProjectileManager {
             case 'smg': {
                 gfx.strokeColor = this.ctx.hex(color, 120);
                 gfx.lineWidth = r * 0.4;
-                gfx.moveTo(t[n - 2].x, t[n - 2].y);
-                gfx.lineTo(t[n - 1].x, t[n - 1].y);
+                gfx.moveTo(t[n - 2].x - px, t[n - 2].y - py);
+                gfx.lineTo(t[n - 1].x - px, t[n - 1].y - py);
                 gfx.stroke();
                 break;
             }
@@ -741,8 +741,8 @@ export class ProjectileManager {
                     const alpha = 20 + 60 * (i / n);
                     gfx.strokeColor = this.ctx.hex(color, alpha);
                     gfx.lineWidth = r * 0.6 * (i / n);
-                    gfx.moveTo(t[i].x, t[i].y);
-                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.moveTo(t[i].x - px, t[i].y - py);
+                    gfx.lineTo(t[i + 1].x - px, t[i + 1].y - py);
                     gfx.stroke();
                 }
                 break;
@@ -754,7 +754,10 @@ export class ProjectileManager {
                     const alpha = 20 + 40 * (i / n);
                     gfx.strokeColor = this.ctx.hex(color, alpha);
                     gfx.lineWidth = 1.2;
-                    gfx.circle(t[i].x, t[i].y, r * (0.8 + 0.4 * (i / n)));
+                    const cx = t[i].x - px;
+                    const cy = t[i].y - py;
+                    const rad = r * (0.8 + 0.4 * (i / n));
+                    gfx.circle(cx, cy, rad);
                     gfx.stroke();
                 }
                 break;
@@ -766,8 +769,8 @@ export class ProjectileManager {
                 for (const ox of offsets) {
                     gfx.strokeColor = this.ctx.hex(color, 60);
                     gfx.lineWidth = r * 0.3;
-                    gfx.moveTo(t[n - 2].x + ox * r, t[n - 2].y);
-                    gfx.lineTo(t[n - 1].x + ox * r, t[n - 1].y);
+                    gfx.moveTo(t[n - 2].x - px + ox * r, t[n - 2].y - py);
+                    gfx.lineTo(t[n - 1].x - px + ox * r, t[n - 1].y - py);
                     gfx.stroke();
                 }
                 break;
@@ -779,8 +782,9 @@ export class ProjectileManager {
                     const a = 15 + 50 * (i / n);
                     gfx.strokeColor = this.ctx.hex(color, a);
                     gfx.lineWidth = 1;
-                    gfx.moveTo(t[i].x - r * 0.6, t[i].y);
-                    gfx.lineTo(t[i].x + r * 0.6, t[i].y);
+                    const cx = t[i].x - px;
+                    gfx.moveTo(cx - r * 0.6, t[i].y - py);
+                    gfx.lineTo(cx + r * 0.6, t[i].y - py);
                     gfx.stroke();
                 }
                 break;
@@ -792,9 +796,13 @@ export class ProjectileManager {
                     const a = 15 + 50 * (i / n);
                     gfx.strokeColor = this.ctx.hex(accent, a);
                     gfx.lineWidth = 1;
+                    const cx1 = t[i].x - px;
+                    const cy1 = t[i].y - py;
+                    const cx2 = t[i + 1].x - px;
+                    const cy2 = t[i + 1].y - py;
                     for (const sx of [-1.35, 1.35]) {
-                        gfx.moveTo(t[i].x + sx * r, t[i].y);
-                        gfx.lineTo(t[i + 1].x + sx * r, t[i + 1].y);
+                        gfx.moveTo(cx1 + sx * r, cy1);
+                        gfx.lineTo(cx2 + sx * r, cy2);
                     }
                     gfx.stroke();
                 }
@@ -807,8 +815,8 @@ export class ProjectileManager {
                     const a = 15 + 70 * (i / n);
                     gfx.strokeColor = this.ctx.hex(color, a);
                     gfx.lineWidth = r * 0.5;
-                    gfx.moveTo(t[i].x, t[i].y);
-                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.moveTo(t[i].x - px, t[i].y - py);
+                    gfx.lineTo(t[i + 1].x - px, t[i + 1].y - py);
                     gfx.stroke();
                 }
                 break;
@@ -819,13 +827,13 @@ export class ProjectileManager {
                 gfx.strokeColor = this.ctx.hex(color, 60);
                 gfx.lineWidth = 1.2;
                 for (let i = 0; i < n - 1; i++) {
-                    gfx.moveTo(t[i].x, t[i].y);
-                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.moveTo(t[i].x - px, t[i].y - py);
+                    gfx.lineTo(t[i + 1].x - px, t[i + 1].y - py);
                 }
                 gfx.stroke();
                 for (let i = 1; i < n - 1; i += 2) {
                     gfx.fillColor = this.ctx.hex(accent, 40);
-                    gfx.circle(t[i].x, t[i].y, r * 0.3);
+                    gfx.circle(t[i].x - px, t[i].y - py, r * 0.3);
                     gfx.fill();
                 }
                 break;
@@ -837,8 +845,8 @@ export class ProjectileManager {
                     const a = 10 + 50 * (i / n);
                     gfx.strokeColor = this.ctx.hex('#9333EA', a);
                     gfx.lineWidth = 1.5;
-                    gfx.moveTo(t[i].x, t[i].y);
-                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.moveTo(t[i].x - px, t[i].y - py);
+                    gfx.lineTo(t[i + 1].x - px, t[i + 1].y - py);
                     gfx.stroke();
                 }
                 break;
@@ -848,8 +856,8 @@ export class ProjectileManager {
             case 'rail': {
                 gfx.strokeColor = this.ctx.hex('#FFFFFF', 70);
                 gfx.lineWidth = r * 0.3;
-                gfx.moveTo(t[n - 2].x, t[n - 2].y);
-                gfx.lineTo(t[n - 1].x, t[n - 1].y);
+                gfx.moveTo(t[n - 2].x - px, t[n - 2].y - py);
+                gfx.lineTo(t[n - 1].x - px, t[n - 1].y - py);
                 gfx.stroke();
                 break;
             }
@@ -860,7 +868,7 @@ export class ProjectileManager {
                     const a = 15 + 60 * (i / n);
                     const rad = r * (0.3 + 0.7 * (i / n));
                     gfx.fillColor = this.ctx.hex(color, a);
-                    gfx.circle(t[i].x, t[i].y, rad);
+                    gfx.circle(t[i].x - px, t[i].y - py, rad);
                     gfx.fill();
                 }
                 break;
@@ -872,7 +880,7 @@ export class ProjectileManager {
                     const a = 20 + 40 * (i / n);
                     gfx.strokeColor = this.ctx.hex('#64748B', a);
                     gfx.lineWidth = 1.5;
-                    gfx.circle(t[i].x, t[i].y, r * (0.8 + 0.3 * (i / n)));
+                    gfx.circle(t[i].x - px, t[i].y - py, r * (0.8 + 0.3 * (i / n)));
                     gfx.stroke();
                 }
                 break;
@@ -883,7 +891,7 @@ export class ProjectileManager {
                 for (let i = 0; i < n; i += 2) {
                     const a = 15 + 50 * (i / n);
                     gfx.fillColor = this.ctx.hex(color, a);
-                    gfx.circle(t[i].x, t[i].y, r * 0.3);
+                    gfx.circle(t[i].x - px, t[i].y - py, r * 0.3);
                     gfx.fill();
                 }
                 break;
@@ -895,8 +903,8 @@ export class ProjectileManager {
                     const a = 15 + 60 * (i / n);
                     gfx.strokeColor = this.ctx.hex(color, a);
                     gfx.lineWidth = r * 0.4;
-                    gfx.moveTo(t[i].x - r * 0.2, t[i].y);
-                    gfx.lineTo(t[i + 1].x + r * 0.2, t[i + 1].y);
+                    gfx.moveTo(t[i].x - px - r * 0.2, t[i].y - py);
+                    gfx.lineTo(t[i + 1].x - px + r * 0.2, t[i + 1].y - py);
                     gfx.stroke();
                 }
                 break;
@@ -908,7 +916,7 @@ export class ProjectileManager {
                     const clr = i % 2 === 0 ? '#7DD3FC' : '#FB923C';
                     const a = 15 + 50 * (i / n);
                     gfx.fillColor = this.ctx.hex(clr, a);
-                    gfx.circle(t[i].x, t[i].y, r * 0.25);
+                    gfx.circle(t[i].x - px, t[i].y - py, r * 0.25);
                     gfx.fill();
                 }
                 break;
@@ -920,11 +928,11 @@ export class ProjectileManager {
                     const a = 15 + 50 * (i / n);
                     gfx.strokeColor = this.ctx.hex(color, a);
                     gfx.lineWidth = 1.2;
-                    gfx.moveTo(t[i].x, t[i].y);
-                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.moveTo(t[i].x - px, t[i].y - py);
+                    gfx.lineTo(t[i + 1].x - px, t[i + 1].y - py);
                     if (i % 2 === 0 && i + 2 < n) {
-                        gfx.moveTo(t[i].x, t[i].y);
-                        gfx.lineTo(t[i + 2].x, t[i + 2].y);
+                        gfx.moveTo(t[i].x - px, t[i].y - py);
+                        gfx.lineTo(t[i + 2].x - px, t[i + 2].y - py);
                     }
                     gfx.stroke();
                 }
@@ -937,8 +945,8 @@ export class ProjectileManager {
                     const a = 10 + 40 * (i / n);
                     gfx.strokeColor = this.ctx.hex(color, a);
                     gfx.lineWidth = 1;
-                    gfx.moveTo(t[i].x, t[i].y);
-                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.moveTo(t[i].x - px, t[i].y - py);
+                    gfx.lineTo(t[i + 1].x - px, t[i + 1].y - py);
                     gfx.stroke();
                 }
                 break;
@@ -961,7 +969,7 @@ export class ProjectileManager {
         // ── 弹道拖尾（每种武器不同） ─────────────────────────────────
         const trail = bullet.trail;
         if (trail.length >= 2) {
-            this.drawBulletTrail(gfx, trail, bullet.style, c, a, r);
+            this.drawBulletTrail(gfx, trail, bullet.x, bullet.y, bullet.style, c, a, r);
         }
 
         switch (bullet.style) {
