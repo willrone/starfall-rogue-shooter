@@ -65,6 +65,7 @@ export interface Bullet {
     accent: string;
     style: WeaponAttackStyle;
     hitIds: Set<number>;
+    trail: { x: number; y: number }[];   // 弹道拖尾位置历史
 }
 
 interface SprayConeVfx {
@@ -715,7 +716,234 @@ export class ProjectileManager {
             accent: '#F8FAFC',
             style: 'rifle',
             hitIds: new Set<number>(),
+            trail: [],
         };
+    }
+
+    private drawBulletTrail(gfx: Graphics, trail: { x: number; y: number }[], style: WeaponAttackStyle, color: string, accent: string, r: number): void {
+        const t = trail;
+        const n = t.length;
+
+        switch (style) {
+            // 冲锋枪：细长曳光线条，快速渐变淡出
+            case 'smg': {
+                gfx.strokeColor = this.ctx.hex(color, 120);
+                gfx.lineWidth = r * 0.4;
+                gfx.moveTo(t[n - 2].x, t[n - 2].y);
+                gfx.lineTo(t[n - 1].x, t[n - 1].y);
+                gfx.stroke();
+                break;
+            }
+
+            // 霜束：宽阔冰蓝渐变光束
+            case 'frost': {
+                for (let i = 0; i < n - 1; i++) {
+                    const alpha = 20 + 60 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(color, alpha);
+                    gfx.lineWidth = r * 0.6 * (i / n);
+                    gfx.moveTo(t[i].x, t[i].y);
+                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 回声弓：涟漪环
+            case 'echo': {
+                for (let i = 0; i < n; i += 2) {
+                    const alpha = 20 + 40 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(color, alpha);
+                    gfx.lineWidth = 1.2;
+                    gfx.circle(t[i].x, t[i].y, r * (0.8 + 0.4 * (i / n)));
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 裂变枪管：三条短迹
+            case 'scatter': {
+                const offsets = [-0.6, 0, 0.6];
+                for (const ox of offsets) {
+                    gfx.strokeColor = this.ctx.hex(color, 60);
+                    gfx.lineWidth = r * 0.3;
+                    gfx.moveTo(t[n - 2].x + ox * r, t[n - 2].y);
+                    gfx.lineTo(t[n - 1].x + ox * r, t[n - 1].y);
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 镜像棱镜：扩散光针
+            case 'prism': {
+                for (let i = 0; i < n; i++) {
+                    const a = 15 + 50 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(color, a);
+                    gfx.lineWidth = 1;
+                    gfx.moveTo(t[i].x - r * 0.6, t[i].y);
+                    gfx.lineTo(t[i].x + r * 0.6, t[i].y);
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 量子织机：双卫星轨迹
+            case 'quantum': {
+                for (let i = 0; i < n - 1; i++) {
+                    const a = 15 + 50 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(accent, a);
+                    gfx.lineWidth = 1;
+                    for (const sx of [-1.35, 1.35]) {
+                        gfx.moveTo(t[i].x + sx * r, t[i].y);
+                        gfx.lineTo(t[i + 1].x + sx * r, t[i + 1].y);
+                    }
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 离子长枪：笔直长束淡出
+            case 'ion': {
+                for (let i = 0; i < n - 1; i++) {
+                    const a = 15 + 70 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(color, a);
+                    gfx.lineWidth = r * 0.5;
+                    gfx.moveTo(t[i].x, t[i].y);
+                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 荆棘连弩：带刺轨迹
+            case 'thorn': {
+                gfx.strokeColor = this.ctx.hex(color, 60);
+                gfx.lineWidth = 1.2;
+                for (let i = 0; i < n - 1; i++) {
+                    gfx.moveTo(t[i].x, t[i].y);
+                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                }
+                gfx.stroke();
+                for (let i = 1; i < n - 1; i += 2) {
+                    gfx.fillColor = this.ctx.hex(accent, 40);
+                    gfx.circle(t[i].x, t[i].y, r * 0.3);
+                    gfx.fill();
+                }
+                break;
+            }
+
+            // 虚空针：细暗紫痕
+            case 'void_needle': {
+                for (let i = 0; i < n - 1; i++) {
+                    const a = 10 + 50 * (i / n);
+                    gfx.strokeColor = this.ctx.hex('#9333EA', a);
+                    gfx.lineWidth = 1.5;
+                    gfx.moveTo(t[i].x, t[i].y);
+                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 磁轨炮：细亮白线
+            case 'rail': {
+                gfx.strokeColor = this.ctx.hex('#FFFFFF', 70);
+                gfx.lineWidth = r * 0.3;
+                gfx.moveTo(t[n - 2].x, t[n - 2].y);
+                gfx.lineTo(t[n - 1].x, t[n - 1].y);
+                gfx.stroke();
+                break;
+            }
+
+            // 流星发射器：火焰拖尾
+            case 'meteor': {
+                for (let i = 0; i < n; i++) {
+                    const a = 15 + 60 * (i / n);
+                    const rad = r * (0.3 + 0.7 * (i / n));
+                    gfx.fillColor = this.ctx.hex(color, a);
+                    gfx.circle(t[i].x, t[i].y, rad);
+                    gfx.fill();
+                }
+                break;
+            }
+
+            // 重力锤：暗物质震波环
+            case 'gravity': {
+                for (let i = 0; i < n; i += 2) {
+                    const a = 20 + 40 * (i / n);
+                    gfx.strokeColor = this.ctx.hex('#64748B', a);
+                    gfx.lineWidth = 1.5;
+                    gfx.circle(t[i].x, t[i].y, r * (0.8 + 0.3 * (i / n)));
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 轨道无人机：电弧点迹
+            case 'drone': {
+                for (let i = 0; i < n; i += 2) {
+                    const a = 15 + 50 * (i / n);
+                    gfx.fillColor = this.ctx.hex(color, a);
+                    gfx.circle(t[i].x, t[i].y, r * 0.3);
+                    gfx.fill();
+                }
+                break;
+            }
+
+            // 虚空撕裂者：青色裂隙痕迹
+            case 'void_tear': {
+                for (let i = 0; i < n - 1; i++) {
+                    const a = 15 + 60 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(color, a);
+                    gfx.lineWidth = r * 0.4;
+                    gfx.moveTo(t[i].x - r * 0.2, t[i].y);
+                    gfx.lineTo(t[i + 1].x + r * 0.2, t[i + 1].y);
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 冰狱审判：冰蓝橙双色交替
+            case 'icefire': {
+                for (let i = 0; i < n - 1; i++) {
+                    const clr = i % 2 === 0 ? '#7DD3FC' : '#FB923C';
+                    const a = 15 + 50 * (i / n);
+                    gfx.fillColor = this.ctx.hex(clr, a);
+                    gfx.circle(t[i].x, t[i].y, r * 0.25);
+                    gfx.fill();
+                }
+                break;
+            }
+
+            // 织网支配者：金色链网
+            case 'web': {
+                for (let i = 0; i < n - 1; i++) {
+                    const a = 15 + 50 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(color, a);
+                    gfx.lineWidth = 1.2;
+                    gfx.moveTo(t[i].x, t[i].y);
+                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    if (i % 2 === 0 && i + 2 < n) {
+                        gfx.moveTo(t[i].x, t[i].y);
+                        gfx.lineTo(t[i + 2].x, t[i + 2].y);
+                    }
+                    gfx.stroke();
+                }
+                break;
+            }
+
+            // 默认：简单线性淡出
+            default: {
+                for (let i = 0; i < n - 1; i++) {
+                    const a = 10 + 40 * (i / n);
+                    gfx.strokeColor = this.ctx.hex(color, a);
+                    gfx.lineWidth = 1;
+                    gfx.moveTo(t[i].x, t[i].y);
+                    gfx.lineTo(t[i + 1].x, t[i + 1].y);
+                    gfx.stroke();
+                }
+                break;
+            }
+        }
     }
 
     drawBullet(bullet: Bullet): void {
@@ -729,6 +957,12 @@ export class ProjectileManager {
         const c = bullet.color;
         const a = bullet.accent;
         const r = bullet.radius;
+
+        // ── 弹道拖尾（每种武器不同） ─────────────────────────────────
+        const trail = bullet.trail;
+        if (trail.length >= 2) {
+            this.drawBulletTrail(gfx, trail, bullet.style, c, a, r);
+        }
 
         switch (bullet.style) {
             // ── 冲锋枪：短小高速曳光弹，连续射击像“哒哒哒” ──
@@ -1323,6 +1557,7 @@ export class ProjectileManager {
         }
         bullet.hitIds.clear();
         bullet.gfx.clear();
+        bullet.trail.length = 0;
         bullet.node.active = false;
         this.bulletPool.push(bullet);
     }
@@ -1335,6 +1570,10 @@ export class ProjectileManager {
             bullet.x += bullet.vx * dt;
             bullet.y += bullet.vy * dt;
             bullet.node.setPosition(bullet.x, bullet.y, 6);
+
+            // 弹道拖尾：每帧记录位置，保持最多 10 个点
+            bullet.trail.push({ x: bullet.x, y: bullet.y });
+            if (bullet.trail.length > 10) bullet.trail.shift();
 
             if (bullet.life <= 0 || bullet.x < WORLD_LEFT - 180 || bullet.x > WORLD_RIGHT + 180 || bullet.y < WORLD_BOTTOM - 180 || bullet.y > WORLD_TOP + 180) {
                 // 机制: ricochet (荆棘连弩) — 撞墙反弹, 最多 2 次, 每次 +15% 伤害
