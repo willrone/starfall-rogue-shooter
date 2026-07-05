@@ -2382,7 +2382,8 @@ export class RogueShooterGame extends Component {
                 this.proj.createBullet(angle, damage, this.proj.getBulletPierce(), weaponStyle, weaponColor, shootMechanic);
             }
         } else if (shootMechanic === 'poison') {
-            // 瘟疫喷射器: 扇形毒雾, 不射子弹, 直接伤害锥形范围敌人
+            // 瘟疫喷射器：扇形持续喷雾。喷到敌人只叠中毒层数，不做每秒多次直伤；
+            // 提升攻速 = 更快叠层，DoT 每层每秒结算。
             const range = Math.min(this.getAttackRange(), 420);
             this.proj.spawnSprayCone(baseAngle, range, weaponColor);
             for (const enemy of this.enemyMgr.enemies) {
@@ -2398,13 +2399,9 @@ export class RogueShooterGame extends Component {
                 while (diff > Math.PI) diff -= Math.PI * 2;
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 if (Math.abs(diff) > 0.55) continue;
-                // 应用伤害+叠毒 (直接伤害, 不射子弹)
-                const roll = this.enemyMgr.rollOutgoingDamage(enemy, damage);
-                this.enemyMgr.damageEnemy(enemy, roll.amount, '#84CC16', roll.tag);
-                enemy.poisonStacks = Math.min(5, (enemy.poisonStacks || 0) + 1);
-                enemy.poisonTimer = 1.0;
-                enemy.poisonDps = 0.5 + damage * 0.3;
-                if (this.cs.shotCounter % 2 === 0) {
+                const beforeStacks = enemy.poisonStacks || 0;
+                const afterStacks = this.proj.applyPoisonStack(enemy, damage, 1);
+                if (afterStacks > beforeStacks && this.cs.shotCounter % 2 === 0) {
                     this.proj.spawnBulletHitSpark(pos.x, pos.y, weaponStyle, weaponColor, '#BBF7D0');
                 }
             }

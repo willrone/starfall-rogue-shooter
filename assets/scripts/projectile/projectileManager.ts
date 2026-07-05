@@ -11,6 +11,9 @@ import {
     weaponFireRateAtLevel,
     weaponPierceAtLevel,
     weaponBulletSpeedAtLevel,
+    calcPoisonDpsPerStack,
+    POISON_MAX_STACKS,
+    POISON_STACK_DURATION,
 } from '../core/combatFormulas';
 import {
     WORLD_LEFT,
@@ -206,40 +209,41 @@ export class ProjectileManager {
     // ── Bullet sprite cache ─────────────────────────────────────────
     private bulletSpriteFrames: Record<string, SpriteFrame | null> = {};
     private static readonly BULLET_STYLES: Record<string, string> = {
-        rifle: 'bullet_default',
-        smg: 'bullet_default',
-        spray: 'bullet_pulse',
-        frost: 'bullet_rail',
-        echo: 'bullet_default',
-        scatter: 'bullet_shotgun',
-        prism: 'bullet_pulse',
-        quantum: 'bullet_pulse',
-        ion: 'bullet_rail',
-        thorn: 'bullet_disc',
-        rail: 'bullet_rail',
-        void_needle: 'bullet_rail',
-        meteor: 'bullet_meteor',
-        drone: 'bullet_disc',
-        gravity: 'bullet_meteor',
-        void_tear: 'bullet_disc',
-        icefire: 'bullet_pulse',
-        web: 'bullet_disc',
+        rifle: 'vfx_bullet_rifle',
+        smg: 'vfx_bullet_smg',
+        spray: 'vfx_bullet_spray',
+        frost: 'vfx_bullet_frost',
+        echo: 'vfx_bullet_echo',
+        scatter: 'vfx_bullet_scatter',
+        prism: 'vfx_bullet_prism',
+        quantum: 'vfx_bullet_quantum',
+        ion: 'vfx_bullet_ion',
+        thorn: 'vfx_bullet_thorn',
+        rail: 'vfx_bullet_rail',
+        void_needle: 'vfx_bullet_void_needle',
+        meteor: 'vfx_bullet_meteor',
+        drone: 'vfx_bullet_drone',
+        gravity: 'vfx_bullet_gravity',
+        void_tear: 'vfx_bullet_void_tear',
+        icefire: 'vfx_bullet_icefire',
+        web: 'vfx_bullet_web',
         // Legacy aliases
-        shotgun: 'bullet_shotgun',
-        laser: 'bullet_rail',
-        pulse: 'bullet_pulse',
-        scythe: 'bullet_disc',
-        disc: 'bullet_disc',
-        chain: 'bullet_disc',
-        ricochet: 'bullet_default',
+        shotgun: 'vfx_bullet_scatter',
+        laser: 'vfx_bullet_rail',
+        pulse: 'vfx_bullet_prism',
+        scythe: 'vfx_bullet_void_tear',
+        disc: 'vfx_bullet_drone',
+        chain: 'vfx_bullet_web',
+        ricochet: 'vfx_bullet_thorn',
     };
 
     initEffectPools(worldNode: Node): void {
         this.sparkLayer = new Node('SparkLayer');
         worldNode.addChild(this.sparkLayer);
-        // Preload bullet sprites
-        for (const key of Object.keys(ProjectileManager.BULLET_STYLES)) {
-            const file = ProjectileManager.BULLET_STYLES[key];
+        // Preload transparent sprite primitives used as the visible texture layer for bullets.
+        // Graphics still draw the fallback shape, but the sprite layer is now independent from
+        // art/placeholder so replacing assets/resources/effects/vfx_bullet_*.png takes effect.
+        for (const file of new Set(Object.keys(ProjectileManager.BULLET_STYLES).map(key => ProjectileManager.BULLET_STYLES[key]))) {
             const path = `effects/${file}/spriteFrame`;
             resources.load(path, SpriteFrame, (_e, sf) => {
                 if (sf) this.bulletSpriteFrames[file] = sf;
@@ -458,6 +462,46 @@ export class ProjectileManager {
         }
     }
 
+    private getBulletSpriteFrameName(style: WeaponAttackStyle): string {
+        return ProjectileManager.BULLET_STYLES[style] || 'vfx_bullet_rifle';
+    }
+
+    private applyBulletSpriteFrame(bullet: Bullet): void {
+        if (!bullet.sprite) return;
+        const frameName = this.getBulletSpriteFrameName(bullet.style);
+        const sf = this.bulletSpriteFrames[frameName];
+        if (sf) {
+            bullet.sprite.spriteFrame = sf;
+            bullet.sprite.node.active = true;
+        } else {
+            // Keep Graphics fallback visible while async resources.load finishes.
+            bullet.sprite.node.active = false;
+        }
+    }
+
+    private getBulletSpriteSizeMultiplier(style: WeaponAttackStyle): number {
+        switch (style) {
+            case 'rail': return 9.2;
+            case 'void_needle': return 8.8;
+            case 'ion': return 8.4;
+            case 'frost': return 7.8;
+            case 'meteor': return 7.0;
+            case 'gravity': return 6.6;
+            case 'void_tear': return 6.4;
+            case 'icefire': return 6.0;
+            case 'prism': return 5.8;
+            case 'quantum': return 5.8;
+            case 'web': return 5.6;
+            case 'drone': return 5.4;
+            case 'scatter': return 5.2;
+            case 'echo': return 5.1;
+            case 'thorn': return 5.0;
+            case 'smg': return 4.9;
+            case 'spray': return 5.0;
+            default: return 5.0;
+        }
+    }
+
     // ── Weapon stat getters ───────────────────────────────────────────────
     // 每级成长率: 伤害+12%, 射速+10%, 穿透+10%, 弹速+8% (公式在 combatFormulas.ts)
 
@@ -567,13 +611,19 @@ export class ProjectileManager {
     }
 
     // ── 机制 3: poison (瘟疫喷射器) ──────────────────────────────────
-    // 命中叠 1 层毒 (上限 5), 每秒扣固定伤害 × stacks
+    // 喷雾命中只叠毒，不做多次直伤；攻速提升 = 更快叠层。
+    public applyPoisonStack(enemy: Enemy, sourceDamage: number, layers = 1): number {
+        if (enemy.boss) return enemy.poisonStacks || 0;
+        const previous = enemy.poisonStacks || 0;
+        enemy.poisonStacks = Math.min(POISON_MAX_STACKS, previous + Math.max(1, layers));
+        enemy.poisonTimer = enemy.poisonTimer > 0 ? enemy.poisonTimer : 1.0;
+        enemy.poisonDuration = POISON_STACK_DURATION;
+        enemy.poisonDps = calcPoisonDpsPerStack(sourceDamage);
+        return enemy.poisonStacks;
+    }
+
     private onPoisonHit(bullet: Bullet, enemy: Enemy): void {
-        if (enemy.boss) return;
-        enemy.poisonStacks = Math.min(5, enemy.poisonStacks + 1);
-        enemy.poisonTimer = 1.0;
-        // 基于当前子弹伤害计算每层每秒 DOT（使 DOT 随 baseDamage/升级成长）
-        enemy.poisonDps = 0.5 + bullet.damage * 0.3;
+        this.applyPoisonStack(enemy, bullet.damage, 1);
     }
 
     // ── 机制 4: knockback (重力锤) ───────────────────────────────────
@@ -671,16 +721,7 @@ export class ProjectileManager {
         bullet.node.active = true;
         bullet.node.setPosition(bullet.x, bullet.y, 6);
         bullet.node.angle = angle * 180 / Math.PI;
-        // Assign style-specific sprite
-        if (bullet.sprite) {
-            const sf = this.bulletSpriteFrames[ProjectileManager.BULLET_STYLES[style] || 'bullet_default'];
-            if (sf) {
-                bullet.sprite.spriteFrame = sf;
-                bullet.sprite.node.active = true;
-            } else if (bullet.gfx) {
-                bullet.sprite.node.active = false;
-            }
-        }
+        this.applyBulletSpriteFrame(bullet);
         this.drawBullet(bullet);
         this.bullets.push(bullet);
     }
@@ -692,10 +733,20 @@ export class ProjectileManager {
         const node = new Node('Bullet');
         node.layer = Layers.Enum.UI_2D;
         this.ctx.worldNode!.addChild(node);
-        node.addComponent(UITransform).setContentSize(24, 24);
+        node.addComponent(UITransform).setContentSize(30, 30);
         const gfx = node.addComponent(Graphics);
-        const sprite = this.ctx.addSpriteChild(node, 'BulletArt', 'bullet_plasma', 28, 28);
-        if (sprite) sprite.node.active = false; // hide until style is set in createBullet
+
+        // Do not create the bullet sprite through ctx.addSpriteChild('bullet_plasma').
+        // That path depends on art/placeholder preload timing, so replacing resources/effects
+        // could appear to do nothing in Cocos preview if the placeholder frame was missing.
+        const spriteNode = new Node('BulletArt');
+        spriteNode.layer = Layers.Enum.UI_2D;
+        node.addChild(spriteNode);
+        spriteNode.setPosition(0, 0, 1);
+        spriteNode.addComponent(UITransform).setContentSize(32, 32);
+        const sprite = spriteNode.addComponent(Sprite);
+        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        spriteNode.active = false; // enabled once the style-specific SpriteFrame is loaded
         return {
             node,
             gfx,
@@ -959,8 +1010,11 @@ export class ProjectileManager {
         const gfx = bullet.gfx;
         gfx.clear();
         if (bullet.sprite) {
-            bullet.sprite.color = this.ctx.hex(bullet.accent, 235);
-            bullet.sprite.node.getComponent(UITransform)?.setContentSize(bullet.radius * 3.2, bullet.radius * 3.2);
+            // Preserve the texture's own colors/alpha. Previously every bullet sprite was
+            // tinted to a single accent color, making replaced PNG resources look unchanged.
+            bullet.sprite.color = this.ctx.hex('#FFFFFF', 238);
+            const spriteSize = bullet.radius * this.getBulletSpriteSizeMultiplier(bullet.style);
+            bullet.sprite.node.getComponent(UITransform)?.setContentSize(spriteSize, spriteSize);
         }
         const c = bullet.color;
         const a = bullet.accent;
@@ -1632,6 +1686,7 @@ export class ProjectileManager {
                     splitBullet.node.active = true;
                     splitBullet.node.setPosition(splitBullet.x, splitBullet.y, 6);
                     splitBullet.node.angle = a * 180 / Math.PI;
+                    this.applyBulletSpriteFrame(splitBullet);
                     this.drawBullet(splitBullet);
                     this.bullets.push(splitBullet);
                 }
@@ -1788,6 +1843,235 @@ export class ProjectileManager {
 
     // ── Muzzle flash / hit spark ──────────────────────────────────────────
 
+    private drawMuzzleSignature(gfx: Graphics, style: WeaponAttackStyle, length: number, width: number, color: string, accent: string): void {
+        switch (style) {
+            case 'frost':
+                gfx.strokeColor = this.ctx.hex('#E0F2FE', 190);
+                gfx.lineWidth = 2;
+                for (const x of [length * 0.35, length * 0.65, length * 0.92]) {
+                    gfx.moveTo(x, -width * 0.42); gfx.lineTo(x + 8, 0); gfx.lineTo(x, width * 0.42);
+                }
+                gfx.stroke();
+                break;
+            case 'echo':
+                gfx.strokeColor = this.ctx.hex(accent, 115);
+                gfx.lineWidth = 2;
+                gfx.circle(length * 0.45, 0, width * 0.65);
+                gfx.circle(length * 0.72, 0, width * 0.95);
+                gfx.stroke();
+                break;
+            case 'scatter':
+            case 'shotgun':
+                gfx.fillColor = this.ctx.hex(accent, 145);
+                for (const lane of [-0.62, 0, 0.62]) {
+                    gfx.moveTo(length * 0.25, lane * width * 0.55);
+                    gfx.lineTo(length * 1.18, lane * width * 0.92 + width * 0.16);
+                    gfx.lineTo(length * 1.18, lane * width * 0.92 - width * 0.16);
+                    gfx.close();
+                    gfx.fill();
+                }
+                break;
+            case 'prism':
+                gfx.strokeColor = this.ctx.hex(accent, 150);
+                gfx.lineWidth = 2;
+                for (let i = 0; i < 6; i++) {
+                    const a = (Math.PI * 2 * i) / 6;
+                    gfx.moveTo(0, 0);
+                    gfx.lineTo(Math.cos(a) * width * 1.35, Math.sin(a) * width * 1.35);
+                }
+                gfx.stroke();
+                break;
+            case 'quantum':
+                gfx.strokeColor = this.ctx.hex('#99F6E4', 145);
+                gfx.lineWidth = 2;
+                gfx.circle(0, 0, width * 0.95);
+                gfx.moveTo(-width * 1.25, 0); gfx.lineTo(width * 1.25, 0);
+                gfx.stroke();
+                break;
+            case 'ion':
+                gfx.fillColor = this.ctx.hex(accent, 190);
+                gfx.moveTo(length * 1.26, 0);
+                gfx.lineTo(length * 0.74, -width * 0.76);
+                gfx.lineTo(length * 0.88, 0);
+                gfx.lineTo(length * 0.74, width * 0.76);
+                gfx.close();
+                gfx.fill();
+                break;
+            case 'thorn':
+                gfx.strokeColor = this.ctx.hex('#D9F99D', 180);
+                gfx.lineWidth = 2.2;
+                for (const x of [length * 0.38, length * 0.62, length * 0.86]) {
+                    gfx.moveTo(x, 0); gfx.lineTo(x - 10, -width * 0.5);
+                    gfx.moveTo(x, 0); gfx.lineTo(x - 10, width * 0.5);
+                }
+                gfx.stroke();
+                break;
+            case 'rail':
+                gfx.strokeColor = this.ctx.hex('#FFFFFF', 220);
+                gfx.lineWidth = 2.6;
+                gfx.moveTo(0, 0); gfx.lineTo(length * 1.48, 0);
+                gfx.stroke();
+                gfx.strokeColor = this.ctx.hex('#CBD5E1', 120);
+                gfx.lineWidth = 1.4;
+                gfx.moveTo(length * 0.22, -width * 0.52); gfx.lineTo(length * 1.30, -width * 0.52);
+                gfx.moveTo(length * 0.22, width * 0.52); gfx.lineTo(length * 1.30, width * 0.52);
+                gfx.stroke();
+                break;
+            case 'void_needle':
+                gfx.fillColor = this.ctx.hex('#020617', 95);
+                gfx.circle(length * 0.28, 0, width * 1.05);
+                gfx.fill();
+                gfx.strokeColor = this.ctx.hex('#F0ABFC', 210);
+                gfx.lineWidth = 1.8;
+                gfx.moveTo(0, 0); gfx.lineTo(length * 1.45, 0);
+                gfx.stroke();
+                break;
+            case 'meteor':
+                gfx.fillColor = this.ctx.hex('#FED7AA', 155);
+                for (const lane of [-0.45, 0.1, 0.52]) {
+                    gfx.circle(length * (0.44 + lane * 0.08), lane * width, width * (0.28 + Math.abs(lane) * 0.12));
+                    gfx.fill();
+                }
+                break;
+            case 'drone':
+                gfx.strokeColor = this.ctx.hex('#ECFCCB', 160);
+                gfx.lineWidth = 2;
+                gfx.circle(length * 0.22, 0, width * 0.72);
+                gfx.moveTo(length * 0.22 - width, -width * 0.42); gfx.lineTo(length * 0.22, 0); gfx.lineTo(length * 0.22 - width, width * 0.42);
+                gfx.moveTo(length * 0.22 + width, -width * 0.42); gfx.lineTo(length * 0.22, 0); gfx.lineTo(length * 0.22 + width, width * 0.42);
+                gfx.stroke();
+                break;
+            case 'gravity':
+                gfx.strokeColor = this.ctx.hex('#CBD5E1', 120);
+                gfx.lineWidth = 2;
+                gfx.circle(0, 0, width * 1.15);
+                gfx.circle(0, 0, width * 1.75);
+                gfx.stroke();
+                break;
+            case 'void_tear':
+                gfx.strokeColor = this.ctx.hex('#CFFAFE', 190);
+                gfx.lineWidth = 3;
+                gfx.moveTo(length * 0.10, -width * 0.28);
+                gfx.quadraticCurveTo(length * 0.54, -width * 1.25, length * 1.10, -width * 0.12);
+                gfx.stroke();
+                break;
+            case 'icefire':
+                gfx.fillColor = this.ctx.hex('#7DD3FC', 85); gfx.circle(length * 0.35, -width * 0.28, width * 0.85); gfx.fill();
+                gfx.fillColor = this.ctx.hex('#FB923C', 85); gfx.circle(length * 0.35, width * 0.28, width * 0.85); gfx.fill();
+                break;
+            case 'web':
+                gfx.strokeColor = this.ctx.hex('#FEF3C7', 165);
+                gfx.lineWidth = 2;
+                gfx.moveTo(0, 0); gfx.lineTo(length * 0.62, -width * 0.42); gfx.lineTo(length * 1.16, 0);
+                gfx.moveTo(length * 0.62, -width * 0.42); gfx.lineTo(length * 0.62, width * 0.52);
+                gfx.moveTo(length * 0.30, 0); gfx.lineTo(length * 0.84, width * 0.45);
+                gfx.stroke();
+                break;
+            default:
+                break;
+        }
+    }
+
+    private drawHitSparkSignature(gfx: Graphics, style: WeaponAttackStyle, radius: number, color: string, accent: string): void {
+        switch (style) {
+            case 'frost':
+                gfx.strokeColor = this.ctx.hex('#E0F2FE', 220);
+                gfx.lineWidth = 2;
+                for (let i = 0; i < 6; i++) {
+                    const a = (Math.PI * 2 * i) / 6;
+                    gfx.moveTo(Math.cos(a) * radius * 0.28, Math.sin(a) * radius * 0.28);
+                    gfx.lineTo(Math.cos(a) * radius * 1.05, Math.sin(a) * radius * 1.05);
+                }
+                gfx.stroke();
+                break;
+            case 'echo':
+                gfx.strokeColor = this.ctx.hex(accent, 150);
+                gfx.lineWidth = 2;
+                gfx.circle(0, 0, radius * 0.95);
+                gfx.circle(0, 0, radius * 1.35);
+                gfx.stroke();
+                break;
+            case 'scatter':
+            case 'shotgun':
+                gfx.fillColor = this.ctx.hex(accent, 190);
+                for (const [px, py] of [[0, 0], [-0.8, -0.48], [-0.8, 0.48]] as const) {
+                    gfx.circle(px * radius * 0.62, py * radius * 0.62, radius * 0.18);
+                    gfx.fill();
+                }
+                break;
+            case 'prism':
+                gfx.strokeColor = this.ctx.hex('#F0ABFC', 205);
+                gfx.lineWidth = 2.4;
+                for (let i = 0; i < 5; i++) {
+                    const a = (Math.PI * 2 * i) / 5;
+                    gfx.moveTo(0, 0); gfx.lineTo(Math.cos(a) * radius * 1.15, Math.sin(a) * radius * 1.15);
+                }
+                gfx.stroke();
+                break;
+            case 'quantum':
+                gfx.strokeColor = this.ctx.hex('#99F6E4', 205);
+                gfx.lineWidth = 2;
+                gfx.circle(0, 0, radius * 0.70);
+                gfx.moveTo(-radius, 0); gfx.lineTo(radius, 0);
+                gfx.stroke();
+                break;
+            case 'ion':
+            case 'rail':
+            case 'void_needle':
+                gfx.strokeColor = this.ctx.hex('#FFFFFF', 230);
+                gfx.lineWidth = 2.8;
+                gfx.moveTo(-radius * 1.35, 0); gfx.lineTo(radius * 1.35, 0);
+                gfx.stroke();
+                break;
+            case 'thorn':
+                gfx.strokeColor = this.ctx.hex('#D9F99D', 220);
+                gfx.lineWidth = 2;
+                for (let i = 0; i < 8; i++) {
+                    const a = (Math.PI * 2 * i) / 8;
+                    gfx.moveTo(Math.cos(a) * radius * 0.35, Math.sin(a) * radius * 0.35);
+                    gfx.lineTo(Math.cos(a) * radius * 1.0, Math.sin(a) * radius * 1.0);
+                }
+                gfx.stroke();
+                break;
+            case 'meteor':
+                gfx.fillColor = this.ctx.hex('#FED7AA', 190);
+                gfx.circle(-radius * 0.20, -radius * 0.10, radius * 0.32); gfx.fill();
+                gfx.fillColor = this.ctx.hex('#F97316', 160);
+                gfx.circle(radius * 0.22, radius * 0.15, radius * 0.45); gfx.fill();
+                break;
+            case 'gravity':
+                gfx.strokeColor = this.ctx.hex('#CBD5E1', 150);
+                gfx.lineWidth = 2.4;
+                gfx.circle(0, 0, radius * 1.05);
+                gfx.circle(0, 0, radius * 1.55);
+                gfx.stroke();
+                break;
+            case 'void_tear':
+                gfx.strokeColor = this.ctx.hex('#CFFAFE', 215);
+                gfx.lineWidth = 3;
+                gfx.moveTo(-radius * 0.95, -radius * 0.15);
+                gfx.quadraticCurveTo(0, -radius * 1.10, radius * 1.00, radius * 0.10);
+                gfx.stroke();
+                break;
+            case 'icefire':
+                gfx.fillColor = this.ctx.hex('#7DD3FC', 105); gfx.circle(-radius * 0.26, 0, radius * 0.62); gfx.fill();
+                gfx.fillColor = this.ctx.hex('#FB923C', 105); gfx.circle(radius * 0.26, 0, radius * 0.62); gfx.fill();
+                break;
+            case 'web':
+                gfx.strokeColor = this.ctx.hex('#FEF3C7', 200);
+                gfx.lineWidth = 2;
+                for (let i = 0; i < 6; i++) {
+                    const a = (Math.PI * 2 * i) / 6;
+                    gfx.moveTo(0, 0); gfx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+                }
+                gfx.circle(0, 0, radius * 0.55);
+                gfx.stroke();
+                break;
+            default:
+                break;
+        }
+    }
+
     spawnMuzzleFlash(angle: number, style: WeaponAttackStyle, color: string, shotCount: number): void {
         const idx = this.acquireFlash();
         if (idx < 0) return;
@@ -1847,6 +2131,7 @@ export class ProjectileManager {
             gfx.roundRect(length * 0.3, -width * 0.12, length * 0.58, width * 0.24, width * 0.12);
             gfx.fill();
         }
+        this.drawMuzzleSignature(gfx, style, length, width, color, this.getWeaponAccentColor(style, color));
         this.flashTimer[idx] = ProjectileManager.FLASH_LIFE * (style === 'spray' ? 3.0 : 1.8);
         this.flashActive++;
     }
@@ -2029,39 +2314,40 @@ export class ProjectileManager {
         const moveTo = (x: number, y: number) => { const q = p(x, y); gfx.moveTo(q.x, q.y); };
         const lineTo = (x: number, y: number) => { const q = p(x, y); gfx.lineTo(q.x, q.y); };
         const circle = (x: number, y: number, r: number) => { const q = p(x, y); gfx.circle(q.x, q.y, r); };
-        const strokePath = (lane: number, color: string, alpha: number, width: number, wiggle: number) => {
-            gfx.strokeColor = this.ctx.hex(color, Math.round(alpha * alphaMul));
-            gfx.lineWidth = width;
-            for (let s = 0; s <= 9; s++) {
-                const t = s / 9;
-                const x = 18 + length * (0.05 + t * 0.82);
-                const spread = halfWidth * (0.10 + t * 0.50);
-                const y = lane * spread + Math.sin((t * 5.4 + cone.seed * 0.19 + lane) * Math.PI) * wiggle * (0.35 + t);
-                if (s === 0) moveTo(x, y); else lineTo(x, y);
-            }
-            gfx.stroke();
+        const mistBlob = (x: number, y: number, r: number, color: string, alpha: number) => {
+            gfx.fillColor = this.ctx.hex(color, Math.round(alpha * alphaMul));
+            circle(x, y, r);
+            gfx.fill();
         };
 
-        // Cocos 官方推荐攻击/自然特效优先用“粒子纹理 + 发射器 + 生命周期”，
-        // 这里用单 Graphics 只画低透明导向气流，真正体积感交给 pooled mist sprites。
-        // 禁止再画整块高亮实心扇形，否则会像荧光油漆刷。
-        gfx.fillColor = this.ctx.hex('#14532D', Math.round(26 * alphaMul));
-        moveTo(12, -12);
-        lineTo(length * 0.34, -halfWidth * 0.42);
-        lineTo(length * 0.88, -halfWidth * 0.26);
+        // Cocos 官方推荐攻击/自然特效优先用“粒子纹理 + 发射器 + 生命周期”。
+        // 这里不再画硬折线气流；用户实测会看成几根折线。Graphics 只保留低透明雾底、
+        // 软雾团和少量液滴，真正体积感交给 pooled mist sprites。
+        gfx.fillColor = this.ctx.hex('#14532D', Math.round(16 * alphaMul));
+        moveTo(12, -10);
+        lineTo(length * 0.28, -halfWidth * 0.34);
+        lineTo(length * 0.74, -halfWidth * 0.32);
         lineTo(length * 0.96, 0);
-        lineTo(length * 0.88, halfWidth * 0.26);
-        lineTo(length * 0.34, halfWidth * 0.42);
-        lineTo(12, 12);
+        lineTo(length * 0.74, halfWidth * 0.32);
+        lineTo(length * 0.28, halfWidth * 0.34);
+        lineTo(12, 10);
         gfx.close();
         gfx.fill();
 
-        // Thin turbulent streams — readable direction, but not a solid beam.
-        strokePath(0.00, '#D9F99D', 128, 7, 12);
-        strokePath(-0.48, '#86EFAC', 92, 5, 15);
-        strokePath(0.48, '#A3E635', 92, 5, 15);
-        strokePath(-0.20, '#22C55E', 62, 3, 18);
-        strokePath(0.22, '#22C55E', 62, 3, 18);
+        // Soft turbulent fog clusters. These replace the old hard stream polylines,
+        // so the sprayer reads as poisonous mist rather than lightning/折线.
+        for (let i = 0; i < 18; i++) {
+            const r0 = this.sprayRand(cone.seed, 220 + i * 5);
+            const r1 = this.sprayRand(cone.seed, 221 + i * 5);
+            const r2 = this.sprayRand(cone.seed, 222 + i * 5);
+            const t = 0.08 + r0 * 0.86;
+            const spread = halfWidth * (0.12 + t * 0.50);
+            const x = 22 + length * t;
+            const y = (r1 - 0.5) * 2 * spread + Math.sin((i + cone.seed) * 1.27) * 7;
+            const radius = 13 + r2 * 23 + t * 8;
+            const color = i % 4 === 0 ? '#D9F99D' : i % 4 === 1 ? '#86EFAC' : i % 4 === 2 ? '#A3E635' : '#22C55E';
+            mistBlob(x, y, radius, color, i % 4 === 0 ? 22 : 15);
+        }
 
         // Small muzzle cloud, replacing the previous huge neon origin blob.
         gfx.fillColor = this.ctx.hex('#D9F99D', Math.round(76 * alphaMul));
@@ -2165,6 +2451,7 @@ export class ProjectileManager {
             gfx.lineTo(0, radius * 0.45);
             gfx.stroke();
         }
+        this.drawHitSparkSignature(gfx, style, radius, color, accent);
         this.sparkTimer[idx] = ProjectileManager.SPARK_LIFE * (isBig ? 2.2 : 1.5);
         this.sparkActive++;
     }

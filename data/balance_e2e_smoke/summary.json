@@ -1,14 +1,14 @@
 [
   {
-    "weapon_id": "echo-bow-standard",
-    "weapon_name": "回声弓",
-    "tier": "standard",
-    "target_profile": "standard",
+    "weapon_id": "storm-rifle",
+    "weapon_name": "冲锋枪",
+    "tier": "novice",
+    "target_profile": "novice",
     "runs": 1,
-    "p50": 6,
-    "p90": 6,
-    "avg_kills": 585,
-    "avg_level": 9,
+    "p50": 3,
+    "p90": 3,
+    "avg_kills": 146,
+    "avg_level": 5,
     "passes": false
   }
 ]

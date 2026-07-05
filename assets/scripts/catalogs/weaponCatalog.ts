@@ -30,7 +30,7 @@ export interface WeaponVariant {
 export const WEAPON_FAMILIES: WeaponFamily[] = [
     // ── Novice (3 把) ─── 目标 DPS 25-40 ──────────
     { id: 'storm-rifle', name: '冲锋枪', color: '#F97316', damage: 8, fireRate: 3.0, pierce: 0.0, drone: 0.0, bulletSpeed: 1.6, attackRange: 480, mechanic: 'overheat', desc: '冲锋枪，连续射击射速逐层提升（+50%），停火冷却。攻击距离短。' },
-    { id: 'plague-sprayer', name: '瘟疫喷射器', color: '#84CC16', damage: 5, fireRate: 5.0, pierce: 0.0, drone: 0.0, bulletSpeed: 0.0, attackRange: 380, mechanic: 'poison', desc: '扇形持续喷雾，每秒 8 次对范围内敌人造成毒伤+叠毒，近距离面伤。' },
+    { id: 'plague-sprayer', name: '瘟疫喷射器', color: '#84CC16', damage: 5, fireRate: 5.0, pierce: 0.0, drone: 0.0, bulletSpeed: 0.0, attackRange: 380, mechanic: 'poison', desc: '扇形持续喷雾，命中只叠中毒层数；每层每秒造成毒伤。提升攻速会加快叠层速度。' },
     { id: 'frost-beamer', name: '霜束发射器', color: '#60A5FA', damage: 10, fireRate: 2.2, pierce: 0.3, drone: 0.0, bulletSpeed: 1.4, attackRange: 660, mechanic: 'slow', desc: '高频冰弹, 命中减速目标 0.4 秒。' },
 
     // ── Standard (4 把) ─── 目标 DPS 30-45 ────────

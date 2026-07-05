@@ -23,6 +23,7 @@ import type { CombatState } from '../state/combatState';
 
 import { periodicFollowPhase } from './enemyMovement';
 import { spawnCircle, spawnChargeWave, spawnCross, spawnPincer } from './enemySpawnPatterns';
+import { POISON_TICK_INTERVAL } from '../core/combatFormulas';
 
 import * as EnemyConst from "./enemyConstants";
 export * from "./enemyConstants";
@@ -418,6 +419,9 @@ export class EnemyManager {
             const dy = py - ey;
             const distSq = dx * dx + dy * dy;
 
+            // ── 状态效果（毒/减速等）必须在所有优化分支前处理，确保远处/降频敌人也能 tick DoT ─────
+            this.updateEnemyStatusEffects(enemy, dt);
+
             // Distance culling: enemies far from screen get simplified movement
             if (distSq > FAR_CULL_DIST_SQ) {
                 const dist = Math.max(0.001, Math.sqrt(distSq));
@@ -478,6 +482,7 @@ export class EnemyManager {
                 vx += (-dirY) * orbitSign * orbitDistanceWeight * 0.45;
                 vy += (dirX) * orbitSign * orbitDistanceWeight * 0.45;
             }
+            let moveSpeed = enemy.speed;
             // ── 远程怪"追→停→射"节奏 ──
             // seeker / aura 等远程怪：追一阵→停住射击→再追
             if (enemy.movementType === 'periodic-follow') {
@@ -492,7 +497,6 @@ export class EnemyManager {
                     moveSpeed = 0;
                 }
             }
-            let moveSpeed = enemy.speed;
             if (enemy.dashTimer > 0) {
                 enemy.dashTimer = Math.max(0, enemy.dashTimer - dt);
                 vx = enemy.dashVx;
@@ -515,22 +519,6 @@ export class EnemyManager {
                     else enemy.knockbackVx *= knockDecay;
                     if (Math.abs(enemy.knockbackVy) < 5) enemy.knockbackVy = 0;
                     else enemy.knockbackVy *= knockDecay;
-                }
-                // ── 机制词条: 毒 (瘟疫) ───────────────────────────────
-                if (enemy.poisonStacks > 0) {
-                    enemy.poisonTimer -= dt;
-                    if (enemy.poisonTimer <= 0) {
-                        // tick: 固定伤害 per stack（由 onPoisonHit 基于子弹伤害计算）
-                        const dot = (enemy.poisonDps || 2) * enemy.poisonStacks;
-                        enemy.hp -= dot;
-                        if (enemy.hp <= 0) {
-                            this.killEnemy(enemy);
-                        } else {
-                            const p = this.getEnemyPosition(enemy);
-                            this.ctx.spawnFloatingText(`毒 ${Math.ceil(dot)}`, p.x, p.y + enemy.radius + 8, '#84CC16', 18);
-                        }
-                        enemy.poisonTimer = 1.0;
-                    }
                 }
                 const steer = this.getEnemyCrowdSteer(enemy, crowdGrid, ex, ey, dirX, dirY, dist);
                 vx += steer.x;
@@ -673,6 +661,35 @@ export class EnemyManager {
             this.drawEnemy(enemy);
         }
     }
+
+    public updateEnemyStatusEffects(enemy: Enemy, dt: number) {
+        // ── 机制词条: 毒 (瘟疫) ───────────────────────────────
+        // 必须在远怪降频优化之前调用，确保即使远处的敌人也能正常 tick DoT
+        if (enemy.poisonStacks > 0) {
+            enemy.poisonDuration = Math.max(0, (enemy.poisonDuration || 0) - dt);
+            if (enemy.poisonDuration <= 0) {
+                enemy.poisonStacks = 0;
+                enemy.poisonDps = 0;
+                enemy.poisonTimer = 0;
+            } else {
+                enemy.poisonTimer -= dt;
+                if (enemy.poisonTimer <= 0) {
+                    // tick: 每层每秒固定伤害；喷雾本身只叠层，不做多次直伤。
+                    const dot = (enemy.poisonDps || 2) * enemy.poisonStacks * POISON_TICK_INTERVAL;
+                    enemy.hp -= dot;
+                    if (enemy.hp <= 0) {
+                        this.killEnemy(enemy);
+                    } else {
+                        const p = this.getEnemyPosition(enemy);
+                        this.ctx.spawnFloatingText(`毒${enemy.poisonStacks} ${Math.ceil(dot)}`, p.x, p.y + enemy.radius + 8, '#84CC16', 18);
+                    }
+                    enemy.poisonTimer += POISON_TICK_INTERVAL;
+                    if (enemy.poisonTimer <= 0) enemy.poisonTimer = POISON_TICK_INTERVAL;
+                }
+            }
+        }
+    }
+
     public updateEnemySkill(enemy: Enemy, dt: number, dist: number, dirX: number, dirY: number) {
         enemy.skillTimer -= dt;
         enemy.armorTimer = Math.max(0, enemy.armorTimer - dt);
@@ -1638,6 +1655,7 @@ export class EnemyManager {
             slowFactor: 0,
             poisonStacks: 0,
             poisonTimer: 0,
+            poisonDuration: 0,
             poisonDps: 0,
             knockbackVx: 0,
             knockbackVy: 0,

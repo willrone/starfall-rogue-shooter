@@ -125,6 +125,29 @@ def delayed(t: float, start: float, duration: float, fn: SampleFn, amp: float = 
     return amp * env_decay(local, duration, 0.002, 2.0) * fn(local)
 
 
+def spray_hiss_sfx(duration: float = 0.42) -> list[float]:
+    """Continuous wet poison-sprayer burst: low-passed hiss + subtle pump tone.
+
+    The old 0.205s white-noise chirp read as a short click/pulse. This one is long
+    enough to overlap consecutive plague-sprayer shots and feel like a pressure spray.
+    """
+    rng = random.Random(70205)
+    samples: list[float] = []
+    smooth = 0.0
+    for i in range(int(SAMPLE_RATE * duration)):
+        t = i / SAMPLE_RATE
+        white = rng.uniform(-1.0, 1.0)
+        smooth += (white - smooth) * 0.16
+        turbulent = 0.68 * smooth + 0.32 * white
+        pump = 0.72 + 0.28 * sine(31, t)
+        low_pressure = 0.20 * sine(sweep(245, 150, t, duration), t)
+        wet_whistle = 0.075 * sine(720 + 70 * sine(7, t), t)
+        fade_in = min(1.0, t / 0.035)
+        fade_out = min(1.0, max(0.0, (duration - t) / 0.13)) ** 0.55
+        samples.append(clamp((turbulent * pump + low_pressure + wet_whistle) * fade_in * fade_out * 0.47))
+    return samples
+
+
 def make_sfx() -> dict[str, list[float]]:
     random.seed(42)
     return {
@@ -151,7 +174,7 @@ def make_sfx() -> dict[str, list[float]]:
 
         # 17 dedicated primary-weapon shoot signatures.
         "sfx_shoot_smg": render(0.072, lambda t: env_decay(t, 0.072, 0.0015, 2.2) * (0.65 * square(sweep(920, 520, t, 0.072), t) + 0.35 * noise(t)), 0.32),
-        "sfx_shoot_spray": render(0.205, lambda t: env_decay(t, 0.205, 0.012, 1.15) * (0.78 * noise(t) + 0.22 * sine(sweep(420, 230, t, 0.205), t)), 0.32),
+        "sfx_shoot_spray": spray_hiss_sfx(),
         "sfx_shoot_frost": render(0.18, lambda t: env_decay(t, 0.18, 0.003, 1.55) * (0.55 * sine(sweep(2100, 1320, t, 0.18), t) + 0.25 * sine(3150, t) + 0.20 * tri(840, t)), 0.34),
         "sfx_shoot_echo": render(0.24, lambda t: env_decay(t, 0.11, 0.002, 2.0) * (0.72 * tri(sweep(760, 510, t, 0.11), t) + 0.28 * noise(t)) + delayed(t, 0.058, 0.11, lambda u: tri(sweep(640, 420, u, 0.11), u), 0.55), 0.38),
         "sfx_shoot_scatter": render(0.165, lambda t: env_decay(t, 0.165, 0.002, 1.55) * (0.72 * noise(t) + 0.28 * square(sweep(300, 105, t, 0.165), t)), 0.58),

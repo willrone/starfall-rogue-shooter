@@ -23,7 +23,7 @@ export interface ShootSfxProfile {
 // 17 把主武器必须一把一套独立射击音效。legacy aliases 只给旧存档/旧测试兜底。
 export const WEAPON_SHOOT_SFX: Record<WeaponAttackStyle, ShootSfxProfile> = {
     smg: { clip: 'sfx_shoot_smg', volume: 0.56, cooldown: 0.026 },
-    spray: { clip: 'sfx_shoot_spray', volume: 0.62, cooldown: 0.052 },
+    spray: { clip: 'sfx_shoot_spray', volume: 0.70, cooldown: 0.115 },
     frost: { clip: 'sfx_shoot_frost', volume: 0.64, cooldown: 0.070 },
     echo: { clip: 'sfx_shoot_echo', volume: 0.66, cooldown: 0.085 },
     scatter: { clip: 'sfx_shoot_scatter', volume: 0.78, cooldown: 0.090 },

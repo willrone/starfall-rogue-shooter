@@ -22,6 +22,10 @@ import {
     calcBulletDamage,
     calcFireInterval,
     calcBulletPierce,
+    calcPoisonDpsPerStack,
+    calcPoisonSustainedDps,
+    calcPoisonTimeToMaxStacks,
+    POISON_MAX_STACKS,
     weaponDamageAtLevel,
     weaponFireRateAtLevel,
     averageEnemyHp,
@@ -73,6 +77,11 @@ const ALL_WEAPONS: WeaponSpec[] = WEAPON_FAMILIES.map((w) => ({
 
 function weaponDps(ws: WeaponSpec, level: number, extraStats: Partial<CharacterStats> = {}): number {
     const stats = { ...BASE, ...extraStats };
+    if (ws.mechanic === 'poison') {
+        const damage = calcBulletDamage(ws.damage, level, stats);
+        const stackRate = 1 / calcFireInterval(ws.fireRate, level, stats);
+        return calcPoisonSustainedDps(damage, stackRate);
+    }
     return calcDps(ws.damage, ws.fireRate, level, stats);
 }
 
@@ -157,6 +166,32 @@ function testWeaponDpsFingerprint() {
     }
 }
 
+// ── 测试 5b: 瘟疫喷射器是叠毒器，不是每秒多次直伤枪 ────────────────
+function testPoisonSprayerStackingModel() {
+    const plague = ALL_WEAPONS.find(w => w.id === 'plague-sprayer');
+    if (!plague) throw new Error('plague-sprayer must exist');
+    const damage = calcBulletDamage(plague.damage, 1, BASE);
+    const interval = calcFireInterval(plague.fireRate, 1, BASE);
+    const stackRate = 1 / interval;
+    const perStack = calcPoisonDpsPerStack(damage);
+    const sustained = calcPoisonSustainedDps(damage, stackRate);
+
+    assert.equal(POISON_MAX_STACKS, 12, 'Plague sprayer should have enough stack headroom for attack-speed growth');
+    assert(stackRate >= 4.5 && stackRate <= 6.0,
+        `Base plague stack rate ${stackRate.toFixed(2)}/s should be a few poison layers per second, not 8 direct hits/s`);
+    assert(perStack >= 2.0 && perStack <= 3.0,
+        `Poison per-stack DPS ${perStack.toFixed(2)} should be readable but not bursty`);
+    assert(sustained >= 28 && sustained <= 34,
+        `Poison max-stack sustained DPS ${sustained.toFixed(1)} should stay in novice DPS band`);
+    assert(calcPoisonTimeToMaxStacks(stackRate) >= 2.0,
+        'Base plague sprayer should ramp over time instead of instantly capping stacks');
+
+    const fastStats = { ...BASE, attackSpeed: BASE.attackSpeed + 1.0 };
+    const fastStackRate = 1 / calcFireInterval(plague.fireRate, 1, fastStats);
+    assert(fastStackRate > stackRate,
+        'Attack speed should increase plague-sprayer poison stacking speed');
+}
+
 // ── 测试 6: 检查穿透期望值是否在合理范围 ────────────────────────────
 function testPierceValues() {
     for (const w of ALL_WEAPONS) {
@@ -199,6 +234,7 @@ export function testCombatBalance() {
     testUpgradeBoost();
     testWavePressure();
     testWeaponDpsFingerprint();
+    testPoisonSprayerStackingModel();
     testPierceValues();
     testAverageEnemyHp();
     testEstimateP50();

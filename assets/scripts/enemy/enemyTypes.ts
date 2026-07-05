@@ -37,9 +37,10 @@ export interface Enemy {
     // ── 机制词条状态字段 (Phase 2) ─────────────────────────────────
     slowTimer: number;      // 霜束发射器: 减速剩余时间 (秒)
     slowFactor: number;     // 霜束发射器: 减速系数, 0.4 = 60% 减速
-    poisonStacks: number;   // 瘟疫喷射器: 毒层数 (上限 5)
+    poisonStacks: number;   // 瘟疫喷射器: 毒层数 (上限 12)
     poisonTimer: number;    // 瘟疫喷射器: 毒 tick 计时器
-    poisonDps: number;      // 瘟疫喷射器: 每层每秒固定伤害（由子弹伤害计算）
+    poisonDuration: number; // 瘟疫喷射器: 未继续喷到时的层数保留时间
+    poisonDps: number;      // 瘟疫喷射器: 每层每秒固定伤害（由武器伤害计算）
     knockbackVx: number;    // 重力锤: 击退速度 X
     knockbackVy: number;    // 重力锤: 击退速度 Y
     // ── Boss 技能状态字段 ───────────────────────────────────────────

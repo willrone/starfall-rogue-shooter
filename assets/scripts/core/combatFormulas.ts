@@ -35,6 +35,29 @@ export function weaponBulletSpeedAtLevel(base: number, level: number): number {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Poison sprayer stacking model
+// ═══════════════════════════════════════════════════════════════════════
+
+export const POISON_MAX_STACKS = 12;
+export const POISON_STACK_DURATION = 3.4;
+export const POISON_TICK_INTERVAL = 1.0;
+
+/** 每层中毒每秒伤害：跟武器伤害/等级/攻击力成长，但不是每次喷射的直接伤害。 */
+export function calcPoisonDpsPerStack(bulletDamage: number): number {
+    return Math.max(1.2, 0.45 + bulletDamage * 0.28);
+}
+
+/** 当前叠层速度达到满层所需时间。攻速越高，叠层越快。 */
+export function calcPoisonTimeToMaxStacks(stackRatePerSecond: number, maxStacks = POISON_MAX_STACKS): number {
+    return maxStacks / Math.max(0.1, stackRatePerSecond);
+}
+
+/** 满层后的稳定 DoT DPS，用于平衡指纹。 */
+export function calcPoisonSustainedDps(bulletDamage: number, _stackRatePerSecond: number, maxStacks = POISON_MAX_STACKS): number {
+    return calcPoisonDpsPerStack(bulletDamage) * maxStacks;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Bullet damage / fire interval / pierce (纯函数版)
 // ═══════════════════════════════════════════════════════════════════════
 // 所有百分比加成都是相对于武器基础值的加法，不复利：
