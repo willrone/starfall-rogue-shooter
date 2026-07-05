@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+icefire-judge-standard,冰狱审判,standard,standard,1,38766,10,568.93,1341,14,657,13,combat,302.65,False,

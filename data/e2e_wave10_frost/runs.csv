@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+frost-beamer-standard,霜束发射器,novice,novice,1,6496,6,292.55,541,10,147,7,paused,0.0,True,

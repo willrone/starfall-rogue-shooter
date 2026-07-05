@@ -14,6 +14,43 @@ export interface AudioHostContext {
     refreshSettingsPanel(): void;
 }
 
+export interface ShootSfxProfile {
+    clip: string;
+    volume: number;
+    cooldown: number;
+}
+
+// 17 把主武器必须一把一套独立射击音效。legacy aliases 只给旧存档/旧测试兜底。
+export const WEAPON_SHOOT_SFX: Record<WeaponAttackStyle, ShootSfxProfile> = {
+    smg: { clip: 'sfx_shoot_smg', volume: 0.56, cooldown: 0.026 },
+    spray: { clip: 'sfx_shoot_spray', volume: 0.70, cooldown: 0.115 },
+    frost: { clip: 'sfx_shoot_frost', volume: 0.64, cooldown: 0.070 },
+    echo: { clip: 'sfx_shoot_echo', volume: 0.66, cooldown: 0.085 },
+    scatter: { clip: 'sfx_shoot_scatter', volume: 0.78, cooldown: 0.090 },
+    prism: { clip: 'sfx_shoot_prism', volume: 0.66, cooldown: 0.082 },
+    quantum: { clip: 'sfx_shoot_quantum', volume: 0.66, cooldown: 0.080 },
+    ion: { clip: 'sfx_shoot_ion', volume: 0.76, cooldown: 0.110 },
+    thorn: { clip: 'sfx_shoot_thorn', volume: 0.66, cooldown: 0.075 },
+    rail: { clip: 'sfx_shoot_rail_cannon', volume: 0.82, cooldown: 0.135 },
+    void_needle: { clip: 'sfx_shoot_void_needle', volume: 0.70, cooldown: 0.095 },
+    meteor: { clip: 'sfx_shoot_meteor_launcher', volume: 0.74, cooldown: 0.150 },
+    drone: { clip: 'sfx_shoot_orbital_drone', volume: 0.62, cooldown: 0.075 },
+    gravity: { clip: 'sfx_shoot_gravity_hammer', volume: 0.78, cooldown: 0.170 },
+    void_tear: { clip: 'sfx_shoot_void_tear', volume: 0.72, cooldown: 0.088 },
+    icefire: { clip: 'sfx_shoot_icefire', volume: 0.72, cooldown: 0.105 },
+    web: { clip: 'sfx_shoot_web', volume: 0.66, cooldown: 0.082 },
+
+    // Legacy style aliases kept for older code paths. New weapon families above must not share clips.
+    rifle: { clip: 'sfx_shoot_default', volume: 0.64, cooldown: 0.055 },
+    shotgun: { clip: 'sfx_shoot_shotgun', volume: 0.78, cooldown: 0.090 },
+    laser: { clip: 'sfx_shoot_laser', volume: 0.68, cooldown: 0.080 },
+    chain: { clip: 'sfx_shoot_pulse', volume: 0.62, cooldown: 0.075 },
+    pulse: { clip: 'sfx_shoot_pulse', volume: 0.62, cooldown: 0.075 },
+    disc: { clip: 'sfx_shoot_disc', volume: 0.68, cooldown: 0.100 },
+    ricochet: { clip: 'sfx_shoot_rifle', volume: 0.66, cooldown: 0.070 },
+    scythe: { clip: 'sfx_shoot_disc', volume: 0.68, cooldown: 0.100 },
+};
+
 export class AudioManager {
     sfxSource: AudioSource | null = null;
     bgmSource: AudioSource | null = null;
@@ -78,28 +115,8 @@ export class AudioManager {
     }
 
     playShootSfx(style: WeaponAttackStyle): void {
-        switch (style) {
-            case 'shotgun':
-                this.playSfx('sfx_shoot_shotgun', 0.78, 0.09);
-                break;
-            case 'rail':
-                this.playSfx('sfx_shoot_rail', 0.78, 0.12);
-                break;
-            case 'laser':
-            case 'pulse':
-                this.playSfx('sfx_shoot_laser', 0.68, 0.08);
-                break;
-            case 'meteor':
-                this.playSfx('sfx_shoot_meteor', 0.72, 0.14);
-                break;
-            case 'disc':
-            case 'scythe':
-                this.playSfx('sfx_shoot_disc', 0.68, 0.1);
-                break;
-            default:
-                this.playSfx('sfx_shoot_default', 0.64, 0.055);
-                break;
-        }
+        const profile = WEAPON_SHOOT_SFX[style] || WEAPON_SHOOT_SFX.rifle;
+        this.playSfx(profile.clip, profile.volume, profile.cooldown);
     }
 
     requestBgm(name: string): void {

@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "orbital-drone",
+    "weapon_name": "轨道无人机",
+    "tier": "boss_clear",
+    "target_profile": "boss_clear",
+    "runs": 1,
+    "p50": 8,
+    "p90": 8,
+    "avg_kills": 861,
+    "avg_level": 12,
+    "passes": false
+  }
+]

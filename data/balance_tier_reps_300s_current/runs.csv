@@ -1,0 +1,5 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died
+storm-rifle,风暴步枪,novice,novice,1,57127,4,194.3,109,4,47,0,paused,0.0,True
+echo-bow-standard,回声弓,standard,standard,1,36479,6,286.68,280,7,175,3,combat,235.0,False
+ion-lance-standard,离子长枪,boss_gate,boss_gate,1,84511,6,284.18,359,8,104,3,combat,170.52,False
+meteor-launcher-standard,流星发射器,boss_clear,boss_clear,1,57916,6,285.38,415,8,93,3,paused,0.0,True

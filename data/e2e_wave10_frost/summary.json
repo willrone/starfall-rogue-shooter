@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "frost-beamer-standard",
+    "weapon_name": "霜束发射器",
+    "tier": "novice",
+    "target_profile": "novice",
+    "runs": 1,
+    "p50": 6,
+    "p90": 6,
+    "avg_kills": 541,
+    "avg_level": 10,
+    "passes": true
+  }
+]

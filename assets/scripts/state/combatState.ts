@@ -24,6 +24,11 @@ export interface CombatState {
     biomass: number;
     circuits: number;
     crystals: number;
+    voidFragment: number;
+    energyCore: number;
+    frostCore: number;
+    infernoCore: number;
+    webSilk: number;
 
     // ── Player combat state ─────────────────────────────────────
     playerX: number;
@@ -43,6 +48,9 @@ export interface CombatState {
     regenTimer: number;
     shotCounter: number;
     activeWeaponIndex: number;
+    // 冰霜减速状态
+    slowTimer: number;
+    slowFactor: number;
 
     // ── 机制词条状态 (Phase 2) ─────────────────────────────────────────
     critStacks: number;
@@ -50,6 +58,8 @@ export interface CombatState {
     pierceStacks: number;
     pierceStackTimer: number;
     droneCharge: number;
+    overheatStacks: number;    // 冲锋枪: 连续射击层数 (0-5), +10%射速/层
+    overheatTimer: number;     // 冲锋枪: 距上次射击时间, >0.8s 开始衰减
 
     // ── Wave state ──────────────────────────────────────────────
     combatTime: number;
@@ -79,6 +89,15 @@ export interface CombatState {
 
     // ── Per-battle shield fragments ──────────────────────────────
     shieldFragments: number;
+
+    // ── Boss 机制区域 ───────────────────────────────────────────
+    frostZones: { x: number; y: number; radius: number; damage: number; duration: number; }[];
+    fireZones: { x: number; y: number; radius: number; damage: number; duration: number; }[];
+    burrowedEnemyIds: number[];
+
+    // ── 副武器 ─────────────────────────────────────────────────
+    equippedOffhandId: string | null;   // 战斗中已装备的副武器 id
+    offhandLevel: number;               // 副武器当前等级（T1=1, T5=5）
 }
 
 /**
@@ -99,14 +118,19 @@ export function createCombatState(): CombatState {
         biomass: 0,
         circuits: 0,
         crystals: 0,
+        voidFragment: 0,
+        energyCore: 0,
+        frostCore: 0,
+        infernoCore: 0,
+        webSilk: 0,
 
         // Player combat state
         playerX: 0,
         playerY: -170,
         cameraX: 0,
         cameraY: 0,
-        playerHp: 180,
-        playerMaxHp: 180,
+        playerHp: 50,
+        playerMaxHp: 50,
         playerShield: 0,
         playerShieldMax: 0,
         shieldRechargeDelay: 0,
@@ -118,11 +142,15 @@ export function createCombatState(): CombatState {
         regenTimer: 0,
         shotCounter: 0,
         activeWeaponIndex: 0,
+        slowTimer: 0,
+        slowFactor: 1,
         critStacks: 0,
         attackSpeedBoostTimer: 0,
         pierceStacks: 0,
         pierceStackTimer: 0,
         droneCharge: 0,
+        overheatStacks: 0,
+        overheatTimer: 0,
 
         // Wave state
         combatTime: 0,
@@ -150,6 +178,15 @@ export function createCombatState(): CombatState {
         xp: 0,
         xpToNext: 65,
         shieldFragments: 0,
+
+        // Boss 机制区域
+        frostZones: [],
+        fireZones: [],
+        burrowedEnemyIds: [],
+
+        // 副武器（空场不装备，进入战斗再装）
+        equippedOffhandId: null,
+        offhandLevel: 0,
     };
 }
 
@@ -199,8 +236,15 @@ export function resetCombatSession(state: CombatState): void {
     state.regenTimer = 0;
     state.shotCounter = 0;
     state.activeWeaponIndex = 0;
+    state.slowTimer = 0;
+    state.slowFactor = 1;
     state.playerX = 0;
     state.playerY = -190;
     state.shieldRechargeDelay = 0;
     state.invulnerableTimer = 0;
+
+    // Boss 机制区域
+    state.frostZones = [];
+    state.fireZones = [];
+    state.burrowedEnemyIds = [];
 }

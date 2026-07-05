@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "webmaster-standard",
+    "weapon_name": "织网支配者",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 10,
+    "p90": 10,
+    "avg_kills": 2017,
+    "avg_level": 16,
+    "passes": false
+  }
+]

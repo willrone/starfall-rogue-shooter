@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died
+meteor-launcher-standard,流星发射器,boss_clear,boss_clear,1,54916,6,287.28,318,7,121,1,combat,2.53,False

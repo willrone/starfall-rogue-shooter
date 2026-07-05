@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "icefire-judge-standard",
+    "weapon_name": "冰狱审判",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 11,
+    "p90": 11,
+    "avg_kills": 2483,
+    "avg_level": 18,
+    "passes": false
+  }
+]

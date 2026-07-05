@@ -86,7 +86,22 @@ class CDPClient:
             self.ws = None
 
     def is_connected(self) -> bool:
-        return self.ws is not None
+        if self.ws is None:
+            return False
+        try:
+            # Send a no-op frame to check liveness
+            self.ws.ping(b'')
+            return True
+        except Exception:
+            self.ws = None
+            return False
+
+    def ensure_connected(self, target_url_filter: str) -> bool:
+        """Reconnect if the WebSocket is dead. Returns True if connected."""
+        if self.is_connected():
+            return True
+        logger.info("CDP socket dead; reconnecting to %s", target_url_filter)
+        return self.connect(target_url_filter)
 
     # ------------------------------------------------------------------
     # Low-level CDP message helpers
@@ -96,6 +111,9 @@ class CDPClient:
         """Send a CDP command and return the message id."""
         self._msg_id += 1
         msg = {"id": self._msg_id, "method": method, "params": params or {}}
+        sock = getattr(self.ws, 'sock', None)
+        if sock:
+            sock.settimeout(5.0)  # prevent indefinite TCP blocking on send
         self.ws.send(json.dumps(msg))
         return self._msg_id
 

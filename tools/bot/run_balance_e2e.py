@@ -72,7 +72,7 @@ def wait_cdp(port: int, *, timeout: float = 30.0) -> None:
     wait_url(f"http://127.0.0.1:{port}/json", timeout=timeout)
 
 
-def wait_game_hooks(cdp_port: int, target_filter: str, *, timeout: float = 45.0) -> None:
+def wait_game_hooks(cdp_port: int, target_filter: str, *, timeout: float = 120.0) -> None:
     deadline = time.time() + timeout
     last_error: Exception | None = None
     while time.time() < deadline:
@@ -80,7 +80,7 @@ def wait_game_hooks(cdp_port: int, target_filter: str, *, timeout: float = 45.0)
         try:
             if cdp.connect(target_url_filter=target_filter):
                 ready = cdp.evaluate(
-                    "(function(){return !!(window.__starfallGame && window.__starfallTick && window.__starfallSetSeed);})()",
+                    "(function(){return !!(window.__starfallGame && window.__starfallTick && window.__starfallBulkTick && window.__starfallSetSeed);})()",
                     timeout=3,
                 )
                 if ready:
@@ -143,7 +143,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--chrome", type=Path, default=DEFAULT_CHROME)
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--weapon", action="append", default=[])
-    parser.add_argument("--max-seconds", type=int, default=240)
+    parser.add_argument("--weapon-level", type=int, default=1)
+    parser.add_argument("--max-seconds", type=int, default=600)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", default="data/balance_e2e_smoke")
     parser.add_argument("--allow-balance-fail", action="store_true")
@@ -163,7 +164,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         url = f"http://localhost:{http_port}"
         chrome_proc, chrome_profile = start_chrome(args.chrome, cdp_port, url)
         target_filter = f"localhost:{http_port}"
-        wait_game_hooks(cdp_port, target_filter, timeout=50)
+        wait_game_hooks(cdp_port, target_filter)
 
         cmd = [
             sys.executable,
@@ -171,6 +172,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "--runs", str(args.runs),
             "--max-seconds", str(args.max_seconds),
             "--seed", str(args.seed),
+            "--weapon-level", str(args.weapon_level),
             "--target-filter", target_filter,
             "--cdp-host", "127.0.0.1",
             "--cdp-port", str(cdp_port),

@@ -34,15 +34,20 @@ def find_macos_conflict_copies(root: Path) -> list[Path]:
     if not root.exists():
         return []
     conflicts: list[Path] = []
-    for path in root.rglob('*'):
-        if not (path.is_file() or path.is_dir()):
-            continue
-        match = CONFLICT_COPY_RE.fullmatch(path.name)
-        if not match:
-            continue
-        canonical = path.with_name(match.group('stem') + match.group('suffix'))
-        if canonical.exists():
-            conflicts.append(path)
+    try:
+        for path in root.rglob('*'):
+            if not (path.is_file() or path.is_dir()):
+                continue
+            match = CONFLICT_COPY_RE.fullmatch(path.name)
+            if not match:
+                continue
+            canonical = path.with_name(match.group('stem') + match.group('suffix'))
+            if canonical.exists():
+                conflicts.append(path)
+    except OSError:
+        # Some macOS conflict directories can cause Resource deadlock avoided
+        # when iterating with rglob. Skip them and let the caller handle.
+        pass
     return sorted(conflicts, key=lambda p: len(p.parts), reverse=True)
 
 
@@ -50,7 +55,7 @@ def clean_macos_conflict_copies() -> None:
     # iCloud/macOS can leave dataless duplicate files such as
     # "RogueShooterGame 2.ts". Cocos imports those as extra scripts, then the
     # build flips between scenes=0/scripts=0 and copyfile -11 failures.
-    for root in [ROOT / 'assets', ROOT / 'build/web-mobile']:
+    for root in [ROOT / 'assets', ROOT / 'build/web-mobile', ROOT / 'library']:
         for path in find_macos_conflict_copies(root):
             if path.is_dir():
                 shutil.rmtree(path)
@@ -59,7 +64,7 @@ def clean_macos_conflict_copies() -> None:
             print(f'[bot-build] removed macOS conflict copy {path.relative_to(ROOT)}')
 
 
-def run_build(label: str, *, clean_editor_cache: bool) -> int:
+def run_build(label: str, *, clean_editor_cache: bool, use_config_path: bool = False) -> int:
     paths_to_remove = ['build/web-mobile']
     if clean_editor_cache:
         paths_to_remove.append('temp/programming/packer-driver/targets/editor')
@@ -72,12 +77,18 @@ def run_build(label: str, *, clean_editor_cache: bool) -> int:
                 path.unlink()
     log = ROOT / f'temp/builder/log/bot-web-mobile-{label}.log'
     log.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [str(COCOS), '--project', str(ROOT), '--build', f'configPath={CONFIG.relative_to(ROOT)}']
+    # Cocos 3.8.8 usually works best with semicolon CLI syntax, but the
+    # startScene lookup can occasionally fail while AssetDB still has a valid
+    # graph. In that case configPath works because it carries an explicit
+    # scenes[] list. Keep both paths and validate the artifact, never trust exit.
+    cli_args = f'configPath={CONFIG}' if use_config_path else f'platform=web-mobile;debug=true;startScene={SCENE_UUID}'
+    cmd = [str(COCOS), '--project', str(ROOT), '--build', cli_args]
     proc = subprocess.run(cmd, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
     log.write_text(proc.stdout)
     scenes = last_log_int(proc.stdout, r'Number of all scenes: (\d+)')
     scripts = last_log_int(proc.stdout, r'Number of all scripts: (\d+)')
-    print(f'[bot-build] {label}: exit={proc.returncode} scenes={scenes} scripts={scripts} clean_editor_cache={clean_editor_cache}')
+    mode = 'configPath' if use_config_path else 'semicolon'
+    print(f'[bot-build] {label}: mode={mode} exit={proc.returncode} scenes={scenes} scripts={scripts} clean_editor_cache={clean_editor_cache}')
     if '当前初始场景不存在' in proc.stdout:
         print(f'[bot-build] {label}: Cocos reported missing/bundled start scene')
     print(proc.stdout[-2400:])
@@ -104,12 +115,39 @@ def seed_assets_data() -> None:
     and asset rows from a healthy import.  The seed is only used for the bot
     web-mobile test build and never committed back into source assets.
     """
+    if assets_data_is_healthy():
+        print('[bot-build] keeping healthy library/.assets-data.json (has importer metadata)')
+        return
     if ASSETS_DATA_SEED.exists():
         ASSETS_DATA.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ASSETS_DATA_SEED, ASSETS_DATA)
         print(f'[bot-build] seeded {ASSETS_DATA.relative_to(ROOT)} from {ASSETS_DATA_SEED.relative_to(ROOT)}')
         return
     repair_assets_data()
+
+
+def assets_data_is_healthy() -> bool:
+    """True when Cocos GUI has done a real import, not just the minimal seed.
+
+    The seed file intentionally lacks `importer` fields. Once a full import exists,
+    overwriting it with the seed regresses builds back to scenes=0/scripts=0.
+    """
+    if not ASSETS_DATA.exists():
+        return False
+    try:
+        data = json.loads(ASSETS_DATA.read_text())
+    except Exception:
+        return False
+    if not isinstance(data, dict):
+        return False
+    with_importer = sum(1 for v in data.values() if isinstance(v, dict) and 'importer' in v)
+    scenes = sum(1 for v in data.values() if isinstance(v, dict) and str(v.get('url', '')).endswith('.scene'))
+    scripts = sum(1 for v in data.values() if isinstance(v, dict) and str(v.get('url', '')).endswith('.ts'))
+    has_main = SCENE_UUID in data and SCRIPT_UUID in data
+    # Some Cocos 3.8.8 imports on this project write a healthy 1k+ AssetDB graph
+    # without `importer` fields. The seed is only ~881 entries; do not overwrite a
+    # real 1k+ graph that already contains scene/script URLs.
+    return ((with_importer > 100) or (len(data) > 1000)) and scenes >= 1 and scripts >= 20 and has_main
 
 
 def repair_assets_data() -> None:
@@ -144,22 +182,30 @@ def main() -> int:
 
     clean_macos_conflict_copies()
 
-    attempts = [
-        ('first', True),
-        ('retry-seeded', False),
-        ('retry-seeded-2', False),
-    ]
-    last_code = 36
-    for label, clean_editor_cache in attempts:
-        seed_assets_data()
-        last_code = run_build(label, clean_editor_cache=clean_editor_cache)
+    # ── Strategy ─────────────────────────────────────────────────────
+    # Cocos CLI build needs a warm-up round: clean_editor_cache=True
+    # triggers AssetDB to upgrade the seed format → second attempt works.
+    # Without the warm-up the seed stays in an incompatible format.
+    seed_assets_data()
+    for attempt, clean_cache in (('warmup', True), ('build', False)):
+        last_code = run_build(attempt, clean_editor_cache=clean_cache)
         if artifact_ok():
-            print(f'[bot-build] web-mobile artifact valid after {label}')
+            print(f'[bot-build] web-mobile artifact valid ({attempt})')
             return 0
-        print(f'[bot-build] {label} produced empty/invalid main bundle; will retry if attempts remain')
+        print(f'[bot-build] {attempt}: artifact invalid, retrying…')
+        # Cocos may rewrite library/.assets-data.json back to an empty/zero-version graph
+        # after a failed startScene lookup. Re-seed before the next attempt/fallback.
+        seed_assets_data()
+
+    print('[bot-build] semicolon CLI path produced an invalid empty bundle; trying configPath fallback…')
+    seed_assets_data()
+    last_code = run_build('configpath', clean_editor_cache=False, use_config_path=True)
+    if artifact_ok():
+        print('[bot-build] web-mobile artifact valid (configPath fallback)')
+        return 0
 
     size = MAIN_INDEX.stat().st_size if MAIN_INDEX.exists() else None
-    print(f'[bot-build] invalid artifact after all retries; main index size={size}', file=sys.stderr)
+    print(f'[bot-build] invalid artifact after 2 attempts; main index size={size}', file=sys.stderr)
     return last_code if last_code not in (0, 36) else 2
 
 

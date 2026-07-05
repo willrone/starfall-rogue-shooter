@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+void-tearer-standard,虚空撕裂者,standard,standard,1,32577,11,566.61,2577,19,1816,19,combat,253.0,False,

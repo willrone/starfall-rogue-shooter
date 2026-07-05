@@ -36,7 +36,6 @@ import {
     createEmptyCharacterStats,
 } from '../core/stats';
 import {
-    LEVEL_UPGRADES,
     RUN_ITEMS,
 } from '../catalogs/runItemCatalog';
 import {
@@ -58,6 +57,9 @@ export const PICKUP_HARD_CAP = 260;
 export const FLOATING_TEXT_LIMIT = 90;
 const LEVEL_REFRESH_COST = 28;
 const CHEST_REFRESH_COST = 34;
+
+/** 最大道具持有数（取消硬上限，改为仅提示参考） */
+export const MAX_RUN_ITEM_SLOTS = 999;
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -143,7 +145,10 @@ export class PickupManager {
     public pendingLootChoices: LootChoice[] = [];
     public runStats: CharacterStats = this.createEmptyStats();
     public acquiredRunItemIds: Set<string> = new Set();
-    public acquiredStatUpgradeIds: Set<string> = new Set();
+
+    // ── 道具丢弃 ──────────────────────────────────────────────────────────
+    public pendingNewItem: LevelUpgrade | null = null;
+    public pendingDiscardChoices: LevelUpgrade[] = [];
 
     constructor(public ctx: PickupHostContext) {}
 
@@ -583,9 +588,13 @@ export class PickupManager {
             }
         });
         if (this.panels.levelRefreshButton) {
-            this.panels.levelRefreshButton.node.active = true;
-            this.panels.levelRefreshButton.label.string = `刷新 -${refreshCost}合金`;
-            this.ctx.drawButton(this.panels.levelRefreshButton, this.ctx.getSpendableAlloy() < refreshCost);
+            if (refreshCost > 0) {
+                this.panels.levelRefreshButton.node.active = true;
+                this.panels.levelRefreshButton.label.string = `刷新 -${refreshCost}合金`;
+                this.ctx.drawButton(this.panels.levelRefreshButton, this.ctx.getSpendableAlloy() < refreshCost);
+            } else {
+                this.panels.levelRefreshButton.node.active = false;
+            }
         }
     }
 
@@ -594,6 +603,8 @@ export class PickupManager {
             this.chooseLevelUpgrade(index);
         } else if (this.cs.phase === 'item-choice') {
             this.chooseRunItem(index);
+        } else if (this.cs.phase === 'discard') {
+            this.chooseDiscard(index);
         }
     }
 
@@ -601,7 +612,7 @@ export class PickupManager {
         if (this.cs.phase !== 'level-up') return;
         const choice = this.pendingLevelChoices[index];
         if (!choice) return;
-        this.applyLevelUpgrade(choice.id);
+        this.applyLevelUpgrade(choice);
         if (this.panels.levelPanel) this.panels.levelPanel.active = false;
         if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
         this.resumeCombatAfterChoice();
@@ -613,6 +624,8 @@ export class PickupManager {
         const choice = this.pendingItemChoices[index];
         if (!choice) return;
         this.applyRunItem(choice.id);
+        // If slots were full, discard is pending — don't close
+        if (this.pendingNewItem) return;
         if (this.panels.levelPanel) this.panels.levelPanel.active = false;
         if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
         this.resumeCombatAfterChoice();
@@ -626,18 +639,75 @@ export class PickupManager {
         }
     }
 
-    applyLevelUpgrade(id: string): void {
-        const upgrade = LEVEL_UPGRADES.find((item) => item.id === id);
-        if (!upgrade) return;
-        this.acquiredStatUpgradeIds.add(id);
+    applyLevelUpgrade(upgrade: LevelUpgrade): void {
         this.applyStatEffects(upgrade.effects);
     }
 
     applyRunItem(id: string): void {
         const item = RUN_ITEMS.find((upgrade) => upgrade.id === id);
         if (!item) return;
+
+        // 道具格满 → 进入丢弃模式
+        if (this.acquiredRunItemIds.size >= MAX_RUN_ITEM_SLOTS && !this.acquiredRunItemIds.has(id)) {
+            this.pendingNewItem = item;
+            this.openDiscardChoices();
+            return;
+        }
+
         this.acquiredRunItemIds.add(id);
         this.applyStatEffects(item.effects);
+    }
+
+    // ── 丢弃流程 ──────────────────────────────────────────────────────────
+
+    openDiscardChoices(): void {
+        this.cs.phase = 'discard';
+        // 构建当前道具列表供选择丢弃
+        this.pendingDiscardChoices = [];
+        for (const id of this.acquiredRunItemIds) {
+            const item = RUN_ITEMS.find(i => i.id === id);
+            if (item) this.pendingDiscardChoices.push(item);
+        }
+        this.renderChoicePanel(
+            `道具栏已满 (${this.acquiredRunItemIds.size}/${MAX_RUN_ITEM_SLOTS})`,
+            '选择一件丢弃，替换为新道具。已花费的合金不退还。',
+            this.pendingDiscardChoices,
+            0, // 无刷新按钮
+        );
+    }
+
+    chooseDiscard(index: number): void {
+        if (this.cs.phase !== 'discard') return;
+        const discardItem = this.pendingDiscardChoices[index];
+        if (!discardItem || !this.pendingNewItem) return;
+
+        // 移除被丢弃道具的效果
+        this.removeStatEffects(discardItem.effects);
+        this.acquiredRunItemIds.delete(discardItem.id);
+
+        // 应用新道具（此时一定有空格）
+        this.applyRunItem(this.pendingNewItem.id);
+
+        const newName = this.pendingNewItem.name;
+        this.pendingNewItem = null;
+        this.pendingDiscardChoices = [];
+
+        // 关闭面板
+        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
+        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
+        this.resumeCombatAfterChoice();
+        this.ctx.showToast(`丢弃${discardItem.name}，装备${newName}`);
+    }
+
+    removeStatEffects(effects: StatEffect[]): void {
+        const stats = this.runStats as Record<StatKey, number>;
+        for (const effect of effects) {
+            stats[effect.stat] -= effect.amount;
+        }
+        this.cs.playerMaxHp = this.ctx.getMaxHp();
+        this.cs.playerShieldMax = this.ctx.getShieldMax();
+        this.cs.playerHp = this.ctx.clamp(this.cs.playerHp, 1, this.cs.playerMaxHp);
+        this.cs.playerShield = this.ctx.clamp(this.cs.playerShield, 0, this.cs.playerShieldMax);
     }
 
     refreshCurrentChoices(): void {
@@ -752,6 +822,18 @@ export class PickupManager {
 
     // ── Clear / Reset ──────────────────────────────────────────────────────
 
+    /**
+     * Instantly collect all pickups on the ground.
+     * Used by the CDP bot (which does not move) to simulate a player who
+     * collects all dropped alloy before going to the shop.
+     */
+    autoCollectAll(): void {
+        for (const pickup of this.pickups) {
+            this.collectPickup(pickup);
+        }
+        this.pickups = [];
+    }
+
     clearAll(): void {
         for (const pickup of this.pickups) pickup.node.destroy();
         for (const floatingText of [...this.floatingTexts]) this.recycleFloatingText(floatingText, true);
@@ -762,10 +844,11 @@ export class PickupManager {
     resetRun(): void {
         this.runStats = this.createEmptyStats();
         this.acquiredRunItemIds = new Set();
-        this.acquiredStatUpgradeIds = new Set();
         this.pendingItemChoices = [];
         this.currentItemChoiceQuality = 'common';
         this.pendingLevelChoices = [];
         this.pendingLootChoices = [];
+        this.pendingNewItem = null;
+        this.pendingDiscardChoices = [];
     }
 }

@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "meteor-launcher-standard",
+    "weapon_name": "流星发射器",
+    "tier": "boss_clear",
+    "target_profile": "boss_clear",
+    "runs": 1,
+    "p50": 6,
+    "p90": 6,
+    "avg_kills": 325,
+    "avg_level": 7,
+    "passes": false
+  }
+]

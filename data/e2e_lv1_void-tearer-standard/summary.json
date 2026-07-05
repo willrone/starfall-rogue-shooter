@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "void-tearer-standard",
+    "weapon_name": "虚空撕裂者",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 11,
+    "p90": 11,
+    "avg_kills": 2577,
+    "avg_level": 19,
+    "passes": false
+  }
+]

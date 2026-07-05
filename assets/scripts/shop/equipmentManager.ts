@@ -4,6 +4,7 @@ import { CombatState } from '../state/combatState';
 import { EQUIPMENT, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from '../catalogs/equipmentCatalog';
 import { WEAPON_CATALOG, WEAPON_COUNT, getWeaponStyleName, getWeaponTierForId } from '../catalogs/weaponCatalog';
 import { RUN_ITEMS, RUN_ITEM_COUNT, formatRunItemEffect } from '../catalogs/runItemCatalog';
+import { OFFHAND_CATALOG, findOffhand } from '../catalogs/offhandCatalog';
 import {
     applyEquipmentLootChoiceSpec,
     createEquipmentLootChoiceSpecs,
@@ -73,7 +74,7 @@ interface ButtonView {
 export interface ShopHostContext {
     cs: CombatState;
     panels: PanelManager;
-    pickupMgr: { acquiredRunItemIds: Set<string>; applyRunItem(id: string): void };
+    pickupMgr: { acquiredRunItemIds: Set<string>; applyRunItem(id: string): void; pendingNewItem: LevelUpgrade | null };
 
     showToast(msg: string): void;
     refreshHud(): void;
@@ -108,6 +109,10 @@ export class EquipmentManager {
     equipmentPage = 0;
     visibleHangarEquipment: EquipmentDef[] = [];
     shopOffers: (LevelUpgrade | null)[] = [];
+
+    // ── 副武器 ─────────────────────────────────────────────────
+    equippedOffhandId: string | null = null;
+    offhandLevels: Record<string, number> = {};
 
     private ctx: ShopHostContext;
 
@@ -188,6 +193,11 @@ export class EquipmentManager {
             this.ctx.cs.biomass = Math.max(0, Number(data.biomass) || this.ctx.cs.biomass);
             this.ctx.cs.circuits = Math.max(0, Number(data.circuits) || this.ctx.cs.circuits);
             this.ctx.cs.crystals = Math.max(0, Number(data.crystals) || 0);
+            this.ctx.cs.voidFragment = Math.max(0, Number(data.voidFragment) || 0);
+            this.ctx.cs.energyCore = Math.max(0, Number(data.energyCore) || 0);
+            this.ctx.cs.frostCore = Math.max(0, Number(data.frostCore) || 0);
+            this.ctx.cs.infernoCore = Math.max(0, Number(data.infernoCore) || 0);
+            this.ctx.cs.webSilk = Math.max(0, Number(data.webSilk) || 0);
             if (Array.isArray(data.ownedEquipment)) {
                 this.ownedEquipment = new Set(data.ownedEquipment);
             }
@@ -196,6 +206,12 @@ export class EquipmentManager {
             }
             if (data.equipmentBlueprints && typeof data.equipmentBlueprints === 'object') {
                 this.equipmentBlueprints = data.equipmentBlueprints;
+            }
+            if (data.offhandLevels && typeof data.offhandLevels === 'object') {
+                this.offhandLevels = data.offhandLevels;
+            }
+            if (typeof data.equippedOffhandId === 'string' || data.equippedOffhandId === null) {
+                this.equippedOffhandId = data.equippedOffhandId;
             }
             if (Array.isArray(data.equippedEquipment)) {
                 this.equippedEquipment = data.equippedEquipment.filter((id: string) => typeof id === 'string');
@@ -219,10 +235,17 @@ export class EquipmentManager {
                 biomass: this.ctx.cs.biomass,
                 circuits: this.ctx.cs.circuits,
                 crystals: this.ctx.cs.crystals,
+                voidFragment: this.ctx.cs.voidFragment,
+                energyCore: this.ctx.cs.energyCore,
+                frostCore: this.ctx.cs.frostCore,
+                infernoCore: this.ctx.cs.infernoCore,
+                webSilk: this.ctx.cs.webSilk,
                 ownedEquipment: [...this.ownedEquipment],
                 equippedEquipment: this.equippedEquipment,
                 equipmentLevels: this.equipmentLevels,
                 equipmentBlueprints: this.equipmentBlueprints,
+                equippedOffhandId: this.equippedOffhandId,
+                offhandLevels: this.offhandLevels,
             }));
         } catch (error) {
             console.warn('Failed to save rogue shooter progress', error);
@@ -308,6 +331,113 @@ export class EquipmentManager {
         if (weapons.length <= 0) return null;
         this.ctx.cs.activeWeaponIndex = this.ctx.clamp(this.ctx.cs.activeWeaponIndex, 0, weapons.length - 1);
         return weapons[this.ctx.cs.activeWeaponIndex] || weapons[0] || null;
+    }
+
+    // ── 副武器 ─────────────────────────────────────────────────
+    getEquippedOffhandId(): string | null {
+        return this.equippedOffhandId;
+    }
+
+    getOffhandLevel(id: string): number {
+        return this.offhandLevels[id] || 1;
+    }
+
+    hasOffhand(id: string): boolean {
+        return !!this.offhandLevels[id];
+    }
+
+    /** 装备/切换副武器 */
+    equipOffhand(id: string | null): void {
+        this.equippedOffhandId = id;
+        this.saveProgress();
+    }
+
+    /** 检查是否可合成某副武器 */
+    canSynthesizeOffhand(id: string): { ok: boolean; reason?: string } {
+        const def = findOffhand(id);
+        if (!def) return { ok: false, reason: '未知副武器' };
+        if (this.offhandLevels[id]) return { ok: false, reason: '已拥有' };
+        // 材料检查由上级 UI 层读取钱包完成
+        return { ok: true };
+    }
+
+    /** 合成副武器（T1） */
+    synthesizeOffhand(id: string): boolean {
+        const def = findOffhand(id);
+        if (!def || this.offhandLevels[id]) return false;
+        if (this.ctx.cs.alloy < def.recipeAlloy) return false;
+        this.ctx.cs.alloy -= def.recipeAlloy;
+        this.offhandLevels[id] = 1;
+        this.saveProgress();
+        return true;
+    }
+
+    /** 副武器升级花费 */
+    getOffhandUpgradeCost(id: string, targetLevel: number): { alloy: number; material: string; materialQty: number } | null {
+        const def = findOffhand(id);
+        if (!def) return null;
+        const current = this.offhandLevels[id] || 0;
+        if (targetLevel <= current || targetLevel > 5) return null;
+        const tier = targetLevel - 1; // T2→T5 = index 1-4
+        const qty = [3, 5, 8, 12][tier - 1] || 3;
+        const alloy = [100, 180, 280, 400][tier - 1] || 100;
+        return { alloy, material: '通用金粉', materialQty: qty };
+    }
+
+    /** 升级副武器 */
+    upgradeOffhand(id: string): boolean {
+        const current = this.offhandLevels[id] || 0;
+        if (current >= 5) return false;
+        const cost = this.getOffhandUpgradeCost(id, current + 1);
+        if (!cost) return false;
+        if (this.ctx.cs.alloy < cost.alloy) return false;
+        this.ctx.cs.alloy -= cost.alloy;
+        this.offhandLevels[id] = current + 1;
+        this.saveProgress();
+        return true;
+    }
+
+    // ── 传说武器合成 ─────────────────────────────────────────────
+    /** 传说武器配方 */
+    static readonly LEGENDARY_RECIPES: Record<string, { name: string; material: string; materialQty: number; alloy: number; desc: string }> = {
+        'void-tearer': { name: '虚空撕裂者', material: 'voidFragment', materialQty: 3, alloy: 200, desc: '高速穿透型，每穿透一层减目标防御。' },
+        'icefire-judge': { name: '冰狱审判', material: 'frostCore', materialQty: 2, alloy: 200, desc: '冰火交替爆发，冰冻减速+火焰爆炸。' },
+        'webmaster': { name: '织网支配者', material: 'webSilk', materialQty: 2, alloy: 200, desc: '召唤续航型，子弹缓速+击杀回血。' },
+    };
+
+    /** 获取传说武器合成配方 */
+    getLegendaryRecipes(): { id: string; name: string; material: string; materialQty: number; alloy: number; desc: string; owned: boolean }[] {
+        const recipes: { id: string; name: string; material: string; materialQty: number; alloy: number; desc: string; owned: boolean }[] = [];
+        const keys = Object.keys(EquipmentManager.LEGENDARY_RECIPES);
+        for (const id of keys) {
+            const recipe = EquipmentManager.LEGENDARY_RECIPES[id];
+            recipes.push({ id, ...recipe, owned: this.ownedEquipment.has(id) });
+        }
+        return recipes;
+    }
+
+    /** 合成传说武器 */
+    synthesizeLegendary(id: string): boolean {
+        const recipe = EquipmentManager.LEGENDARY_RECIPES[id];
+        if (!recipe) return false;
+        if (this.ownedEquipment.has(id)) return false;
+        // 检查材料
+        const wallet = this.ctx.cs as unknown as Record<string, number>;
+        const materialKey = recipe.material;
+        if ((wallet[materialKey] || 0) < recipe.materialQty) return false;
+        if (this.ctx.cs.alloy < recipe.alloy) return false;
+        // 消耗材料
+        wallet[materialKey] -= recipe.materialQty;
+        this.ctx.cs.alloy -= recipe.alloy;
+        // 获得武器
+        this.ownedEquipment.add(id);
+        this.equipmentLevels[id] = 1;
+        // 如果还没装备武器，自动装备
+        if (this.equippedEquipment.length === 0 || this.equippedEquipment.every(e => e.startsWith('tactical') || e.startsWith('phase') || e.startsWith('kinetic') || e.startsWith('magnet'))) {
+            this.equippedEquipment.unshift(id);
+        }
+        this.saveProgress();
+        return true;
     }
 
     getOwnedWeapons(): EquipmentDef[] {
@@ -440,6 +570,11 @@ export class EquipmentManager {
             biomass: this.ctx.cs.biomass,
             circuits: this.ctx.cs.circuits,
             crystals: this.ctx.cs.crystals,
+            voidFragment: this.ctx.cs.voidFragment,
+            energyCore: this.ctx.cs.energyCore,
+            frostCore: this.ctx.cs.frostCore,
+            infernoCore: this.ctx.cs.infernoCore,
+            webSilk: this.ctx.cs.webSilk,
         };
     }
 
@@ -486,28 +621,38 @@ export class EquipmentManager {
         const level = this.getEquipmentLevel(equipment.id);
         const cost = this.createEmptyWallet();
         if (equipment.kind === 'weapon') {
-            // 武器升级成本: 线性递增, 高等级需核心/晶体
-            cost.shards = 8 + Math.ceil(level * 3 + equipment.baseCost / 30);
-            cost.circuits = 5 + Math.ceil(level * 2 + equipment.baseCost / 50);
+            // 武器升级成本: 指数递增, 高等级需核心/晶体 (2026-06-29 翻倍)
+            cost.shards = 12 + Math.ceil(level * 8 + equipment.baseCost / 12);
+            cost.circuits = 8 + Math.ceil(level * 5 + equipment.baseCost / 24);
         } else {
             const slot = equipment.gearSlot || 'accessory';
             const base = Math.max(1, equipment.baseCost);
             if (slot === 'hat') {
-                cost.circuits = 6 + Math.ceil(level * 2.5 + base / 48);
-                cost.shards = 4 + Math.ceil(level * 2 + base / 56);
+                cost.circuits = 10 + Math.ceil(level * 6 + base / 24);
+                cost.shards = 6 + Math.ceil(level * 5 + base / 30);
             } else if (slot === 'armor') {
-                cost.biomass = 8 + Math.ceil(level * 3 + base / 38);
+                cost.biomass = 14 + Math.ceil(level * 7 + base / 18);
                 cost.cores = Math.max(cost.cores, Math.floor(level / 3));
             } else if (slot === 'boots') {
-                cost.biomass = 6 + Math.ceil(level * 2 + base / 50);
-                cost.circuits = 4 + Math.ceil(level * 2.2 + base / 58);
+                cost.biomass = 10 + Math.ceil(level * 5 + base / 24);
+                cost.circuits = 6 + Math.ceil(level * 5 + base / 28);
             } else {
-                cost.shards = 8 + Math.ceil(level * 2.8 + base / 40);
-                cost.circuits = 3 + Math.ceil(level * 1.8 + base / 68);
+                cost.shards = 14 + Math.ceil(level * 6 + base / 18);
+                cost.circuits = 5 + Math.ceil(level * 4 + base / 32);
             }
         }
-        if (level >= 4) cost.cores = Math.max(cost.cores || 0, Math.ceil((level - 2) / 2));
-        if (level >= 7) cost.crystals = Math.max(cost.crystals || 0, Math.ceil((level - 5) / 2));
+        if (level >= 2) cost.cores = Math.max(cost.cores || 0, level - 1);
+        if (level >= 5) cost.crystals = Math.max(cost.crystals || 0, level - 3);
+        // Lv.9+ 升级额外消耗 Boss 材料（5种任意其一）
+        const nextLevel = level + 1;
+        if (nextLevel >= 9) {
+            const matCount = nextLevel >= 13 ? 3 : nextLevel >= 11 ? 2 : 1;
+            const matKeys = ['voidFragment', 'energyCore', 'frostCore', 'infernoCore', 'webSilk'] as const;
+            const cs = this.ctx.cs as unknown as Record<string, number>;
+            for (const k of matKeys) {
+                if (cs[k] >= matCount) { (cost as Record<string, number>)[k] = matCount; break; }
+            }
+        }
         return cost;
     }
 
@@ -545,6 +690,22 @@ export class EquipmentManager {
             if (equipment.baseCost >= 60) cost.crystals = 1;
             if (equipment.baseCost >= 160) cost.crystals += 1;
         }
+        // Legendary 传说武器：需要 Boss 材料
+        if (equipment.kind === 'weapon') {
+            const LEGENDARY_BOSS_MATERIALS: Record<string, Record<string, number>> = {
+                'void-tearer': { voidFragment: 3, energyCore: 2 },
+                'icefire-judge': { frostCore: 3, infernoCore: 2 },
+                'webmaster': { webSilk: 3, energyCore: 2 },
+            };
+            const mat = LEGENDARY_BOSS_MATERIALS[equipment.id];
+            if (mat) {
+                if (mat.voidFragment) (cost as Record<string, number>).voidFragment = mat.voidFragment;
+                if (mat.energyCore) (cost as Record<string, number>).energyCore = mat.energyCore;
+                if (mat.frostCore) (cost as Record<string, number>).frostCore = mat.frostCore;
+                if (mat.infernoCore) (cost as Record<string, number>).infernoCore = mat.infernoCore;
+                if (mat.webSilk) (cost as Record<string, number>).webSilk = mat.webSilk;
+            }
+        }
         return cost;
     }
 
@@ -577,11 +738,15 @@ export class EquipmentManager {
             if (equipment.attackStyle) {
                 lines.push(`攻击风格：${getWeaponStyleName(equipment.attackStyle)}${equipment.kind === 'weapon' && equipped ? '；战斗中只有当前武器属性生效' : ''}`);
             }
-            const dmg = equipment.weaponStats.damage * detailLevel;
-            const rate = equipment.weaponStats.fireRate * detailLevel;
-            const pier = equipment.weaponStats.pierce * detailLevel;
-            lines.push(`伤害 ${this.formatStat(dmg)}  |  射速 ${this.formatStat(rate)}次/秒  |  穿透 ${this.formatStat(pier)}`);
-            lines.push(`弹速倍率 ${this.formatStat(equipment.weaponStats.bulletSpeed * detailLevel)}`);
+            // 正确计算伤害: weaponStat × 每级成长
+            const dmg = equipment.weaponStats.damage * (1 + (detailLevel - 1) * 0.12);
+            // 正确计算 RPS: fireRate × 每级成长 + attackSpeed × 0.45 → 再对 1/间隔 取倒数
+            const fireRate = equipment.weaponStats.fireRate * (1 + (detailLevel - 1) * 0.10);
+            const rps = Math.min(Math.max(0.15, fireRate), 14.28);
+            // 正确计算穿透: pierce × 每级成长
+            const pier = equipment.weaponStats.pierce * (1 + (detailLevel - 1) * 0.10);
+            lines.push(`伤害 ${this.formatStat(dmg)}  |  射速 ${this.formatStat(rps)}次/秒  |  穿透 ${this.formatStat(pier)}`);
+            lines.push(`弹速倍率 ${this.formatStat(equipment.weaponStats.bulletSpeed * (1 + (detailLevel - 1) * 0.08))}`);
         } else {
             lines.push(this.formatGearStats(equipment, detailLevel));
         }
@@ -669,7 +834,10 @@ export class EquipmentManager {
         if (this.ctx.cs.waveIndex >= 11) {
             endlessMultiplier = Math.pow(1.05, this.ctx.cs.waveIndex - 10);
         }
-        return Math.max(50, Math.round(baseCost * this.getRunItemShopPriceMultiplier(item) * endlessMultiplier));
+        // 累计涨价：每买一件本局道具（含宝箱和商店），下一件贵 35%
+        const itemsBought = this.ctx.pickupMgr.acquiredRunItemIds.size;
+        const cumulativeMultiplier = 1 + itemsBought * 0.35;
+        return Math.max(50, Math.round(baseCost * this.getRunItemShopPriceMultiplier(item) * endlessMultiplier * cumulativeMultiplier));
     }
 
     getRunItemShopPriceMultiplier(item: LevelUpgrade): number {
@@ -801,7 +969,13 @@ export class EquipmentManager {
             this.ctx.showToast(`合金不足，需要 ${cost}。`);
             return;
         }
+        // If slots are full, this will enter discard mode
         this.ctx.pickupMgr.applyRunItem(item.id);
+        if (this.ctx.pickupMgr.pendingNewItem) {
+            // Discard pending — close shop, discard panel shows instead
+            this.ctx.panels.setShopPanelActive(false);
+            return;
+        }
         this.shopOffers[index] = this.pickShopOfferForSlot(index);
         this.renderShop();
         this.ctx.showToast(`购买本局道具：${item.name}，该格已补货。`);

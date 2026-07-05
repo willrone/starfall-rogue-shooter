@@ -22,6 +22,10 @@ import {
     calcBulletDamage,
     calcFireInterval,
     calcBulletPierce,
+    calcPoisonDpsPerStack,
+    calcPoisonSustainedDps,
+    calcPoisonTimeToMaxStacks,
+    POISON_MAX_STACKS,
     weaponDamageAtLevel,
     weaponFireRateAtLevel,
     averageEnemyHp,
@@ -35,7 +39,7 @@ import {
 // ── 基础属性 ───────────────────────────────────────────────────────────
 const BASE = createBaseCharacterStats();
 
-// ── 14 把武器条目 (family 数据) ──────────────────────────────────────
+// ── 17 把武器条目 (family 数据) ──────────────────────────────────────
 interface WeaponSpec {
     id: string;
     name: string;
@@ -48,8 +52,8 @@ interface WeaponSpec {
     tier: 'novice' | 'standard' | 'boss_gate' | 'boss_clear';
 }
 
-// 从 WEAPON_FAMILIES 取出 14 把基础武器
-// tier 映射与 CDP 工具的 WEAPON_TIER_MAP 保持一致
+// 从 WEAPON_FAMILIES 取出 17 把基础/传说武器
+// tier 映射与 CDP 工具的 WEAPON_TIER_MAP 保持一致；传说武器按 standard 目标检查
 const TIER_MAP: Record<string, WeaponSpec['tier']> = {
     'storm-rifle': 'novice', 'plague-sprayer': 'novice', 'frost-beamer': 'novice',
     'echo-bow': 'standard', 'split-barrel': 'standard', 'mirror-prism': 'standard', 'quantum-loom': 'standard',
@@ -73,18 +77,23 @@ const ALL_WEAPONS: WeaponSpec[] = WEAPON_FAMILIES.map((w) => ({
 
 function weaponDps(ws: WeaponSpec, level: number, extraStats: Partial<CharacterStats> = {}): number {
     const stats = { ...BASE, ...extraStats };
+    if (ws.mechanic === 'poison') {
+        const damage = calcBulletDamage(ws.damage, level, stats);
+        const stackRate = 1 / calcFireInterval(ws.fireRate, level, stats);
+        return calcPoisonSustainedDps(damage, stackRate);
+    }
     return calcDps(ws.damage, ws.fireRate, level, stats);
 }
 
-// ── 测试 1: 全部 14 把武器基础 DPS 健康范围 ──────────────────────────
+// ── 测试 1: 全部 17 把武器基础 DPS 健康范围 ──────────────────────────
 function testAllWeaponsDpsInRange() {
     for (const w of ALL_WEAPONS) {
         const dps = weaponDps(w, 1);
-        // 全部应在 2~25 区间 (轨道无人机特殊 1.5+)
-        assert(dps >= (w.id === 'orbital-drone' ? 1.5 : 2) && dps <= 25,
+        // 两轮武器基础伤害 buff + 3 把传说武器上线后，Lv.1 裸 DPS 合理上限约 150
+        assert(dps >= (w.id === 'orbital-drone' ? 3 : 3) && dps <= 160,
             `${w.name} Lv.1 DPS=${dps.toFixed(2)} should be in reasonable range`);
     }
-    console.log(`  ✓ 14 把武器 Lv.1 DPS 都在 [2, 25] 区间`);
+    console.log(`  ✓ 17 把武器 Lv.1 DPS 都在 [3, 160] 区间`);
 }
 
 // ── 测试 2: 按 tier 检查 DPS 分段 ────────────────────────────────────
@@ -118,7 +127,7 @@ function testUpgradeBoost() {
         assert(ratio >= 1.2 && ratio <= 5.0,
             `${w.name} Lv.1→Lv.6 DPS ratio=${ratio.toFixed(2)} should be in [1.2, 5.0]`);
     }
-    console.log(`  ✓ 14 把武器 Lv.1→Lv.6 提升率都在 [1.2, 5.0] 区间`);
+    console.log(`  ✓ 17 把武器 Lv.1→Lv.6 提升率都在 [1.2, 5.0] 区间`);
 }
 
 // ── 测试 4: 波次压力增长——1-6 波曲线 ────────────────────────────────
@@ -157,6 +166,32 @@ function testWeaponDpsFingerprint() {
     }
 }
 
+// ── 测试 5b: 瘟疫喷射器是叠毒器，不是每秒多次直伤枪 ────────────────
+function testPoisonSprayerStackingModel() {
+    const plague = ALL_WEAPONS.find(w => w.id === 'plague-sprayer');
+    if (!plague) throw new Error('plague-sprayer must exist');
+    const damage = calcBulletDamage(plague.damage, 1, BASE);
+    const interval = calcFireInterval(plague.fireRate, 1, BASE);
+    const stackRate = 1 / interval;
+    const perStack = calcPoisonDpsPerStack(damage);
+    const sustained = calcPoisonSustainedDps(damage, stackRate);
+
+    assert.equal(POISON_MAX_STACKS, 12, 'Plague sprayer should have enough stack headroom for attack-speed growth');
+    assert(stackRate >= 4.5 && stackRate <= 6.0,
+        `Base plague stack rate ${stackRate.toFixed(2)}/s should be a few poison layers per second, not 8 direct hits/s`);
+    assert(perStack >= 2.0 && perStack <= 3.0,
+        `Poison per-stack DPS ${perStack.toFixed(2)} should be readable but not bursty`);
+    assert(sustained >= 28 && sustained <= 34,
+        `Poison max-stack sustained DPS ${sustained.toFixed(1)} should stay in novice DPS band`);
+    assert(calcPoisonTimeToMaxStacks(stackRate) >= 2.0,
+        'Base plague sprayer should ramp over time instead of instantly capping stacks');
+
+    const fastStats = { ...BASE, attackSpeed: BASE.attackSpeed + 1.0 };
+    const fastStackRate = 1 / calcFireInterval(plague.fireRate, 1, fastStats);
+    assert(fastStackRate > stackRate,
+        'Attack speed should increase plague-sprayer poison stacking speed');
+}
+
 // ── 测试 6: 检查穿透期望值是否在合理范围 ────────────────────────────
 function testPierceValues() {
     for (const w of ALL_WEAPONS) {
@@ -164,7 +199,7 @@ function testPierceValues() {
         assert(pierce >= 0 && pierce <= 10,
             `${w.name} pierce=${pierce.toFixed(1)} should be in [0, 10]`);
     }
-    console.log(`  ✓ 14 把武器穿透值都在 [0, 10] 区间`);
+    console.log(`  ✓ 17 把武器穿透值都在 [0, 10] 区间`);
 }
 
 // ── 测试 7: 怪均血量 —— 1-10 波增长平缓 ────────────────────────────
@@ -186,7 +221,7 @@ function testEstimateP50() {
         assert(p50 >= 1 && p50 <= 20,
             `${w.name} estimated P50=${p50} should be in [1, 20]`);
     }
-    console.log(`  ✓ 14 把武器 P50 估算在 [1, 20] 区间`);
+    console.log(`  ✓ 17 把武器 P50 估算在 [1, 20] 区间`);
 }
 
 // ── 汇总输出 ──────────────────────────────────────────────────────────
@@ -199,6 +234,7 @@ export function testCombatBalance() {
     testUpgradeBoost();
     testWavePressure();
     testWeaponDpsFingerprint();
+    testPoisonSprayerStackingModel();
     testPierceValues();
     testAverageEnemyHp();
     testEstimateP50();

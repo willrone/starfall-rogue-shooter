@@ -9,41 +9,68 @@ export interface RunItemBlueprint {
     effects: StatEffect[];
 }
 
+// ── Range-based upgrade blueprint for level-up choices ──────────────
+
+export interface StatUpgradeRange {
+    stat: keyof typeof STAT_META;
+    min: number;
+    max: number;
+}
+
+export interface StatUpgradeBlueprint {
+    id: string;
+    name: string;
+    category: string;
+    color: string;
+    effects: StatUpgradeRange[];
+}
+
 export const ITEM_TIER_NAMES = ['I', 'II', 'III', 'IV', 'V'];
 export const TRADEOFF_POSITIVE_BONUS = 1.24;
 
 export const RUN_ITEM_BLUEPRINTS: RunItemBlueprint[] = [
-    { id: 'charged-magazine', name: '高能弹匣', category: '攻击', color: '#F94144', effects: [{ stat: 'weaponDamagePct', amount: 0.08 }, { stat: 'weaponFireRatePct', amount: 0.05 }, { stat: 'moveSpeed', amount: -5 }] },
-    { id: 'rapid-trigger', name: '急速扳机', category: '攻击', color: '#4CC9F0', effects: [{ stat: 'weaponFireRatePct', amount: 0.15 }, { stat: 'weaponDamagePct', amount: -0.02 }] },
-    { id: 'longscope', name: '远距瞄具', category: '攻击', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 70 }, { stat: 'critChance', amount: 0.02 }, { stat: 'dodgeChance', amount: -0.01 }] },
-    { id: 'crit-lens', name: '暴击透镜', category: '攻击', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.045 }, { stat: 'critDamage', amount: 0.15 }] },
-    { id: 'execution-protocol', name: '处决协议', category: '攻击', color: '#B5179E', effects: [{ stat: 'lethalChance', amount: 0.012 }, { stat: 'lethalDamage', amount: 0.25 }, { stat: 'weaponFireRatePct', amount: -0.02 }] },
-    { id: 'fracture-warhead', name: '裂解弹头', category: '攻击', color: '#C084FC', effects: [{ stat: 'lethalMaxHpPct', amount: 0.01 }, { stat: 'weaponDamagePct', amount: 0.05 }, { stat: 'critChance', amount: -0.015 }] },
-    { id: 'piercing-coil', name: '穿甲线圈', category: '攻击', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 0.5 }, { stat: 'pierceDamagePct', amount: 0.15 }, { stat: 'weaponFireRatePct', amount: -0.02 }] },
-    { id: 'armor-piercing-round', name: '破甲弹', category: '攻击', color: '#E879F9', effects: [{ stat: 'pierceDamagePct', amount: 0.20 }, { stat: 'pierce', amount: 0.3 }] },
-    { id: 'superconductor-round', name: '超导弹体', category: '攻击', color: '#22D3EE', effects: [{ stat: 'bulletSpeed', amount: 40 }, { stat: 'attackRange', amount: 45 }] },
-    { id: 'overload-reactor', name: '过载反应', category: '攻击', color: '#EF4444', effects: [{ stat: 'weaponDamagePct', amount: 0.10 }, { stat: 'maxHp', amount: -18 }, { stat: 'shieldMax', amount: -16 }] },
-    { id: 'drone-uplink', name: '无人机上行链', category: '攻击', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 1.1 }, { stat: 'attackRange', amount: 24 }, { stat: 'magicDefense', amount: -2 }] },
-    { id: 'sniper-heuristic', name: '狙击演算', category: '攻击', color: '#577590', effects: [{ stat: 'critDamage', amount: 0.28 }, { stat: 'attackRange', amount: 95 }, { stat: 'weaponFireRatePct', amount: -0.04 }] },
-    { id: 'composite-armor', name: '复合护甲', category: '防御', color: '#64748B', effects: [{ stat: 'physicalDefense', amount: 9 }, { stat: 'maxHp', amount: 18 }, { stat: 'moveSpeed', amount: -6 }] },
-    { id: 'arcane-film', name: '秘法隔膜', category: '防御', color: '#8B5CF6', effects: [{ stat: 'magicDefense', amount: 10 }, { stat: 'shieldMax', amount: 20 }] },
-    { id: 'flame-coating', name: '火焰涂层', category: '元素防御', color: '#F3722C', effects: [{ stat: 'fireDefense', amount: 14 }, { stat: 'magicDefense', amount: 2 }, { stat: 'weaponDamagePct', amount: 0.04 }, { stat: 'iceDefense', amount: -3 }] },
-    { id: 'grounding-spike', name: '雷击接地桩', category: '元素防御', color: '#4CC9F0', effects: [{ stat: 'lightningDefense', amount: 14 }, { stat: 'magicDefense', amount: 2 }, { stat: 'weaponFireRatePct', amount: 0.03 }, { stat: 'poisonDefense', amount: -2 }] },
-    { id: 'antitoxin-serum', name: '解毒血清', category: '元素防御', color: '#84CC16', effects: [{ stat: 'poisonDefense', amount: 16 }, { stat: 'magicDefense', amount: 2 }, { stat: 'hpRegen', amount: 0.32 }] },
-    { id: 'cryo-insulation', name: '冰霜绝缘层', category: '元素防御', color: '#A7F3D0', effects: [{ stat: 'iceDefense', amount: 14 }, { stat: 'magicDefense', amount: 2 }, { stat: 'moveSpeed', amount: 6 }, { stat: 'fireDefense', amount: -2 }] },
-    { id: 'deflector-shield', name: '偏转护盾', category: '防御', color: '#14B8A6', effects: [{ stat: 'shieldMax', amount: 35 }, { stat: 'shieldRegen', amount: 1 }, { stat: 'maxHp', amount: -8 }] },
-    { id: 'evasion-servo', name: '闪避伺服', category: '机动', color: '#43AA8B', effects: [{ stat: 'dodgeChance', amount: 0.035 }, { stat: 'moveSpeed', amount: 12 }, { stat: 'physicalDefense', amount: -4 }] },
-    { id: 'regen-vat', name: '再生培养仓', category: '生存', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 0.8 }, { stat: 'maxHp', amount: 10 }, { stat: 'weaponFireRatePct', amount: -0.02 }] },
-    { id: 'bulwark-protocol', name: '坚壁协议', category: '防御', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.025 }, { stat: 'physicalDefense', amount: 4 }, { stat: 'moveSpeed', amount: -8 }] },
-    { id: 'lucky-dice', name: '幸运骰', category: '其他', color: '#F9C74F', effects: [{ stat: 'luck', amount: 10 }, { stat: 'critChance', amount: 0.01 }, { stat: 'maxHp', amount: -6 }] },
-    { id: 'scavenger-field', name: '拾荒磁场', category: '资源', color: '#577590', effects: [{ stat: 'pickupRange', amount: 45 }, { stat: 'resourceGain', amount: 0.04 }, { stat: 'attackRange', amount: -20 }] },
-    { id: 'xp-prism', name: '经验棱镜', category: '成长', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.07 }, { stat: 'luck', amount: 2 }, { stat: 'physicalDefense', amount: -2 }] },
-    { id: 'greed-converter', name: '贪婪转换器', category: '资源', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.16 }, { stat: 'weaponDamagePct', amount: -0.02 }, { stat: 'damageReduction', amount: -0.005 }] },
-    { id: 'phase-thruster', name: '相位推进器', category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed', amount: 24 }, { stat: 'dodgeChance', amount: 0.012 }, { stat: 'pickupRange', amount: 12 }] },
-    { id: 'stable-core', name: '稳态核心', category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp', amount: 25 }, { stat: 'shieldMax', amount: 15 }, { stat: 'critChance', amount: -0.015 }] },
-    { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.025 }, { stat: 'attackRange', amount: 40 }, { stat: 'shieldMax', amount: -8 }] },
-    { id: 'frenzy-injector', name: '狂热注射', category: '混合', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.16 }, { stat: 'hpRegen', amount: -0.3 }, { stat: 'physicalDefense', amount: -2 }] },
+    // ── 攻击（12件）数值大幅提升，纯正面 ──────────────────────────
+    { id: 'charged-magazine', name: '高能弹匣', category: '攻击', color: '#F94144', effects: [{ stat: 'weaponDamagePct', amount: 0.36 }, { stat: 'weaponFireRatePct', amount: 0.18 }] },
+    { id: 'rapid-trigger', name: '急速扳机', category: '攻击', color: '#4CC9F0', effects: [{ stat: 'weaponFireRatePct', amount: 0.48 }] },
+    { id: 'longscope', name: '远距瞄具', category: '攻击', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 48 }, { stat: 'critChance', amount: 0.07 }] },
+    { id: 'crit-lens', name: '暴击透镜', category: '攻击', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.12 }, { stat: 'critDamage', amount: 0.48 }] },
+    { id: 'execution-protocol', name: '处决协议', category: '攻击', color: '#B5179E', effects: [{ stat: 'lethalChance', amount: 0.04 }, { stat: 'lethalDamage', amount: 0.72 }] },
+    { id: 'fracture-warhead', name: '裂解弹头', category: '攻击', color: '#C084FC', effects: [{ stat: 'lethalMaxHpPct', amount: 0.03 }, { stat: 'weaponDamagePct', amount: 0.18 }] },
+    { id: 'piercing-coil', name: '穿甲线圈', category: '攻击', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 1.8 }, { stat: 'pierceDamagePct', amount: 0.42 }] },
+    { id: 'armor-piercing-round', name: '破甲弹', category: '攻击', color: '#E879F9', effects: [{ stat: 'pierceDamagePct', amount: 0.54 }, { stat: 'pierce', amount: 1.2 }] },
+    { id: 'superconductor-round', name: '超导弹体', category: '攻击', color: '#22D3EE', effects: [{ stat: 'bulletSpeed', amount: 96 }, { stat: 'attackRange', amount: 36 }] },
+    { id: 'overload-reactor', name: '过载反应', category: '攻击', color: '#EF4444', effects: [{ stat: 'weaponDamagePct', amount: 0.48 }] },
+    { id: 'drone-uplink', name: '无人机上行链', category: '攻击', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 3.0 }, { stat: 'attackRange', amount: 24 }] },
+    { id: 'sniper-heuristic', name: '狙击演算', category: '攻击', color: '#577590', effects: [{ stat: 'critDamage', amount: 0.72 }, { stat: 'attackRange', amount: 60 }] },
+
+    // ── 防御/生存（7件，替代原元素防） ────────────────────────────
+    { id: 'composite-armor', name: '复合护甲', category: '防御', color: '#64748B', effects: [{ stat: 'maxHp', amount: 84 }, { stat: 'damageReduction', amount: 0.04 }] },
+    { id: 'arcane-film', name: '秘法隔膜', category: '防御', color: '#8B5CF6', effects: [{ stat: 'shieldMax', amount: 72 }, { stat: 'shieldRegen', amount: 3.6 }] },
+    { id: 'warmog-heart', name: '狂徒之心', category: '生存', color: '#F3722C', effects: [{ stat: 'hpRegen', amount: 3.6 }, { stat: 'maxHp', amount: 48 }] },
+    { id: 'evasion-field', name: '闪避力场', category: '机动', color: '#4CC9F0', effects: [{ stat: 'dodgeChance', amount: 0.08 }, { stat: 'moveSpeed', amount: 12 }] },
+    { id: 'bullet-time', name: '子弹时间', category: '攻击', color: '#84CC16', effects: [{ stat: 'weaponFireRatePct', amount: 0.22 }, { stat: 'attackSpeed', amount: 0.05 }] },
+    { id: 'cryo-field', name: '冰霜力场', category: '机动', color: '#A7F3D0', effects: [{ stat: 'moveSpeed', amount: 20 }, { stat: 'shieldMax', amount: 36 }] },
+    { id: 'deflector-shield', name: '偏转护盾', category: '防御', color: '#14B8A6', effects: [{ stat: 'shieldMax', amount: 96 }, { stat: 'shieldRegen', amount: 3.6 }] },
+
+    // ── 机动/生存（3件） ───────────────────────────────────────────
+    { id: 'evasion-servo', name: '闪避伺服', category: '机动', color: '#43AA8B', effects: [{ stat: 'dodgeChance', amount: 0.10 }, { stat: 'moveSpeed', amount: 16 }, { stat: 'shieldMax', amount: 24 }] },
+    { id: 'regen-vat', name: '再生培养仓', category: '生存', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 3.6 }, { stat: 'maxHp', amount: 60 }] },
+    { id: 'bulwark-protocol', name: '坚壁协议', category: '防御', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.07 }, { stat: 'maxHp', amount: 60 }] },
+
+    // ── 资源/成长/其他（4件） ──────────────────────────────────────
+    { id: 'lucky-dice', name: '幸运骰', category: '其他', color: '#F9C74F', effects: [{ stat: 'luck', amount: 30 }, { stat: 'critChance', amount: 0.06 }] },
+    { id: 'scavenger-field', name: '拾荒磁场', category: '资源', color: '#577590', effects: [{ stat: 'pickupRange', amount: 108 }, { stat: 'resourceGain', amount: 0.14 }, { stat: 'moveSpeed', amount: 8 }] },
+    { id: 'xp-prism', name: '经验棱镜', category: '成长', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.30 }, { stat: 'luck', amount: 10 }] },
+    { id: 'greed-converter', name: '贪婪转换器', category: '资源', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.42 }, { stat: 'xpGain', amount: 0.10 }] },
+
+    // ── 混合（2件） ────────────────────────────────────────────────
+    { id: 'phase-thruster', name: '相位推进器', category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed', amount: 28 }, { stat: 'dodgeChance', amount: 0.06 }, { stat: 'pickupRange', amount: 36 }] },
+    { id: 'stable-core', name: '稳态核心', category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp', amount: 96 }, { stat: 'shieldMax', amount: 48 }] },
+    { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.08 }, { stat: 'attackRange', amount: 40 }] },
+    { id: 'frenzy-injector', name: '狂热注射', category: '攻击', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.60 }, { stat: 'moveSpeed', amount: 8 }] },
 ];
+
+// ── RUN_ITEM (chest/shop) catalog ──────────────────────────────────
 
 const SCALE_POSITIVE = (tier: number) => 1 + (tier - 1) * 0.52;
 const SCALE_NEGATIVE = (tier: number) => 0.45 + (tier - 1) * 0.24;
@@ -92,62 +119,64 @@ export function buildRunItemCatalog(): LevelUpgrade[] {
     return items;
 }
 
-export const STAT_UPGRADE_BLUEPRINTS: RunItemBlueprint[] = [
-    { id: 'fire-control', name: '火控训练', category: '攻击属性', color: '#F94144', effects: [{ stat: 'weaponDamagePct', amount: 0.12 }] },
-    { id: 'neural-rapid', name: '神经加速', category: '攻击属性', color: '#4CC9F0', effects: [{ stat: 'weaponFireRatePct', amount: 0.12 }] },
-    { id: 'long-lock', name: '远距锁定', category: '攻击属性', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 110 }, { stat: 'bulletSpeed', amount: 38 }] },
-    { id: 'crit-instinct', name: '暴击直觉', category: '攻击属性', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.045 }] },
-    { id: 'weakpoint-study', name: '弱点解析', category: '攻击属性', color: '#C084FC', effects: [{ stat: 'critDamage', amount: 0.22 }, { stat: 'critChance', amount: 0.01 }] },
-    { id: 'lethal-judgement', name: '致命判断', category: '攻击属性', color: '#F59E0B', effects: [{ stat: 'lethalChance', amount: 0.012 }, { stat: 'lethalDamage', amount: 1.2 }] },
-    { id: 'execution-sense', name: '斩杀本能', category: '攻击属性', color: '#B5179E', effects: [{ stat: 'lethalMaxHpPct', amount: 0.008 }, { stat: 'weaponDamagePct', amount: 0.05 }] },
-    { id: 'pierce-drill', name: '穿透训练', category: '攻击属性', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 1.0 }] },
-    { id: 'pierce-damage-train', name: '穿透强化', category: '攻击属性', color: '#E879F9', effects: [{ stat: 'pierceDamagePct', amount: 0.15 }] },
-    { id: 'drone-command', name: '无人机指挥', category: '攻击属性', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 1.2 }, { stat: 'attackRange', amount: 28 }] },
-    { id: 'armor-body', name: '装甲体魄', category: '防御属性', color: '#64748B', effects: [{ stat: 'physicalDefense', amount: 12 }, { stat: 'maxHp', amount: 22 }] },
-    { id: 'arcane-resolve', name: '秘法抗性', category: '防御属性', color: '#8B5CF6', effects: [{ stat: 'magicDefense', amount: 12 }, { stat: 'shieldMax', amount: 22 }] },
-    { id: 'element-balance', name: '元素调和', category: '防御属性', color: '#14B8A6', effects: [{ stat: 'fireDefense', amount: 9 }, { stat: 'lightningDefense', amount: 9 }, { stat: 'poisonDefense', amount: 9 }, { stat: 'iceDefense', amount: 9 }] },
-    { id: 'life-expansion', name: '生命扩容', category: '防御属性', color: '#43AA8B', effects: [{ stat: 'maxHp', amount: 48 }] },
-    { id: 'shield-expansion', name: '护盾扩容', category: '防御属性', color: '#22D3EE', effects: [{ stat: 'shieldMax', amount: 46 }, { stat: 'shieldRegen', amount: 0.9 }] },
-    { id: 'regen-loop', name: '自愈循环', category: '防御属性', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 1.0 }, { stat: 'maxHp', amount: 10 }] },
-    { id: 'damage-soften', name: '冲击缓释', category: '防御属性', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.028 }, { stat: 'physicalDefense', amount: 4 }] },
-    { id: 'evasion-steps', name: '闪避步伐', category: '其他属性', color: '#2DD4BF', effects: [{ stat: 'dodgeChance', amount: 0.038 }, { stat: 'moveSpeed', amount: 12 }] },
-    { id: 'mobility-drill', name: '移动训练', category: '其他属性', color: '#43AA8B', effects: [{ stat: 'moveSpeed', amount: 40 }] },
-    { id: 'lucky-sense', name: '幸运感知', category: '其他属性', color: '#F9C74F', effects: [{ stat: 'luck', amount: 14 }, { stat: 'pickupRange', amount: 18 }] },
-    { id: 'field-sweep', name: '战场拾取', category: '其他属性', color: '#577590', effects: [{ stat: 'pickupRange', amount: 70 }, { stat: 'xpGain', amount: 0.055 }] },
-    { id: 'combat-learning', name: '战斗学习', category: '其他属性', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.12 }, { stat: 'luck', amount: 4 }] },
-    { id: 'salvage-sense', name: '资源嗅觉', category: '其他属性', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.08 }, { stat: 'luck', amount: 5 }] },
-];
-
-const SCALE_STAT = (tier: number) => 1 + (tier - 1) * 0.58;
-
-export function scaleStatUpgradeEffect(effect: StatEffect, tier: number): StatEffect {
-    const amount = effect.amount * SCALE_STAT(tier);
-    return {
-        stat: effect.stat,
-        amount: Math.abs(amount) >= 3 ? Math.round(amount) : Number(amount.toFixed(3)),
-    };
-}
-
-export function buildStatUpgradeCatalog(): LevelUpgrade[] {
-    const upgrades: LevelUpgrade[] = [];
-    for (const blueprint of STAT_UPGRADE_BLUEPRINTS) {
-        for (let tier = 1; tier <= ITEM_TIER_NAMES.length; tier++) {
-            const effects = blueprint.effects.map((effect) => scaleStatUpgradeEffect(effect, tier));
-            upgrades.push({
-                id: `stat-${blueprint.id}-${tier}`,
-                name: `${blueprint.name} ${tier}段`,
-                desc: effects.map(formatRunItemEffect).join(' / '),
-                color: blueprint.color,
-                category: blueprint.category,
-                tier,
-                effects,
-            });
-        }
-    }
-    return upgrades;
-}
-
 export const RUN_ITEMS: LevelUpgrade[] = buildRunItemCatalog();
 export const RUN_ITEM_COUNT = RUN_ITEMS.length;
-export const LEVEL_UPGRADES: LevelUpgrade[] = buildStatUpgradeCatalog();
-export const STAT_UPGRADE_COUNT = LEVEL_UPGRADES.length;
+
+// ── NEW range-based upgrade blueprints for level-up (replaces old STAT_UPGRADE_BLUEPRINTS) ──
+
+/**
+ * Stat upgrade blueprints with random ranges.
+ * Each time you level up, the actual values are rolled within [min, max].
+ */
+export const LEVEL_UP_BLUEPRINTS: StatUpgradeBlueprint[] = [
+    // ── 💪 力量（Power） ─────────────────────────────────────────
+    { id: 'power-attack',        name: '攻击强化', category: '力量', color: '#F94144', effects: [{ stat: 'attackPower', min: 8, max: 16 }] },
+    { id: 'power-crit',          name: '暴击训练', category: '力量', color: '#F15BB5', effects: [{ stat: 'critChance', min: 0.04, max: 0.10 }] },
+    { id: 'power-crit-damage',   name: '弱点打击', category: '力量', color: '#B5179E', effects: [{ stat: 'critDamage', min: 0.15, max: 0.36 }] },
+
+    // ── ⚡ 敏捷（Agility） ───────────────────────────────────────
+    { id: 'agility-reflex',      name: '神经反射', category: '敏捷', color: '#4CC9F0', effects: [{ stat: 'attackSpeed', min: 0.05, max: 0.12 }] },
+    { id: 'agility-speed',       name: '移速强化', category: '敏捷', color: '#43AA8B', effects: [{ stat: 'moveSpeed', min: 8, max: 18 }] },
+    { id: 'agility-dodge',       name: '身法训练', category: '敏捷', color: '#2DD4BF', effects: [{ stat: 'dodgeChance', min: 0.04, max: 0.07 }] },
+
+    // ── ❤️ 体魄（Physique） ──────────────────────────────────────
+    { id: 'physique-hp',         name: '生命扩展', category: '体魄', color: '#64748B', effects: [{ stat: 'maxHp', min: 30, max: 60 }] },
+    { id: 'physique-shield',     name: '护盾扩容', category: '体魄', color: '#22D3EE', effects: [{ stat: 'shieldMax', min: 24, max: 48 }] },
+    { id: 'physique-toughness',  name: '坚韧体质', category: '体魄', color: '#475569', effects: [{ stat: 'damageReduction', min: 0.03, max: 0.06 }] },
+
+    // ── 🎯 技巧（Technique） ─────────────────────────────────────
+    { id: 'technique-range',     name: '精准瞄准', category: '技巧', color: '#38BDF8', effects: [{ stat: 'attackRange', min: 20, max: 50 }] },
+    { id: 'technique-pierce',    name: '穿透强化', category: '技巧', color: '#F9C74F', effects: [{ stat: 'pierceDamagePct', min: 0.12, max: 0.28 }] },
+    { id: 'technique-drone',     name: '无人机指挥', category: '技巧', color: '#90BE6D', effects: [{ stat: 'dronePower', min: 1.0, max: 4.5 }] },
+];
+
+/** Roll a random value within [min, max] and produce a proper StatEffect. */
+function rollRangeValue(stat: keyof typeof STAT_META, min: number, max: number): StatEffect {
+    const raw = min + Math.random() * (max - min);
+    const meta = STAT_META[stat];
+    let amount: number;
+    if (meta.kind === 'number') {
+        amount = Math.round(raw);
+    } else {
+        // percent / multiplier → keep 3 decimal places
+        amount = Number(raw.toFixed(3));
+    }
+    return { stat, amount };
+}
+
+/**
+ * Roll a fresh LevelUpgrade from a blueprint with random values.
+ */
+export function rollStatUpgradeChoice(blueprint: StatUpgradeBlueprint): LevelUpgrade {
+    const effects = blueprint.effects.map((e) => rollRangeValue(e.stat, e.min, e.max));
+    const desc = effects.map(formatRunItemEffect).join(' / ');
+    return {
+        id: blueprint.id,
+        name: blueprint.name,
+        desc,
+        color: blueprint.color,
+        category: blueprint.category,
+        tier: 1,
+        effects,
+    };
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "echo-bow-standard",
+    "weapon_name": "回声弓",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 7,
+    "p90": 7,
+    "avg_kills": 276,
+    "avg_level": 7,
+    "passes": false
+  }
+]

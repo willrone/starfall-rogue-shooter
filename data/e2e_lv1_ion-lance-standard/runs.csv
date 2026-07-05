@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+ion-lance-standard,离子长枪,boss_gate,boss_gate,1,82511,10,570.83,1355,15,169,9,combat,351.7,False,

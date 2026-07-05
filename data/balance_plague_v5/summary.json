@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "plague-sprayer-standard",
+    "weapon_name": "瘟疫喷射器",
+    "tier": "novice",
+    "target_profile": "novice",
+    "runs": 1,
+    "p50": 4,
+    "p90": 4,
+    "avg_kills": 300,
+    "avg_level": 7,
+    "passes": false
+  }
+]

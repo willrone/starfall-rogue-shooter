@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "quantum-loom-standard",
+    "weapon_name": "量子织机",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 10,
+    "p90": 10,
+    "avg_kills": 2007,
+    "avg_level": 15,
+    "passes": false
+  }
+]

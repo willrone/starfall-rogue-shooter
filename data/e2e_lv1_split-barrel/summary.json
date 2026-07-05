@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "split-barrel",
+    "weapon_name": "裂变枪管",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 10,
+    "p90": 10,
+    "avg_kills": 2159,
+    "avg_level": 16,
+    "passes": false
+  }
+]

@@ -15,7 +15,7 @@ import {
 } from '../../assets/scripts/catalogs/weaponCatalog';
 
 function testWeaponCatalogCount() {
-    // 20 families × 10 variants = 200 weapons
+    // weapon families × variants = catalog size
     assert(WEAPON_COUNT === WEAPON_FAMILIES.length * WEAPON_VARIANTS.length,
         `WEAPON_COUNT should be ${WEAPON_FAMILIES.length * WEAPON_VARIANTS.length}, got ${WEAPON_COUNT}`);
     assert(WEAPON_CATALOG.length === WEAPON_COUNT, 'WEAPON_CATALOG length must match WEAPON_COUNT');
@@ -35,17 +35,33 @@ function testWeaponKind() {
 }
 
 function testWeaponAttackStyles() {
-    assert(getWeaponAttackStyle('storm-rifle') === 'rifle');
-    assert(getWeaponAttackStyle('split-barrel') === 'shotgun');
+    assert(getWeaponAttackStyle('storm-rifle') === 'smg');
+    assert(getWeaponAttackStyle('plague-sprayer') === 'spray');
+    assert(getWeaponAttackStyle('frost-beamer') === 'frost');
+    assert(getWeaponAttackStyle('echo-bow') === 'echo');
+    assert(getWeaponAttackStyle('split-barrel') === 'scatter');
+    assert(getWeaponAttackStyle('mirror-prism') === 'prism');
+    assert(getWeaponAttackStyle('quantum-loom') === 'quantum');
+    assert(getWeaponAttackStyle('ion-lance') === 'ion');
+    assert(getWeaponAttackStyle('thorn-crossbow') === 'thorn');
     assert(getWeaponAttackStyle('rail-cannon') === 'rail');
+    assert(getWeaponAttackStyle('void-needle') === 'void_needle');
+    assert(getWeaponAttackStyle('meteor-launcher') === 'meteor');
     assert(getWeaponAttackStyle('orbital-drone') === 'drone');
+    assert(getWeaponAttackStyle('gravity-hammer') === 'gravity');
+    assert(getWeaponAttackStyle('void-tearer') === 'void_tear');
+    assert(getWeaponAttackStyle('icefire-judge') === 'icefire');
+    assert(getWeaponAttackStyle('webmaster') === 'web');
+    const styles = WEAPON_FAMILIES.map(family => getWeaponAttackStyle(family.id));
+    assert(new Set(styles).size === WEAPON_FAMILIES.length, 'Every weapon family should have a distinct attack VFX style');
     assert(getWeaponAttackStyle('unknown-weapon') === 'rifle', 'Unknown should default to rifle');
 }
 
 function testWeaponStyleNames() {
-    assert(getWeaponStyleName('shotgun') === '近距宽弹道');
-    assert(getWeaponStyleName('rail') === '高速穿透');
-    assert(getWeaponStyleName('drone') === '无人机电击');
+    assert(getWeaponStyleName('scatter') === '近距三连');
+    assert(getWeaponStyleName('rail') === '磁轨贯穿');
+    assert(getWeaponStyleName('drone') === '无人机电弧');
+    assert(getWeaponStyleName('icefire') === '冰火审判');
     assert(getWeaponStyleName('rifle') === '标准弹道');
 }
 

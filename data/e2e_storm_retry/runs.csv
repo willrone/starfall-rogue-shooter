@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+storm-rifle,冲锋枪,novice,novice,1,57127,0,0.0,0,0,0,0,error,0.0,True,

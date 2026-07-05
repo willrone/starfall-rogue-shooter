@@ -1,0 +1,14 @@
+[
+  {
+    "weapon_id": "rail-cannon-standard",
+    "weapon_name": "磁轨炮",
+    "tier": "boss_gate",
+    "target_profile": "boss_gate",
+    "runs": 1,
+    "p50": 10,
+    "p90": 10,
+    "avg_kills": 1654,
+    "avg_level": 14,
+    "passes": true
+  }
+]

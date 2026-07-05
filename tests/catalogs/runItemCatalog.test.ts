@@ -2,18 +2,15 @@ import assert from 'node:assert/strict';
 import {
     RUN_ITEMS,
     RUN_ITEM_COUNT,
-    LEVEL_UPGRADES,
-    STAT_UPGRADE_COUNT,
     RUN_ITEM_BLUEPRINTS,
-    STAT_UPGRADE_BLUEPRINTS,
+    LEVEL_UP_BLUEPRINTS,
     ITEM_TIER_NAMES,
     TRADEOFF_POSITIVE_BONUS,
     buildRunItemCatalog,
-    buildStatUpgradeCatalog,
     scaleRunItemEffect,
     scaleRunItemEffects,
-    scaleStatUpgradeEffect,
     formatRunItemEffect,
+    rollStatUpgradeChoice,
 } from '../../assets/scripts/catalogs/runItemCatalog';
 
 function testRunItemCatalogCount() {
@@ -23,11 +20,63 @@ function testRunItemCatalogCount() {
     assert(RUN_ITEMS.length === RUN_ITEM_COUNT, 'RUN_ITEMS length must match RUN_ITEM_COUNT');
 }
 
-function testStatUpgradeCatalogCount() {
-    // 23 blueprints × 5 tiers = 115 stat upgrades
-    assert(STAT_UPGRADE_COUNT === STAT_UPGRADE_BLUEPRINTS.length * ITEM_TIER_NAMES.length,
-        `STAT_UPGRADE_COUNT should be ${STAT_UPGRADE_BLUEPRINTS.length * ITEM_TIER_NAMES.length}, got ${STAT_UPGRADE_COUNT}`);
-    assert(LEVEL_UPGRADES.length === STAT_UPGRADE_COUNT, 'LEVEL_UPGRADES length must match STAT_UPGRADE_COUNT');
+function testLevelUpBlueprintsCount() {
+    // 12 blueprints in 4 categories
+    assert(LEVEL_UP_BLUEPRINTS.length === 12,
+        `LEVEL_UP_BLUEPRINTS should have 12 entries, got ${LEVEL_UP_BLUEPRINTS.length}`);
+
+    // Verify all 4 categories are present
+    const categories = new Set(LEVEL_UP_BLUEPRINTS.map(bp => bp.category));
+    for (const cat of ['力量', '敏捷', '体魄', '技巧']) {
+        assert(categories.has(cat), `Missing category: ${cat}`);
+    }
+
+    // Each category should have exactly 3 entries
+    for (const cat of categories) {
+        const count = LEVEL_UP_BLUEPRINTS.filter(bp => bp.category === cat).length;
+        assert(count === 3, `Category ${cat} should have 3 entries, got ${count}`);
+    }
+}
+
+function testLevelUpBlueprintRanges() {
+    for (const bp of LEVEL_UP_BLUEPRINTS) {
+        assert(bp.effects.length >= 1, `${bp.id} should have at least 1 effect`);
+        for (const effect of bp.effects) {
+            assert(typeof effect.min === 'number', `${bp.id} effect min should be a number`);
+            assert(typeof effect.max === 'number', `${bp.id} effect max should be a number`);
+            assert(effect.min <= effect.max, `${bp.id} min (${effect.min}) should be ≤ max (${effect.max})`);
+        }
+    }
+}
+
+function testRollStatUpgradeChoice() {
+    // Test that rolling produces valid LevelUpgrade objects with values within range
+    for (const bp of LEVEL_UP_BLUEPRINTS) {
+        const results = new Map<string, number[]>();
+        // Roll 20 times to see the random range
+        for (let i = 0; i < 20; i++) {
+            const upgrade = rollStatUpgradeChoice(bp);
+            assert(typeof upgrade.id === 'string', `Should have string id`);
+            assert(upgrade.id === bp.id, `id should match blueprint id`);
+            assert(upgrade.name === bp.name, `name should match`);
+            assert(upgrade.effects.length === bp.effects.length, `effect count should match`);
+            for (const effect of upgrade.effects) {
+                const spec = bp.effects.find(e => e.stat === effect.stat);
+                assert(spec, `Unexpected stat ${effect.stat} in rolled upgrade`);
+                assert(effect.amount >= spec.min, `${bp.id} ${effect.stat}: rolled ${effect.amount} < min ${spec.min}`);
+                assert(effect.amount <= spec.max, `${bp.id} ${effect.stat}: rolled ${effect.amount} > max ${spec.max}`);
+                const key = String(effect.stat);
+                if (!results.has(key)) results.set(key, []);
+                results.get(key)!.push(effect.amount);
+            }
+        }
+        // Verify that we got at least some variance (not all rolls same)
+        for (const [statKey, values] of results) {
+            const minVal = Math.min(...values);
+            const maxVal = Math.max(...values);
+            assert(minVal < maxVal, `${bp.id} ${statKey}: all 20 rolls were identical (${minVal}) — range should produce variance`);
+        }
+    }
 }
 
 function testRunItemIdsAreUnique() {
@@ -36,10 +85,10 @@ function testRunItemIdsAreUnique() {
     assert(unique.size === ids.length, `Duplicate run item IDs found: ${ids.length - unique.size} duplicates`);
 }
 
-function testStatUpgradeIdsAreUnique() {
-    const ids = LEVEL_UPGRADES.map(item => item.id);
+function testLevelUpBlueprintIdsAreUnique() {
+    const ids = LEVEL_UP_BLUEPRINTS.map(item => item.id);
     const unique = new Set(ids);
-    assert(unique.size === ids.length, `Duplicate stat upgrade IDs found: ${ids.length - unique.size} duplicates`);
+    assert(unique.size === ids.length, `Duplicate level-up blueprint IDs found: ${ids.length - unique.size} duplicates`);
 }
 
 function testRunItemTierProgression() {
@@ -101,40 +150,18 @@ function testBuildRunItemCatalogFresh() {
     }
 }
 
-function testBuildStatUpgradeCatalogFresh() {
-    const catalog = buildStatUpgradeCatalog();
-    assert(catalog.length === STAT_UPGRADE_COUNT, `Fresh build should produce ${STAT_UPGRADE_COUNT} upgrades, got ${catalog.length}`);
-    for (const item of catalog) {
-        assert(item.id.startsWith('stat-'), `Stat upgrade ${item.id} should start with 'stat-'`);
-        assert(item.effects.length > 0, `Stat upgrade ${item.id} should have effects`);
-    }
-}
-
-function testScaleStatUpgradeEffect() {
-    const effect = { stat: 'attackPower' as const, amount: 16 };
-    const scaled1 = scaleStatUpgradeEffect(effect, 1);
-    assert(scaled1.amount === 16, `Tier 1 stat upgrade should be unchanged: got ${scaled1.amount}`);
-
-    const tier3 = 3;
-    const scaled3 = scaleStatUpgradeEffect(effect, tier3);
-    // Current stat-upgrade scaling contract: SCALE_STAT(tier) = 1 + (tier - 1) * 0.58.
-    // Tier 3: 16 * (1 + 2 * 0.58) = 34.56 → round to 35.
-    const expected3 = Math.round(effect.amount * (1 + (tier3 - 1) * 0.58));
-    assert(scaled3.amount === expected3, `Tier 3 stat upgrade should be ${expected3}: got ${scaled3.amount}`);
-}
-
 // Run all tests
 testRunItemCatalogCount();
-testStatUpgradeCatalogCount();
+testLevelUpBlueprintsCount();
+testLevelUpBlueprintRanges();
+testRollStatUpgradeChoice();
 testRunItemIdsAreUnique();
-testStatUpgradeIdsAreUnique();
+testLevelUpBlueprintIdsAreUnique();
 testRunItemTierProgression();
 testScaleRunItemEffectPositive();
 testScaleRunItemEffectNegative();
 testScaleRunItemEffectTradeoff();
 testFormatRunItemEffect();
 testBuildRunItemCatalogFresh();
-testBuildStatUpgradeCatalogFresh();
-testScaleStatUpgradeEffect();
 
 console.log('runItemCatalog tests passed.');

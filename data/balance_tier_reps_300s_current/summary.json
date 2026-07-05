@@ -1,0 +1,50 @@
+[
+  {
+    "weapon_id": "storm-rifle",
+    "weapon_name": "风暴步枪",
+    "tier": "novice",
+    "target_profile": "novice",
+    "runs": 1,
+    "p50": 4,
+    "p90": 4,
+    "avg_kills": 109,
+    "avg_level": 4,
+    "passes": false
+  },
+  {
+    "weapon_id": "echo-bow-standard",
+    "weapon_name": "回声弓",
+    "tier": "standard",
+    "target_profile": "standard",
+    "runs": 1,
+    "p50": 6,
+    "p90": 6,
+    "avg_kills": 280,
+    "avg_level": 7,
+    "passes": false
+  },
+  {
+    "weapon_id": "ion-lance-standard",
+    "weapon_name": "离子长枪",
+    "tier": "boss_gate",
+    "target_profile": "boss_gate",
+    "runs": 1,
+    "p50": 6,
+    "p90": 6,
+    "avg_kills": 359,
+    "avg_level": 8,
+    "passes": false
+  },
+  {
+    "weapon_id": "meteor-launcher-standard",
+    "weapon_name": "流星发射器",
+    "tier": "boss_clear",
+    "target_profile": "boss_clear",
+    "runs": 1,
+    "p50": 6,
+    "p90": 6,
+    "avg_kills": 415,
+    "avg_level": 8,
+    "passes": false
+  }
+]

@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+split-barrel,裂变枪管,standard,standard,1,10116,10,569.8,2159,16,389,15,combat,234.11,False,

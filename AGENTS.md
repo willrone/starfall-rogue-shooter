@@ -10,111 +10,214 @@
 
 **核心循环**：
 ```
-进入战斗 → 自动射击 → 杀怪 → XP/合金掉落
-→ 升级（3选1属性成长）→ 商店买道具（6格，用合金）→ 更强
+进入战斗 → 自动射击 → 杀怪 → 合金/宝箱掉落（XP 直接获得，不需捡）
+→ 升级（3 选 1 属性成长，数值随机范围）→ 商店买道具（6 格，用合金）→ 更强
 → 波次推进，怪物越密越强
-→ 死亡/撤离 → 永久进度（机库装备升级）
+→ 死亡/撤离 → 永久进度（机库装备升级 + 副武器合成/升级）
 ```
 
-**关键约束**：战斗内武器固定1把，不会换武器。武器升级只在战后机库完成。
+**关键约束**：战斗内装备 1 主武器 + 1 副武器（同时生效，不切换）。
+主武器升级/强化在机库完成；副武器有独立的合成+升级面板。副武器不占用道具槽。
 
 ---
 
 ## 2. 战斗内系统真实机制（最重要，AI 经常搞错）
 
-### 2.1 伤害公式（projectileManager.ts:176-213）
+### 2.1 伤害公式（源码位置）
+
+**子弹伤害** `projectileManager.ts getBulletDamage()` (加法不复利)：
+```typescript
+bulletDamage = max(2,
+  weaponDamage × (1 + (level - 1) × 0.12 + weaponDamagePct)
+  + baseAttackPower × 0.15 + (attackPower - baseAttackPower))
+```
+
+**开火间隔** `projectileManager.ts getFireInterval()` (加法不复利)：
+```typescript
+fireInterval = max(0.07, 1 / max(0.15,
+  weaponFireRate × (1 + (level - 1) × 0.10 + weaponFireRatePct + critBoost)
+  + attackSpeed × 0.45))
+```
+
+**穿透个数** `projectileManager.ts getBulletPierce()`：
+```typescript
+pierce = floor(weaponPierce × (1 + (level - 1) × 0.10) + characterPierce + pierceStacks)
+       + (random < fractional_part ? 1 : 0)   // 随机额外穿透
+```
+
+**弹速** `projectileManager.ts getBulletSpeed()`：
+```typescript
+bulletSpeed = max(260, 300 + weaponBulletSpeed × (1 + (level - 1) × 0.08) × 140 + bonus × 0.4)
+```
+
+**每级成长率**（统一在 `combatFormulas.ts`）：
+| 属性 | 每级 |
+|---|---|
+| 伤害 | +12% |
+| 射速 | +10% |
+| 穿透 | +10% |
+| 弹速 | +8% |
+| 无人机 | +8% |
+
+**baseAttackPower = 16**（`createBaseCharacterStats()` 的值）
+
+### 2.2 无人机伤害（`combatFormulas.ts`）
 
 ```typescript
-// 子弹伤害
-bulletDamage = max(2, weaponDamage × weaponLevel + baseAttackPower×0.15 + (attackPower - baseAttackPower))
-// 开火间隔
-fireInterval = max(0.07, 1 / max(0.15, weaponFireRate × weaponLevel + attackSpeed × 0.45))
-// 穿透（整数地板）
-pierce = floor(weaponPierce × weaponLevel + characterPierce × 0.3)
-// 多弹丸（不是每次触发，有门槛）
-spreadPower = character.multiShot
-guaranteedExtra = min(3, floor(spreadPower / 2.2))  // 每次射击额外弹道
-// 低于 2.2 只有概率触发侧射
-```
-
-**baseAttackPower = 16**（createBaseCharacterStats 里的值）
-**weaponLevel = 战斗内等于机库等级**（非固定 1），每级成长：伤害+12%、射速+10%、穿透+10%、弹速+8%、多弹丸+8%、无人机+8%
-
-### 2.2 无人机伤害
-
-```
 droneCount = min(8, 1 + floor(dronePower / 4))
 droneInterval = max(0.28, 1.18 - min(0.78, dronePower × 0.035))
 每轮电击伤害 ≈ dronePower × 8
 ```
 
-### 2.3 角色属性来源（RogueShooterGame.ts:1959-1989）
+### 2.3 角色属性来源（`RogueShooterGame.ts`）
 
 ```
 stats = createBaseCharacterStats()        // 基础属性
-     + runStats                           // 升级选项 + 商店道具加的属性
-     + weaponStat('fireRate')×0.18        // 武器属性贡献（战斗内不升级）
+     + runStats                           // 升级选项 + 商店道具
+     + weaponStat('fireRate')×0.18       // 武器属性贡献（战斗内不升级）
      + weaponStat('pierce')×0.18
-     + weaponStat('multiShot')
-     + weaponStat('drone')
-     + 装备 gearStats×gearLevel           // 战斗内装备 level 固定为 1
+     + 装备 gearStats×gearLevel          // 战斗内装备 level 固定为 1
 ```
 
-### 2.4 升级系统（runItemCatalog.ts STAT_UPGRADE_BLUEPRINTS）
+### 2.4 升级系统（`runItemCatalog.ts LEVEL_UP_BLUEPRINTS`）
 
-每次升级 → 3 选 1 → 直接加到 runStats 上（永久本局）。
+每次升级 → 3 选 1 → 直接加到 runStats（永久本局），**纯加不减**。
 
-**攻击选项**（选这些会直接影响 DPS）：
-| 选项 | 效果 |
-|---|---|
-| 火控训练 | attackPower +16 |
-| 神经加速 | attackSpeed +0.14 |
-| 穿透训练 | pierce +1.2 |
-| 多弹操控 | multiShot +0.75 |
-| 无人机指挥 | dronePower +1.4 |
-| 暴击直觉 | critChance +0.055 |
-| 弱点解析 | critDamage +0.28, critChance +0.012 |
-| 致命判断 | lethalChance +0.014, lethalDamage +0.2 |
+XP 直接获得（杀怪时自动加，不需要捡经验球）。只有合金、宝箱需要捡。
 
-### 2.5 商店系统（equipmentManager.ts:448-489）
+每个升级选项的数值是**随机范围**，每次 roll 不同。
+
+**4 大类 × 3 种 = 12 种属性（2026-07-02 加强版，每级3选1）：**
+
+| 💪 力量 | 范围 | ⚡ 敏捷 | 范围 | ❤️ 体魄 | 范围 | 🎯 技巧 | 范围 |
+|---|---|---|---|---|---|---|---|
+| 攻击强化 `attackPower` | +8~16 | 神经反射 `attackSpeed` | +0.05~0.12 | 生命扩展 `maxHp` | +30~60 | 精准瞄准 `attackRange` | +55~120 |
+| 暴击训练 `critChance` | +4%~10% | 移速强化 `moveSpeed` | +18~42 | 护盾扩容 `shieldMax` | +24~48 | 穿透强化 `pierceDamagePct` | +12%~28% |
+| 弱点打击 `critDamage` | +15%~36% | 身法训练 `dodgeChance` | +4%~7% | 坚韧体质 `damageReduction` | +3%~6% | 无人机指挥 `dronePower` | +1.0~4.5 |
+
+> `attackPower` 和 `attackSpeed` 是升级**专属**属性（道具不加）。
+
+### 2.5 商店系统（`equipmentManager.ts`）
 
 **卖的是 RUN_ITEM（本局道具），不是武器。**
 
 ```
-RUN_ITEM 有 tier (1-5)，随战斗时间解锁
-价格 = max(46, round((44 + tier×18 + waveFee + cycleFee) × typeMultiplier))
+价格 = max(50, round((44 + tier×22 + waveFee + cycleFee) × endlessMultiplier × cumulativeMultiplier))
 waveFee = floor(waveIndex/4) × 5
 cycleFee = (endlessCycle-1) × 10
 ```
 
-RUN_ITEM 买后直接 `applyRunItem(id)` 加到 runStats，效果和升级选项一样。
+**定价公式不变**，但 **取消硬上限**（`MAX_RUN_ITEM_SLOTS = 999`），可以无限买。累计涨价 35%/件 保持不变，后期越来越贵但不会硬卡你。
 
-### 2.6 XP 曲线
+**道具全是纯正面效果**，无负面。22 件 blueprint × 5 个 tier = 110 个道具实例。
+按 category 分布：攻击(12) / 防御/生存/机动(10) / 资源/成长/其他(5) / 混合(5)。
+
+### 2.6 XP 曲线（`combatState.ts`）
 
 ```
-xpToNext = 65 × 1.24^level + 22 + level×5
+xpToNext = 65 × 1.24^level + 22 + level × 5
 XP 掉率 = 56%，掉落量 = monsterXP × 2.6
 ```
 
-### 2.7 怪物公式
+### 2.7 怪物公式（`enemyManager.ts` + `enemyCatalog.ts`）
 
+**10 种基础怪**（`BASE_ENEMY_ARCHETYPES`）：
+
+| 怪 | HP | 伤害 | 速度 | 权重 | 首次出 |
+|---|---:|---:|---:|---:|---:|
+| 碎壳虫 mite | 18 | 4 | 126 | 7.0 | 波 1+ |
+| 疾行体 runner | 24 | 6 | 196 | 4.0 | 波 10+ |
+| 重甲块 brute | 88 | 10 | 78 | 3.0 | 波 18+ |
+| 裂变囊 splitter | 54 | 7 | 112 | 3.0 | 波 28+ |
+| 磁暴卫士 warden | 160 | 15 | 92 | 2.0 | 波 46+ |
+| 自爆虫 bomber | 14 | 8 | 140 | 3.0 | 波 2+ |
+| 蜂群 swarm | 8 | 2 | 140 | 3.0 | 波 5+ |
+| 灵能体 aura | 40 | 5 | 80 | 1.5 | 波 12+ |
+| 追踪眼 seeker | 30 | 8 | 100 | 2.0 | 波 10+ |
+| 信标 beacon | 60 | 0 | 0 | 1.0 | 波 20+ |
+
+**生成间隔**（波 1-10）：
 ```
-生成间隔 = max(0.95, 1.42 - wave×0.035 - elapsed/38)
-HP 缩放 = 1 + wave×0.028 + combatTime×0.0018
-伤害缩放 = 1 + wave×0.02 + combatTime×0.0009
-每批数量 = 3 + floor(wave×0.45) + floor(elapsed/24) + rand(0,2)
-波时长 = uniform(50, 60) 秒
+interval = max(hardFloor, 1.62 - slot×0.035 - earlyRelief)
+  波1: 1.5s / 波2: 1.4s / 波3: 1.3s / 波4: 1.2s / 波5: 1.1s / 波6: 1.0s / 波7+: 0.95s
+  波11: ~1.29s（略慢于波10，给喘口气）
+  波12+: 指数递减，每波 ×1.05 缩放
 ```
 
-### 2.8 Starter 装备
+**每批数量**：波 1-2: 2 / 波 3-4: 3 / 波 5-6: 4 / 波 7+: 5 / 波 11+: min(60, 5×1.05^(wave-10))
 
-```
-storm-rifle:    weaponStats.damage=4.5, fireRate=1.12, pierce=0, multi=0, drone=0
-tactical-visor: attackRange+36, critChance+0.012
-phase-armor:    maxHp+22, physicalDefense+2.2, magicDefense+1
-kinetic-boots:  moveSpeed+17, dodgeChance+0.008
-magnet-coil:    pickupRange+22, luck+1.2
-```
+**场上限**：波 1: 40 → 波 8+: 240 / Boss波: 60 / 波 11+: max(240, 200×1.05^(wave-10)), min(600)
+
+**HP 缩放** = 1 + wave×0.028 + combatTime×0.0018
+**伤害缩放** = 1 + wave×0.012 + combatTime×0.0009
+
+**无尽缩放**：波 ≥ 11 时，scale = 1.05^(wave-10)，作用于 HP/伤害/间隔/上限。
+
+**5 种小 Boss**（无尽穿插，30% 概率，不掉材料，不挡进度）：
+狂暴重甲块 / 电弧灵能体 / 自爆母体 / 迅捷分裂体 / 再生巨兽
+
+**5 种大 Boss**（波 10/13/16... 每 Cycle 随机选一个，独占护盾+技能）：虚空巨像 / 噬能蠕虫 / 冰霜女皇 / 狱炎领主 / 虚空织网者
+
+### 2.8 武器系统（`weaponCatalog.ts`）
+
+**17 把主武器**（3 把传说 + 14 把基础），详见 `weaponCatalog.ts`：
+
+**15 把副武器**（设计基线见 `docs/offhand_weapon_design.md`），分类：
+- 环绕型 3 把（回旋利刃 / 守护星环 / 烈焰漩涡）
+- 召唤型 4 把（影刃猎手 / 静电蜂群 / 幽影分身 / 治愈蜂鸟）
+- 控场型 3 把（冰霜地雷 / 静电力场 / 黑曜石封印）
+- 爆发型 3 把（虚空裂隙 / 暴风之眼 / 时间扭曲）
+- 防御/辅助 2 把（纳米修复器 / 铜墙护盾）
+
+副武器独立升级（T1-T5），使用独立材料系统。
+
+| 分组 | 武器 |
+|---|---|
+| Novice | 风暴步枪 / 瘟疫喷射器 / 霜束发射器 |
+| Standard | 回声弓 / 裂变枪管 / 镜像棱镜 / 量子织机 |
+| Boss Gate | 荆棘连弩 / 虚空针 / 离子长枪 / 磁轨炮 |
+| Boss Clear | 流星发射器 / 轨道无人机 / 重力锤 |
+| Legendary | 虚空撕裂者 / 冰狱审判 / 织网支配者 |
+
+**变体系统**：10 种变体（T1~T10），同一武器换变体改变定位。
+T3 脉冲：伤害系数 ×4.44（设计意图：均衡提升，大幅增加单发伤害）
+
+### 2.9 机制词条（17 个，已全接入）
+
+| ID | 武器 | 机制 | 状态 |
+|---|---|---|---|
+| `crit_stacks` | 风暴步枪 | 暴击叠加攻速，5 层封顶，6 秒不暴击衰减 1 层 | ✅ |
+| `slow` | 霜束发射器 | 命中减速 0.4 秒 | ✅ |
+| `poison` | 瘟疫喷射器 | 叠 5 层毒，每层 1%/秒，1 秒 tick | ✅ |
+| `knockback` | 重力锤 | 命中击退，暴击 2 倍 | ✅ |
+| `multishot_3` | 裂变枪管 | 同时 3 颗扇形分布 | ✅ |
+| `radial_5` | 镜像棱镜 | 5 颗 360° 全方向散射 | ✅ |
+| `split` | 量子织机 | 飞行 0.5 秒后分裂 2 颗 | ✅ |
+| `pierce_stacks` | 回声弓 | 暴击叠加穿透，6 秒衰减 | ✅ |
+| `pierce_bonus` | 磁轨炮 | 每次穿透 +8% 伤害 | ✅ |
+| `straight` | 离子长枪 | 弹道笔直不衰减 | ✅ |
+| `ricochet` | 荆棘连弩 | 撞墙反弹 2 次，每次 +15% 伤害 | ✅ |
+| `aoe_burn` | 流星发射器 | 命中留 3 秒燃烧区，每秒 12% 攻击力 | ✅ |
+| `drone_charge` | 轨道无人机 | 击杀充能，满 100% 召唤爆炸无人机 | ✅ |
+| `crit_master` | 虚空针 | 高暴击率+暴击伤害加成 | ✅ |
+| `void_tearer` | 虚空撕裂者（传说） | 穿透叠加虚空撕裂，每穿透 +18% 伤害（比磁轨炮更暴力） | ✅ |
+| `icefire_judge` | 冰狱审判（传说） | 冰弹减速 + 火弹爆炸，击杀触发 90 范围 AOE | ✅ |
+| `webmaster_lifesteal` | 织网支配者（传说） | 击杀回血 15% + 无人机充能爆炸 + 缓速 | ✅ |
+
+### 2.10 装备系统（`equipmentCatalog.ts`）
+
+**Starter 装备**（开局自带）：
+tactical-visor（攻击范围+36，暴击率+1.2%）/
+phase-armor（生命+22，物防+2.2，魔防+1，火防+1，冰防+1）/
+kinetic-boots（移速+17，闪避率+0.8%）/
+magnet-coil（拾取范围+22，幸运+1.2）
+
+**装备品质**：普通 / 稀有 / 史诗 / 传奇 / 神话
+
+**武器解锁进度**（`equipmentProgression.ts`）：
+- 家族解锁：按完成战斗次数逐步解锁
+- 变体 T2-T10：按完成战斗次数 + 蓝图数量解锁
+- T9+ 需要蓝图，蓝图由 Boss 低概率掉落
 
 ---
 
@@ -124,12 +227,15 @@ magnet-coil:    pickupRange+22, luck+1.2
 |---|---|
 | `core/stats.ts` 的 `createBaseCharacterStats()` | 所有公式依赖这些基础值 |
 | `core/types.ts` 的 `CharacterStats` / `StatKey` | 全项目用这套类型 |
-| `projectileManager.ts` 的 `getBulletDamage()` / `getFireInterval()` / `getBulletPierce()` | 伤害公式，改了会影响全局平衡 |
+| `combatFormulas.ts` | 伤害/射速/穿透/弹速的纯函数，测试和游戏共享 |
 | `combatState.ts` 的 `xpToNext` 初始值和升级公式 | 已经过平衡调整（65/1.24/22+lv×5） |
 | `state/combatState.ts` 的状态字段名 | 多模块共享 |
 | `assets/resources/audio/` 下的音效文件名 | 代码里硬编码引用 |
 | `STARTER_EQUIPMENT_IDS` 数组内容 | 新手装备已固定 |
 | 抖音小游戏包体 < 20MB 限制 | 构建配置不能动 |
+| `docs/offhand_weapon_design.md` 的 15 把副武器基准 | 基线设计，副武器数量/类型修改需重新确认 |
+| `catalogs/offhandCatalog.ts` 的 15 把副武器数据 | 与 design.md 同步，修改需同时更新两端 |
+| `offhand/offhandManager.ts` 的 15 种机制实现 | 每种机制对应一把副武器，不能随意改机制类型 |
 
 ---
 
@@ -141,136 +247,131 @@ magnet-coil:    pickupRange+22, luck+1.2
 # TypeScript 编译
 npx --yes -p typescript@5.9.3 tsc -p tsconfig.json
 
-# 数值平衡：跑真实 Cocos 游戏 + CDP bot（不要用 Python 重写战斗仿真）
-# 先启动 web-mobile/preview，并用 headed Chrome --remote-debugging-port=9222 打开游戏页
+# 数值平衡：跑真实 Cocos 游戏 + CDP bot
 npm run balance:cdp
+# 或 pipeline（多把武器）
+npm run balance:pipeline
 ```
 
-**当前无广告生存目标按武器阶段分层，不再统一按 8-12 波判断：**
+### 4.7 CDP 自动化测试工作流（正确流程）
 
-| 阶段 | 目标 |
-|---|---|
-| 新手/弱武器 | P50 死在 5-6 波，P90 不超过 7 |
-| 中等武器 | P50 死在 8-9 波，P90 不超过 10 |
-| 强武器 | 可以见到第一只 Boss，但多数局打不过（P50≈10，P90≤10） |
-| 顶级武器 | 可以刚好打过第一只 Boss，但不应一路滚到 20 波（P50≈11，P90≤12） |
+**核心入口**（带自动构建/清理/报告，一次搞定）：
 
-```bash
-# Cocos 抖音构建（可选）
-'/Applications/Cocos/Creator/3.8.8/CocosCreator.app/Contents/MacOS/CocosCreator' \
-  --project /Users/ronghui/Documents/game_dev_cocos \
-  --build 'platform=bytedance-mini-game;debug=false'
-```
+| 用途 | 命令 | 说明 |
+|---|---|---|
+| 快速烟测 | `npm run balance:e2e:smoke` | 1 把武器(风暴步枪) × 1 局 × 240s |
+| 全武器平衡 | `npm run balance:pipeline` | 17 把武器 × 3 局 × 720s/局 |
+| 手动单测 | `python3 tools/bot/run_balance_e2e.py --runs 1 --weapon X --seed 42 --skip-build` | 指定武器、seed |
 
-### 4.2 新增武器必须在 weaponCatalog.ts
+**关键规则（踩过的坑）：**
 
-格式：
+1. **`--skip-build` 优先** — 只要 `build/web-mobile/assets/main/index.js` ≥ 100KB 且含 `__starfallGame`，就 `--skip-build`。省掉 2-3 分钟的构建时间。
+2. **验证 build 是否有效**：
+   ```bash
+   python3 -c "text=open('build/web-mobile/assets/main/index.js','r',encoding='utf-8').read(); print(f'size: {len(text)//1024}KB, __starfallGame: {\"__starfallGame\" in text}')"
+   ```
+3. **必须重新构建时**：`python3 tools/bot/build_web_mobile_for_bot.py` 会自动处理种子恢复和重试。**不要手动开 Cocos GUI 等导入**（没用，GUI 360s 也导不完）。不要 `rm -rf library/`（删了更慢）。
+4. **构建失败 `scenes=0/scripts=0`**：自动重试机制已经修复（去掉了 `clean_editor_cache=True` 的白给轮次）。如果还是失败，检查 `library/` 下有无 macOS 冲突副本（`* 2*` 文件），有就删了重跑。
+5. **CDP bot 找不到钩子**：跑不起来时检查 `build_web_mobile_for_bot.py` 的输出——`__starfallGame` 和 `__starfallBulkTick` 必须都在 index.js 里。不在的话说明 Cocos 缓存了旧代码，删一次 `temp/` 再构建。
+6. **Cocos CLI 构建缓存过强**：如果改代码后构建时间 < 10s 且产物没变，说明缓存命中跳过了重编译。删 `rm -rf temp/` 再构建。
+
+### 4.2 新增武器格式（`weaponCatalog.ts`）
+
 ```typescript
-{ id: 'xxx', name: 'xxx', color: '#HEX',
-  damage: N, fireRate: N, pierce: N, multiShot: N, drone: N,
-  bulletSpeed: N, cost: N, desc: 'xxx' }
+// WEAPON_FAMILIES
+{ id, name, color, damage, fireRate, pierce, drone, bulletSpeed, mechanic, desc }
+// WEAPON_VARIANTS
+{ id, prefix, suffix, tier, damage, fireRate, pierce, drone, speed, cost }
 ```
-- `damage` 和 `fireRate` 直接乘 weaponLevel（=1）算伤害
-- `pierce` 乘 weaponLevel 后 + characterPierce×0.3，再 floor
-- `cost` 是商店购买价（机库用 cores/shards，不是合金）
 
-### 4.3 新增怪物必须在 enemyCatalog.ts
+变体 `damage`/`fireRate` 等是**倍率系数**（如 0.86 表示 ×0.86，4.44 表示 ×4.44），不是绝对值。
+装备价格 = `baseDamage × 5 + tier.cost × 30 × rarityMultiplier`。
 
-格式：
+### 4.3 新增怪物格式（`enemyCatalog.ts`）
+
 ```typescript
-{ id: 'xxx', name: 'xxx', family: 'xxx', artId: 'xxx',
-  hp: N, speed: N, damage: N, radius: N, xp: N,
-  alloyChance: 0.0N, color: '#HEX', accent: '#HEX', spawnAfter: waveN, weight: N }
+{ id, name, family, artId, hp, speed, damage, radius, xp,
+  alloyChance, color, accent, spawnAfter, weight,
+  bossMaterial? }  // bossMaterial: 大 Boss 掉落材料
 ```
-- `hp` 和 `damage` 会被 HP缩放/伤害缩放 直接乘
-- `spawnAfter` = 最早出现的波次（0-based index）
-- `weight` = 生成权重（越大越常出现）
 
-### 4.4 新增道具必须在 runItemCatalog.ts
+基础值会被 HP/伤害缩放公式直接乘。`spawnAfter` = 最早出现的波次（0-based index）。
 
-格式：
+### 4.4 新增道具格式（`runItemCatalog.ts`）
+
 ```typescript
-{ id: 'xxx', name: 'xxx', category: '攻击|防御|元素防御|资源|成长|机动|其他属性',
-  color: '#HEX', effects: [{ stat: 'xxx', amount: N }] }
+{ id, name, category, color, effects: [{ stat, amount }] }
 ```
-- `effects` 直接加到 runStats 上（和升级选项完全一样的机制）
-- 正面 +1.24 倍率（TRADEOFF_POSITIVE_BONUS）只在有负面效果时触发
-- 同 category 的道具在3选1里不会同时出现
 
-### 4.5 新增装备必须在 equipmentCatalog.ts
+blueprint 基础值 × tier 缩放后生效。正面无负面道具不加 1.24 倍率。
 
-格式：
+### 4.5 新增装备格式（`equipmentCatalog.ts`）
+
 ```typescript
-{ id: 'xxx', name: 'xxx', slot: 'hat|armor|boots|accessory',
-  color: '#HEX', baseCost: N, desc: 'xxx',
-  effects: [{ stat: 'xxx', amount: N }] }
+{ id, name, slot, color, baseCost, desc, effects: [{ stat, amount }] }
 ```
-- `gearStats` 乘 `gearLevel`（机库升级，战斗内固定 level=1）
-- 同 slot 不能装备两件
+
+`gearStats` 乘 `gearLevel`（机库升级，战斗内固定 level=1）。
 
 ### 4.6 不能动 Cocos 节点结构
 
 场景 JSON 里有 UUID 引用，手动编辑会破坏。所有节点用代码创建。
 
-### 4.7 音效文件
-
-`sfx_*` 和 `bgm_*` 文件名硬编码在 `RogueShooterGame.ts`，改文件名必须同步改代码。
-
 ---
 
-## 5. 文件结构（实际目录，非目标目录）
+## 5. 文件结构
 
 ```
 assets/scripts/
 ├── RogueShooterGame.ts              # 主入口，所有系统协调
 ├── core/
-│   ├── types.ts                     # CharacterStats / StatKey / WeaponStats / EquipmentDef
-│   ├── stats.ts                     # createBaseCharacterStats / addCharacterStats
+│   ├── types.ts                     # CharacterStats / StatKey / WeaponStats / EquipmentDef / EnemySpec
+│   ├── stats.ts                     # createBaseCharacterStats / addCharacterStats / STAT_META
 │   ├── resources.ts                 # 资源定义和钱包
-│   └── gameContext.ts               # GameEventBus
+│   ├── gameContext.ts               # GameEventBus
+│   └── combatFormulas.ts            # 伤害/射速/穿透/弹速纯函数（测试和游戏共享）
 ├── catalogs/
-│   ├── weaponCatalog.ts             # 20 把武器定义 + 变体系统
-│   ├── equipmentCatalog.ts          # 装备蓝图 + 品质 + STARTER_EQUIPMENT_IDS
-│   ├── enemyCatalog.ts              # 5 种基础怪 + Boss
-│   └── runItemCatalog.ts            # 商店道具 + 升级选项（STAT_UPGRADE_BLUEPRINTS）
+│   ├── weaponCatalog.ts             # 17 把武器（14 基础 + 3 传说）+ 10 种变体
+│   ├── equipmentCatalog.ts           # 装备蓝图 + 品质 + Starter 装备
+│   ├── equipmentProgression.ts       # 武器/装备解锁进度
+│   ├── runItemCatalog.ts            # 22 blueprint × 5 tiers 道具 + 12 种升级选项
+│   └── enemyCatalog.ts              # 10 种基础怪 + 5 小 Boss + 5 大 Boss + 10 变体
 ├── enemy/
-│   ├── enemyManager.ts              # 怪物生成/更新/死亡/分离
-│   └── enemyConstants.ts            # 怪物常量（掉率等）
+│   ├── enemyManager.ts              # 怪物生成/更新/死亡/分裂
+│   └── enemyConstants.ts            # 怪物常量
 ├── projectile/
-│   └── projectileManager.ts         # 子弹伤害/穿透/速度/多弹丸
+│   └── projectileManager.ts          # 子弹伤害/穿透/速度/14 个机制词条
 ├── pickup/
 │   └── pickupManager.ts             # XP/合金掉落、升级选择、宝箱
 ├── shop/
-│   └── equipmentManager.ts          # 商店系统、装备管理、机库
+│   └── equipmentManager.ts           # 商店系统、装备管理、机库
 ├── state/
 │   └── combatState.ts               # 战斗状态（xpToNext 等在这里）
+├── flow/
+│   └── battleFlow.ts                # 战斗流程纯函数（撤离/结算/提示）
 └── ui/
     └── panels.ts                    # UI 面板管理
-
-tools/
-└── bot/
-    └── run_balance_cdp.py           # 真实 Cocos 运行时 + CDP bot 数值平衡测试
-
-docs/
-├── AGENTS.md                        # 本文件（AI 权威参考）
-├── GDD.md                           # 游戏设计文档
-├── PROJECT_ARCHITECTURE.md          # 架构设计
-├── CODING_STANDARDS.md              # 编码规范
-├── REFACTORING_PLAN.md              # 重构计划
-└── playtest/
-    └── PLAYTEST_TEMPLATE.md         # Playtest 记录模板
+tools/bot/
+├── run_balance_cdp.py               # 单把武器 CDP 测试
+└── run_balance_pipeline.py          # 多把武器 CDP 批量测试
+tests/                               # 纯 TS 测试
+├── catalogs/                        # catalog 正确性测试
+├── core/                            # 公式正确性测试
+├── balance/                         # DPS / 波次需求 / P50 估算测试
+└── flows/                          # 战斗流程测试
 ```
 
 ---
 
-## 6. 已知问题
+## 6. 已知问题 / 已知待调
 
 | 问题 | 状态 | 位置 |
 |---|---|---|
-| 主文件 RogueShooterGame.ts 仍 6000+ 行 | 待拆 | 整个文件 |
-| 需要真实 CDP 跑局数据补充分层样本 | 待做 | tools/bot/run_balance_cdp.py |
+| 裂变囊分裂旧残留代码（spawn mite） | ✅ 已修复（删重复） | enemyManager.ts L1827 |
+| 波 10 Boss 需要走位风筝，Bot 打不过但真人可过 | 已确认 | enemyManager.ts spawnBoss() |
+| boss_gate/boss_clear 武器偏弱 | 待调 | 需 CDP 重新跑 1200s 验证 |
+| 瘟疫 DoT 每层 1%/秒（代码），文档写 0.4%/层 | 需确认是否过强 | projectileManager.ts onPoisonHit / enemyManager.ts dot |
+| T3 脉冲 damage 系数 ×4.44（代码），文档写 ×1.04 | 文档已更正，代码值正确 | weaponCatalog.ts T3 pulse |
 
----
-
-*最后更新：2026-06-25*
+*最后更新：2026-07-01*
 *本文件是 AI 修改代码前的必读文件。违反以上规则的修改不会被接受。*

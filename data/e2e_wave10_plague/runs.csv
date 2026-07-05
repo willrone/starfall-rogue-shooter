@@ -1,0 +1,2 @@
+weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
+plague-sprayer-standard,瘟疫喷射器,novice,novice,1,99126,9,479.5,1823,15,2463,14,paused,0.0,True,
