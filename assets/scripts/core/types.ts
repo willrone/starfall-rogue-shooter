@@ -43,6 +43,9 @@ export interface CharacterStats {
     luck: number;
     xpGain: number;
     resourceGain: number;
+    // ── 爆炸/AOE 加成 ────────────────────────────────────────
+    aoeDamagePct: number;   // 爆炸/燃烧/AOE 伤害加成（百分比，0.3=+30%）
+    aoeRangePct: number;    // 爆炸/燃烧/AOE 范围加成（百分比）
 }
 
 export interface StatEffect {

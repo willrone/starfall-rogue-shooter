@@ -1,0 +1,49 @@
+{
+  "ver": "1.0.22",
+  "importer": "texture",
+  "imported": true,
+  "uuid": "253edfde-6b94-4b70-87a4-72b8461f1db1",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "253edfde-6b94-4b70-87a4-72b8461f1db1@6c48a": {
+      "ver": "3.8.8",
+      "importer": "texture",
+      "imported": true,
+      "uuid": "253edfde-6b94-4b70-87a4-72b8461f1db1@6c48a",
+      "files": [],
+      "subMetas": {},
+      "userData": {},
+      "displayName": "",
+      "id": "",
+      "name": ""
+    },
+    "253edfde-6b94-4b70-87a4-72b8461f1db1@f9941": {
+      "ver": "3.8.8",
+      "importer": "sprite-frame",
+      "imported": true,
+      "uuid": "253edfde-6b94-4b70-87a4-72b8461f1db1@f9941",
+      "files": [],
+      "subMetas": {},
+      "userData": {
+        "spriteType": "sliced",
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 3,
+        "borderRight": 3
+      },
+      "displayName": "",
+      "id": "",
+      "name": ""
+    }
+  },
+  "userData": {
+    "wrapModeS": "repeat",
+    "wrapModeT": "repeat",
+    "minfilter": "linear",
+    "magfilter": "linear",
+    "mipfilter": "none",
+    "anisotropy": 0
+  }
+}

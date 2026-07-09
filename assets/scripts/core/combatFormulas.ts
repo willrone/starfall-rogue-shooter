@@ -38,7 +38,7 @@ export function weaponBulletSpeedAtLevel(base: number, level: number): number {
 // Poison sprayer stacking model
 // ═══════════════════════════════════════════════════════════════════════
 
-export const POISON_MAX_STACKS = 12;
+export const POISON_MAX_STACKS = 15;
 export const POISON_STACK_DURATION = 3.4;
 export const POISON_TICK_INTERVAL = 1.0;
 

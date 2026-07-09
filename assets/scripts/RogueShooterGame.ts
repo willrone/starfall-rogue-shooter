@@ -27,6 +27,11 @@ import {
 } from 'cc';
 
 import { PanelManager } from './ui/panels';
+import { uiMgr } from './ui/UIManager';
+import { SettlementPopup } from './ui/SettlementPopup';
+import { RevivePopup } from './ui/RevivePopup';
+import { makeLabel, makeRect, makeButton, drawButton, place, placeLocal, hex, clamp, loadSprite } from './ui/UIHelpers';
+import { BotAIController, type BotAIHost } from './ai/botAI';
 import { AudioManager, type AudioHostContext } from './audio/audioManager';
 import { AdManager } from './ad/AdManager';
 
@@ -98,6 +103,7 @@ import { CombatState, createCombatState, resetCombatSession } from './state/comb
 import { ProjectileManager, BULLET_HIT_CELL, type Bullet, type EnemyProjectile, type ProjectileHostContext } from './projectile/projectileManager';
 import { PickupManager, type Pickup, type PickupHostContext } from './pickup/pickupManager';
 import { EquipmentManager, type ShopHostContext } from './shop/equipmentManager';
+import { OffhandManager, type OffhandHostContext } from './offhand/offhandManager';
 
 const ENEMY_PROJECTILE_LIMIT = 140;
 
@@ -278,13 +284,6 @@ export class RogueShooterGame extends Component {
     // ── Bot test data ─────────────────────────────────────────────
     private botData: any[] = [];
     private botDataTimer = 0;
-    private _botState: 'idle' | 'moving' | 'fighting' | 'fleeing' = 'idle';
-    private _botTargetPos: Vec2 | null = null;
-    private _botMoveTimer = 0;
-    private _botStuckTimer = 0;
-    private _botLastPlayerPos: Vec2 | null = null;
-    private _botLastKillCount = 0;
-    private _botPickupChaseTimer = 0;
 
  // ── Bot global hook (CDP access) ──────────────────────────────
     // Expose game instance and tick function on window so the external
@@ -300,6 +299,10 @@ export class RogueShooterGame extends Component {
     // ── Icon cache ────────────────────────────────────────────────
     private iconCache: Record<string, SpriteFrame | null> = {};
     private _extractDoubled = false; // prevent double-extract ad loop
+    // HUD sprite fill bars (replacing Graphics in drawBars)
+    private _hpBarFill: Node | null = null;
+    private _xpBarFill: Node | null = null;
+    private _shieldBarFill: Node | null = null;
 
     private shop = new EquipmentManager(this as unknown as ShopHostContext);
     private weaponCooldowns: Record<string, number> = {};
@@ -307,6 +310,8 @@ export class RogueShooterGame extends Component {
     private enemyMgr = new EnemyManager(this as unknown as EnemyHostContext);
     private proj = new ProjectileManager(this as unknown as ProjectileHostContext);
     private pickupMgr = new PickupManager(this as unknown as PickupHostContext);
+    private offhandMgr = new OffhandManager(this as unknown as OffhandHostContext);
+    private botAI = new BotAIController(this as unknown as BotAIHost);
     private debugHudEnabled = false;
     private bus = new GameEventBus();
     private perfFrameMs = 0;
@@ -436,7 +441,7 @@ export class RogueShooterGame extends Component {
             this.cs.combatTime += combatDt;
             this.cs.invulnerableTimer = Math.max(0, this.cs.invulnerableTimer - combatDt);
             // Bot mode: decision tick (movement + upgrades)
-            if ((globalThis as any).__starfallBotMode) {
+            if (this.botAIEnabled) {
                 this.botAiTick(combatDt);
                 this.botPickUpgrade();
             }
@@ -462,6 +467,7 @@ export class RogueShooterGame extends Component {
 
             t = this.perfNow();
             this.enemyMgr.updateEnemies(combatDt);
+            this.offhandMgr.tick(combatDt);
             this.resolvePlayerAfterEnemyMovement();
             this.updateDroneVisuals(0);
             this.perfEnemyMs = this.perfNow() - t;
@@ -559,6 +565,7 @@ export class RogueShooterGame extends Component {
         this.worldNode.layer = Layers.Enum.UI_2D;
         root.addChild(this.worldNode);
         this.proj.initEffectPools(this.worldNode);
+        this.offhandMgr.init(this.worldNode);
         this.enemyMgr.initBarLayer(this.worldNode);
         this.enemyMgr.initGroundMarkPool(this.worldNode);
         this.enemyMgr.initDeathParticlePool(this.worldNode);
@@ -566,10 +573,7 @@ export class RogueShooterGame extends Component {
         this.drawWorldArena(this.worldNode);
 
         this.buildHud(root);
-        this.buildRevivePanel(root);
         this.buildVfxOverlay(root);
-        this.buildLevelPanel(root);
-        this.buildShopPanel(root);
         this.buildHangarPanel(root);
         this.buildJoystick(root);
         this.buildMenuPanel(root);
@@ -733,11 +737,11 @@ export class RogueShooterGame extends Component {
         }
         if (this.panels.bgmToggleButton) {
             this.panels.bgmToggleButton.label.string = this.audio.bgmVolume > 0 ? '关闭音乐' : '开启音乐';
-            this.drawButton(this.panels.bgmToggleButton, false);
+            drawButton(this.panels.bgmToggleButton, false);
         }
         if (this.panels.sfxToggleButton) {
             this.panels.sfxToggleButton.label.string = this.audio.sfxVolume > 0 ? '关闭音效' : '开启音效';
-            this.drawButton(this.panels.sfxToggleButton, false);
+            drawButton(this.panels.sfxToggleButton, false);
         }
     }
 
@@ -815,9 +819,9 @@ export class RogueShooterGame extends Component {
     }
 
     private drawArena(root: Node) {
-        this.rect(root, 'DeepSpaceBase', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#10294A');
-        this.rect(root, 'NebulaBandTop', 0, 0, DESIGN_WIDTH, 250, '#1E3A5F');
-        this.rect(root, 'NebulaBandBottom', 0, 1060, DESIGN_WIDTH, 220, '#2A1748');
+        makeRect(root, 'DeepSpaceBase', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, '#10294A');
+        makeRect(root, 'NebulaBandTop', 0, 0, DESIGN_WIDTH, 250, '#1E3A5F');
+        makeRect(root, 'NebulaBandBottom', 0, 1060, DESIGN_WIDTH, 220, '#2A1748');
 
         const sky = new Node('StaticStarSky');
         sky.layer = Layers.Enum.UI_2D;
@@ -826,7 +830,7 @@ export class RogueShooterGame extends Component {
         sky.addComponent(UITransform).setContentSize(DESIGN_WIDTH, DESIGN_HEIGHT);
         const gfx = sky.addComponent(Graphics);
 
-        gfx.fillColor = this.hex('#4CC9F0', 75);
+        gfx.fillColor = hex('#4CC9F0', 75);
         for (let i = 0; i < 86; i++) {
             const x = 18 + ((i * 83) % (DESIGN_WIDTH - 36));
             const y = 18 + ((i * 137) % (DESIGN_HEIGHT - 36));
@@ -835,13 +839,13 @@ export class RogueShooterGame extends Component {
             gfx.fill();
         }
 
-        gfx.fillColor = this.hex('#B5179E', 42);
+        gfx.fillColor = hex('#B5179E', 42);
         gfx.circle(610, 166, 82);
         gfx.fill();
-        gfx.fillColor = this.hex('#F9C74F', 70);
+        gfx.fillColor = hex('#F9C74F', 70);
         gfx.circle(616, 160, 38);
         gfx.fill();
-        gfx.strokeColor = this.hex('#F8FAFC', 52);
+        gfx.strokeColor = hex('#F8FAFC', 52);
         gfx.lineWidth = 3;
         gfx.moveTo(544, 180);
         gfx.lineTo(684, 142);
@@ -856,27 +860,27 @@ export class RogueShooterGame extends Component {
         floor.addComponent(UITransform).setContentSize(WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM);
         const floorGfx = floor.addComponent(Graphics);
 
-        floorGfx.fillColor = this.hex('#254A66');
+        floorGfx.fillColor = hex('#254A66');
         floorGfx.roundRect(WORLD_LEFT, WORLD_BOTTOM, WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM, 52);
         floorGfx.fill();
-        floorGfx.fillColor = this.hex('#3B6D86', 210);
+        floorGfx.fillColor = hex('#3B6D86', 210);
         floorGfx.roundRect(WORLD_LEFT + 120, WORLD_BOTTOM + 150, WORLD_RIGHT - WORLD_LEFT - 240, WORLD_TOP - WORLD_BOTTOM - 300, 180);
         floorGfx.fill();
-        floorGfx.fillColor = this.hex('#2E4A63', 120);
+        floorGfx.fillColor = hex('#2E4A63', 120);
         floorGfx.circle(-1260, -920, 1280);
         floorGfx.fill();
-        floorGfx.fillColor = this.hex('#4CC9F0', 34);
+        floorGfx.fillColor = hex('#4CC9F0', 34);
         floorGfx.circle(-1260, -920, 1540);
         floorGfx.fill();
-        floorGfx.fillColor = this.hex('#020617', 80);
+        floorGfx.fillColor = hex('#020617', 80);
         floorGfx.circle(1720, 1280, 1120);
         floorGfx.fill();
 
-        floorGfx.strokeColor = this.hex('#4CC9F0', 115);
+        floorGfx.strokeColor = hex('#4CC9F0', 115);
         floorGfx.lineWidth = 5;
         floorGfx.roundRect(WORLD_LEFT + 42, WORLD_BOTTOM + 42, WORLD_RIGHT - WORLD_LEFT - 84, WORLD_TOP - WORLD_BOTTOM - 84, 42);
         floorGfx.stroke();
-        floorGfx.strokeColor = this.hex('#7DD3FC', 42);
+        floorGfx.strokeColor = hex('#7DD3FC', 42);
         floorGfx.lineWidth = 2;
         for (let x = WORLD_LEFT; x <= WORLD_RIGHT; x += 320) {
             floorGfx.moveTo(x, WORLD_BOTTOM);
@@ -888,7 +892,7 @@ export class RogueShooterGame extends Component {
         }
         floorGfx.stroke();
 
-        floorGfx.strokeColor = this.hex('#F9C74F', 105);
+        floorGfx.strokeColor = hex('#F9C74F', 105);
         floorGfx.lineWidth = 7;
         for (let i = 0; i < 34; i++) {
             const x = WORLD_LEFT + 260 + (i % 7) * 690 + ((i * 47) % 120);
@@ -900,8 +904,8 @@ export class RogueShooterGame extends Component {
         }
         floorGfx.stroke();
 
-        floorGfx.fillColor = this.hex('#07111F', 96);
-        floorGfx.strokeColor = this.hex('#7DD3FC', 60);
+        floorGfx.fillColor = hex('#07111F', 96);
+        floorGfx.strokeColor = hex('#7DD3FC', 60);
         floorGfx.lineWidth = 3;
         for (let i = 0; i < 46; i++) {
             const x = WORLD_LEFT + 280 + (i % 9) * 560 + ((i * 71) % 130);
@@ -913,7 +917,7 @@ export class RogueShooterGame extends Component {
             floorGfx.stroke();
         }
 
-        floorGfx.fillColor = this.hex('#94A3B8', 92);
+        floorGfx.fillColor = hex('#94A3B8', 92);
         for (let i = 0; i < 62; i++) {
             const x = WORLD_LEFT + 220 + (i % 10) * 500 + ((i * 97) % 155);
             const y = WORLD_BOTTOM + 260 + Math.floor(i / 10) * 690 + ((i * 53) % 190);
@@ -921,7 +925,7 @@ export class RogueShooterGame extends Component {
             floorGfx.fill();
         }
 
-        floorGfx.strokeColor = this.hex('#F8FAFC', 80);
+        floorGfx.strokeColor = hex('#F8FAFC', 80);
         floorGfx.lineWidth = 3;
         for (let x = WORLD_LEFT + 640; x < WORLD_RIGHT; x += 640) {
             for (let y = WORLD_BOTTOM + 640; y < WORLD_TOP; y += 640) {
@@ -938,149 +942,135 @@ export class RogueShooterGame extends Component {
         const top = UI_SAFE_TOP;
         const HUD_H = 68;
         // Top bar
-        this.rect(root, 'HudShadow', 14, top + 6, 692, HUD_H, RogueShooterGame.UI.panelShadow, 12);
-        this.rect(root, 'HudPanel', 10, top, 700, HUD_H, RogueShooterGame.UI.hudBg, RogueShooterGame.UI.cardRadius, RogueShooterGame.UI.hudBorder);
-        this.rect(root, 'HudAccent', 14, top + 6, 4, HUD_H - 12, RogueShooterGame.UI.hudAccent, 2);
-        this.panels.titleLabel = this.label(root, 'Title', '星坠幸存者', 26, top + 2, 280, 24, 15, RogueShooterGame.UI.title, Label.HorizontalAlign.LEFT);
-        this.panels.timerLabel = this.label(root, 'Timer', '', 440, top + 2, 250, 24, 14, RogueShooterGame.UI.cyanText, Label.HorizontalAlign.RIGHT);
-        // HP bar — full width thin strip
-        this.label(root, 'HpLabel', 'HP', 26, top + 14, 22, 14, 10, RogueShooterGame.UI.barLabel);
-        const hpNode = this.rect(root, 'HpBar', 26, top + 13, 668, 6, RogueShooterGame.UI.hpBarBg, 3);
-        this.panels.hpBar = hpNode.getComponent(Graphics);
-        // XP bar — left half
-        this.label(root, 'XpLabel', 'XP', 26, top + 25, 22, 14, 10, RogueShooterGame.UI.barLabel);
-        const xpNode = this.rect(root, 'XpBar', 26, top + 24, 334, 5, RogueShooterGame.UI.xpBarBg, 3);
-        this.panels.xpBar = xpNode.getComponent(Graphics);
-        // Shield bar — right half
-        this.label(root, 'ShieldLabel', '盾', 374, top + 25, 22, 14, 10, RogueShooterGame.UI.barLabel);
-        const shieldNode = this.rect(root, 'ShieldBar', 374, top + 24, 334, 5, RogueShooterGame.UI.hpBarBg, 3);
-        this.panels.shieldBar = shieldNode.getComponent(Graphics);
-        this.panels.debugLabel = this.label(root, 'DebugHud', '', 54, top + 52, 612, 16, 11, '#64748B', Label.HorizontalAlign.LEFT);
+        makeRect(root, 'HudShadow', 14, top + 6, 692, HUD_H, RogueShooterGame.UI.panelShadow, 12);
+        makeRect(root, 'HudPanel', 10, top, 700, HUD_H, RogueShooterGame.UI.hudBg, RogueShooterGame.UI.cardRadius, RogueShooterGame.UI.hudBorder);
+        makeRect(root, 'HudAccent', 14, top + 6, 4, HUD_H - 12, RogueShooterGame.UI.hudAccent, 2);
+        this.panels.titleLabel = makeLabel(root, 'Title', '星坠幸存者', 26, top + 2, 280, 24, 15, RogueShooterGame.UI.title, Label.HorizontalAlign.LEFT);
+        this.panels.timerLabel = makeLabel(root, 'Timer', '', 440, top + 2, 250, 24, 14, RogueShooterGame.UI.cyanText, Label.HorizontalAlign.RIGHT);
+        // HP bar — full width thin strip with sprite texture
+        makeLabel(root, 'HpLabel', 'HP', 26, top + 14, 22, 14, 10, RogueShooterGame.UI.barLabel);
+        const hpBgNode = makeRect(root, 'HpBarBg', 26, top + 13, 668, 6, RogueShooterGame.UI.hpBarBg, 3);
+        this.panels.hpBar = hpBgNode.getComponent(Graphics);
+        const hpFillNode = new Node('HpBarFill');
+        hpFillNode.layer = Layers.Enum.UI_2D;
+        root.addChild(hpFillNode);
+        place(hpFillNode, 26 + 334, top + 13 + 3);
+        const hpFillUt = hpFillNode.addComponent(UITransform);
+        hpFillUt.setContentSize(668, 6);
+        const hpFillSp = hpFillNode.addComponent(Sprite);
+        const hpSf = loadSprite('effects/hud_bar_hp/spriteFrame');
+        if (hpSf) { hpFillSp.spriteFrame = hpSf; hpFillSp.type = Sprite.Type.SLICED; hpFillSp.sizeMode = Sprite.SizeMode.CUSTOM; }
+        this._hpBarFill = hpFillNode;
+
+        // XP bar — left half with sprite texture
+        makeLabel(root, 'XpLabel', 'XP', 26, top + 25, 22, 14, 10, RogueShooterGame.UI.barLabel);
+        const xpBgNode = makeRect(root, 'XpBarBg', 26, top + 24, 334, 5, RogueShooterGame.UI.xpBarBg, 3);
+        this.panels.xpBar = xpBgNode.getComponent(Graphics);
+        const xpFillNode = new Node('XpBarFill');
+        xpFillNode.layer = Layers.Enum.UI_2D;
+        root.addChild(xpFillNode);
+        place(xpFillNode, 26 + 167, top + 24 + 3);
+        const xpFillUt = xpFillNode.addComponent(UITransform);
+        xpFillUt.setContentSize(334, 5);
+        const xpFillSp = xpFillNode.addComponent(Sprite);
+        const xpSf = loadSprite('effects/hud_bar_xp/spriteFrame');
+        if (xpSf) { xpFillSp.spriteFrame = xpSf; xpFillSp.type = Sprite.Type.SLICED; xpFillSp.sizeMode = Sprite.SizeMode.CUSTOM; }
+        this._xpBarFill = xpFillNode;
+
+        // Shield bar — right half with sprite texture
+        makeLabel(root, 'ShieldLabel', '盾', 374, top + 25, 22, 14, 10, RogueShooterGame.UI.barLabel);
+        const shieldBgNode = makeRect(root, 'ShieldBarBg', 374, top + 24, 334, 5, RogueShooterGame.UI.hpBarBg, 3);
+        this.panels.shieldBar = shieldBgNode.getComponent(Graphics);
+        const shieldFillNode = new Node('ShieldBarFill');
+        shieldFillNode.layer = Layers.Enum.UI_2D;
+        root.addChild(shieldFillNode);
+        place(shieldFillNode, 374 + 167, top + 24 + 3);
+        const shieldFillUt = shieldFillNode.addComponent(UITransform);
+        shieldFillUt.setContentSize(334, 5);
+        const shieldFillSp = shieldFillNode.addComponent(Sprite);
+        const shieldSf = loadSprite('effects/hud_bar_shield/spriteFrame');
+        if (shieldSf) { shieldFillSp.spriteFrame = shieldSf; shieldFillSp.type = Sprite.Type.SLICED; shieldFillSp.sizeMode = Sprite.SizeMode.CUSTOM; }
+        this._shieldBarFill = shieldFillNode;
+        this.panels.debugLabel = makeLabel(root, 'DebugHud', '', 54, top + 52, 612, 16, 11, '#64748B', Label.HorizontalAlign.LEFT);
         this.panels.debugLabel.node.active = false;
 
         // Bottom bar
         const BOT_Y = DESIGN_HEIGHT - UI_SAFE_BOTTOM - 56;
-        this.rect(root, 'BottomBarShadow', 14, BOT_Y + 4, 692, 52, RogueShooterGame.UI.panelShadow, 10);
-        this.rect(root, 'BottomBar', 10, BOT_Y, 700, 52, RogueShooterGame.UI.hudBg, RogueShooterGame.UI.cardRadius, RogueShooterGame.UI.hudBorder);
+        makeRect(root, 'BottomBarShadow', 14, BOT_Y + 4, 692, 52, RogueShooterGame.UI.panelShadow, 10);
+        makeRect(root, 'BottomBar', 10, BOT_Y, 700, 52, RogueShooterGame.UI.hudBg, RogueShooterGame.UI.cardRadius, RogueShooterGame.UI.hudBorder);
         // Left: weapon + alloy
-        this.panels.equipmentLabel = this.label(root, 'EquipmentLabel', '', 18, BOT_Y + 4, 260, 22, 14, RogueShooterGame.UI.title, Label.HorizontalAlign.LEFT);
+        this.panels.equipmentLabel = makeLabel(root, 'EquipmentLabel', '', 18, BOT_Y + 4, 260, 22, 14, RogueShooterGame.UI.title, Label.HorizontalAlign.LEFT);
         // Alloy display
-        this.panels.statLabel = this.label(root, 'StatInfo', '', 18, BOT_Y + 28, 260, 20, 13, RogueShooterGame.UI.alloyOrange, Label.HorizontalAlign.LEFT);
+        this.panels.statLabel = makeLabel(root, 'StatInfo', '', 18, BOT_Y + 28, 260, 20, 13, RogueShooterGame.UI.alloyOrange, Label.HorizontalAlign.LEFT);
         // Buff display
-        this.panels.buffLabel = this.label(root, 'BuffLabel', '', 240, BOT_Y + 4, 80, 20, 11, '#F97316', Label.HorizontalAlign.LEFT);
+        this.panels.buffLabel = makeLabel(root, 'BuffLabel', '', 240, BOT_Y + 4, 80, 20, 11, '#F97316', Label.HorizontalAlign.LEFT);
         // 4 action buttons — compact row on the right
         const BTN_W = 68;
         const BTN_GAP = 6;
         const btnStartX = 720 - 24 - BTN_W * 4 - BTN_GAP * 3;
-        this.panels.switchWeaponButton = this.button(root, 'SwitchWeapon', btnStartX, BOT_Y + 4, BTN_W, 44, '#B5179E', '#475569', () => this.switchActiveWeapon());
+        this.panels.switchWeaponButton = makeButton(root, 'SwitchWeapon', btnStartX, BOT_Y + 4, BTN_W, 44, '#B5179E', '#475569', () => this.switchActiveWeapon());
         this.panels.switchWeaponButton.label.string = '切';
-        this.panels.shopButton = this.button(root, 'ShopBtn', btnStartX + (BTN_W + BTN_GAP), BOT_Y + 4, BTN_W, 44, '#22D3EE', '#475569', () => this.shop.openShop());
+        this.panels.shopButton = makeButton(root, 'ShopBtn', btnStartX + (BTN_W + BTN_GAP), BOT_Y + 4, BTN_W, 44, '#22D3EE', '#475569', () => this.shop.openShop());
         this.panels.shopButton.label.string = '商店';
-        this.panels.extractButton = this.button(root, 'ExtractBtn', btnStartX + (BTN_W + BTN_GAP) * 2, BOT_Y + 4, BTN_W, 44, '#F59E0B', '#475569', () => this.extractBattle());
+        this.panels.extractButton = makeButton(root, 'ExtractBtn', btnStartX + (BTN_W + BTN_GAP) * 2, BOT_Y + 4, BTN_W, 44, '#F59E0B', '#475569', () => this.extractBattle());
         this.panels.extractButton.label.string = '撤离';
-        this.panels.pauseButton = this.button(root, 'PauseBtn', btnStartX + (BTN_W + BTN_GAP) * 3, BOT_Y + 4, BTN_W, 44, '#475569', '#475569', () => this.pauseCombat());
+        this.panels.pauseButton = makeButton(root, 'PauseBtn', btnStartX + (BTN_W + BTN_GAP) * 3, BOT_Y + 4, BTN_W, 44, '#475569', '#475569', () => this.pauseCombat());
         this.panels.pauseButton.label.string = '暂停';
 
         // Toast
         const toastTop = BOT_Y - 70;
-        this.toastPanelShadowNode = this.rect(root, 'ToastShadow', 46, toastTop + 6, 628, 48, RogueShooterGame.UI.panelShadow, 10);
-        this.toastPanelNode = this.rect(root, 'ToastPanel', 36, toastTop, 648, 50, RogueShooterGame.UI.panelBg, 10, RogueShooterGame.UI.panelBorder);
-        this.panels.toastLabel = this.label(root, 'Toast', '', 50, toastTop + 4, 620, 42, 17, RogueShooterGame.UI.title);
+        this.toastPanelShadowNode = makeRect(root, 'ToastShadow', 46, toastTop + 6, 628, 48, RogueShooterGame.UI.panelShadow, 10);
+        this.toastPanelNode = makeRect(root, 'ToastPanel', 36, toastTop, 648, 50, RogueShooterGame.UI.panelBg, 10, RogueShooterGame.UI.panelBorder);
+        this.panels.toastLabel = makeLabel(root, 'Toast', '', 50, toastTop + 4, 620, 42, 17, RogueShooterGame.UI.title);
         this.toastPanelShadowNode.active = false;
         this.toastPanelNode.active = false;
         this.panels.toastLabel.node.active = false;
     }
 
-    private buildLevelPanel(root: Node) {
-        this.panels.levelPanelShadow = this.rect(root, 'LevelPanelShadow', 48, 316, 624, 500, RogueShooterGame.UI.panelShadow, 22);
-        this.panels.levelPanelShadow.active = false;
-        const panel = this.spritePanel(root, 'LevelPanel', 36, 302, 648, 500);
-        panel.active = false;
-        this.panels.levelPanel = panel;
-        this.panels.levelTitleLabel = this.label(panel, 'LevelTitle', '角色升级', 42, 30, 564, 52, 32, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
-        this.panels.levelBackButton = this.button(panel, 'LevelBack', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.pickupMgr.choosePanelChoice(0), true);
-        this.panels.levelBackButton.label.string = '返回';
-        this.panels.levelHintLabel = this.label(panel, 'LevelHint', '选择一项自身属性成长，战斗会继续。', 42, 86, 564, 42, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
-
-        for (let i = 0; i < 3; i++) {
-            const button = this.button(panel, `LevelChoice_${i}`, 54, 148 + i * 84, 540, 68, '#4CC9F0', '#94A3B8', () => this.pickupMgr.choosePanelChoice(i), true);
-            this.panels.levelChoiceButtons.push(button);
-        }
-        this.panels.levelRefreshButton = this.button(panel, 'ChoiceRefresh', 204, 414, 240, 48, '#F8961E', '#94A3B8', () => this.pickupMgr.refreshCurrentChoices(), true);
-        this.panels.levelRefreshButton.label.string = '刷新 -28合金';
-    }
-
-    private buildShopPanel(root: Node) {
-        this.panels.shopPanelShadow = this.rect(root, 'ShopPanelShadow', 36, 172, 648, 940, RogueShooterGame.UI.panelShadow, 24);
-        this.panels.shopPanelShadow.active = false;
-        const panel = this.spritePanel(root, 'ShopPanel', 24, 160, 672, 940);
-        panel.active = false;
-        this.panels.shopPanel = panel;
-        this.panels.shopTitleLabel = this.label(panel, 'ShopTitle', '战场商店', 36, 24, 600, 48, 32, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
-        this.panels.shopTipLabel = this.label(panel, 'ShopTip', '随时打开。每格可购买或消耗少量合金刷新下一件。', 42, 72, 588, 42, 18, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
-
-        for (let i = 0; i < SHOP_ITEM_COUNT; i++) {
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            const button = this.button(
-                panel,
-                `ShopOffer_${i}`,
-                52 + col * 304,
-                132 + row * 188,
-                264,
-                118,
-                '#4CC9F0',
-                '#94A3B8',
-                () => this.shop.buyShopItem(i),
-                true,
-            );
-            button.label.fontSize = 15;
-            button.label.lineHeight = 18;
-            this.panels.shopButtons.push(button);
-
-            const refreshButton = this.button(
-                panel,
-                `ShopSlotRefresh_${i}`,
-                52 + col * 304,
-                256 + row * 188,
-                264,
-                40,
-                '#F8961E',
-                '#94A3B8',
-                () => this.shop.refreshShopSlot(i),
-                true,
-            );
-            refreshButton.label.fontSize = 16;
-            refreshButton.label.lineHeight = 18;
-            this.panels.shopSlotRefreshButtons.push(refreshButton);
-        }
-
-        this.panels.shopCloseButton = this.button(panel, 'ShopClose', 204, 824, 264, 52, '#43AA8B', '#94A3B8', () => this.shop.closeShop(), true);
-        this.panels.shopCloseButton.label.string = '继续战斗';
-    }
+    // level panel → ChoicePopup
+    // shop panel  → ShopPopup
 
     private buildHangarPanel(root: Node) {
-        this.panels.hangarPanelShadow = this.rect(root, 'HangarPanelShadow', 36, 196, 648, 936, RogueShooterGame.UI.panelShadow, 24);
+        this.panels.hangarPanelShadow = makeRect(root, 'HangarPanelShadow', 36, 196, 648, 936, RogueShooterGame.UI.panelShadow, 24);
         this.panels.hangarPanelShadow.active = false;
         const panel = this.spritePanel(root, 'HangarPanel', 24, 184, 672, 936);
         panel.active = false;
         this.panels.hangarPanel = panel;
 
-        this.panels.hangarTitleLabel = this.label(panel, 'HangarTitle', '', 36, 24, 600, 52, 32, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
-        this.panels.hangarBackButton = this.button(panel, 'HangarBackHome', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.openMainMenu(), true);
+        this.panels.hangarTitleLabel = makeLabel(panel, 'HangarTitle', '', 36, 24, 600, 52, 32, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
+        this.panels.hangarBackButton = makeButton(panel, 'HangarBackHome', 30, 28, 92, MIN_TOUCH_BUTTON_HEIGHT, '#64748B', '#94A3B8', () => this.openMainMenu(), true);
         this.panels.hangarBackButton.label.string = '首页';
-        this.panels.hangarStatsLabel = this.label(panel, 'HangarStats', '', 46, 78, 580, 98, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
-        this.panels.hangarTipLabel = this.label(panel, 'HangarTip', '', 46, 842, 580, 44, 18, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
+        this.panels.hangarStatsLabel = makeLabel(panel, 'HangarStats', '', 46, 78, 580, 98, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
+        this.panels.hangarTipLabel = makeLabel(panel, 'HangarTip', '', 46, 842, 580, 44, 18, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
+
+        // ── 配装区域 (Loadout) ──
+        this.panels.loadoutWeaponButtons.push(makeButton(panel, 'LoadoutMainWeaponA', 46, 150, 270, 60, '#22D3EE', '#1E293B', () => this.shop.selectEquippedSlot(0), true));
+        this.panels.loadoutWeaponButtons.push(makeButton(panel, 'LoadoutMainWeaponB', 346, 150, 270, 60, '#38BDF8', '#1E293B', () => this.shop.selectEquippedSlot(1), true));
+        this.panels.offhandLoadoutButton = makeButton(panel, 'LoadoutOffhand', 46, 220, 270, 50, '#F97316', '#1E293B', () => this.openOffhandPanel(), true);
+        for (let i = 0; i < MAX_EQUIPPED_GEAR; i++) {
+            const gx = 346 + i * 70;
+            this.panels.gearLoadoutButtons.push(makeButton(panel, `LoadoutGear_${i}`, gx, 220, 66, 50, '#1E293B', '#0F172A', () => this.shop.selectEquippedSlot(2 + i), true));
+        }
+
+        // ── 标签栏 ──
+        this.panels.hangarTabButtons.push(makeButton(panel, 'HangarTabWeapon', 46, 290, 112, 36, '#1E293B', '#0F172A', () => this.shop.changeHangarTab('weapon' as any), true));
+        this.panels.hangarTabButtons[0].label.string = '武器';
+        this.panels.hangarTabButtons.push(makeButton(panel, 'HangarTabOffhand', 180, 290, 112, 36, '#1E293B', '#0F172A', () => this.openOffhandPanel(), true));
+        this.panels.hangarTabButtons[1].label.string = '副武器';
+        this.panels.hangarTabButtons.push(makeButton(panel, 'HangarTabGear', 314, 290, 112, 36, '#1E293B', '#0F172A', () => this.shop.changeHangarTab('gear' as any), true));
+        this.panels.hangarTabButtons[2].label.string = '装备';
+        this.panels.hangarTabButtons.push(makeButton(panel, 'HangarTabForge', 448, 290, 112, 36, '#1E293B', '#0F172A', () => this.openForgePanel(), true));
+        this.panels.hangarTabButtons[3].label.string = '传说熔炉';
 
         for (let i = 0; i < 3; i++) {
-            const button = this.button(panel, `LootChoice_${i}`, 58, 208 + i * 92, 556, 76, '#F8961E', '#94A3B8', () => this.pickupMgr.chooseLoot(i), true);
+            const button = makeButton(panel, `LootChoice_${i}`, 58, 208 + i * 92, 556, 76, '#F8961E', '#94A3B8', () => this.pickupMgr.chooseLoot(i), true);
             this.panels.lootButtons.push(button);
         }
 
         for (let i = 0; i < EQUIPPED_SLOT_COUNT; i++) {
             const col = i % 3;
             const row = Math.floor(i / 3);
-            const button = this.button(
+            const button = makeButton(
                 panel,
                 `EquippedSlot_${i}`,
                 46 + col * 198,
@@ -1095,12 +1085,12 @@ export class RogueShooterGame extends Component {
             this.panels.equippedButtons.push(button);
         }
 
-        this.panels.equipmentDetailLabel = this.label(panel, 'EquipmentDetail', '', 46, 302, 580, 116, 16, RogueShooterGame.UI.body, Label.HorizontalAlign.LEFT, true);
+        this.panels.equipmentDetailLabel = makeLabel(panel, 'EquipmentDetail', '', 46, 302, 580, 116, 16, RogueShooterGame.UI.body, Label.HorizontalAlign.LEFT, true);
 
         for (let i = 0; i < HANGAR_EQUIPMENT_SLOTS; i++) {
             const col = i % 2;
             const row = Math.floor(i / 2);
-            const button = this.button(
+            const button = makeButton(
                 panel,
                 `EquipmentSlot_${i}`,
                 44 + col * 316,
@@ -1115,22 +1105,79 @@ export class RogueShooterGame extends Component {
             this.panels.equipmentButtons.push(button);
         }
 
-        this.panels.prevEquipmentButton = this.button(panel, 'EquipmentPrev', 46, 706, 104, 52, '#64748B', '#94A3B8', () => this.shop.changeEquipmentPage(-1), true);
-        this.panels.equipActionButton = this.button(panel, 'EquipAction', 164, 706, 170, 52, '#4CC9F0', '#94A3B8', () => this.shop.toggleSelectedEquipment(), true);
-        this.panels.upgradeActionButton = this.button(panel, 'UpgradeAction', 348, 706, 170, 52, '#F8961E', '#94A3B8', () => this.shop.upgradeSelectedEquipment(), true);
-        this.panels.nextEquipmentButton = this.button(panel, 'EquipmentNext', 532, 706, 104, 52, '#64748B', '#94A3B8', () => this.shop.changeEquipmentPage(1), true);
+        this.panels.prevEquipmentButton = makeButton(panel, 'EquipmentPrev', 46, 706, 104, 52, '#64748B', '#94A3B8', () => this.shop.changeEquipmentPage(-1), true);
+        this.panels.equipActionButton = makeButton(panel, 'EquipAction', 164, 706, 170, 52, '#4CC9F0', '#94A3B8', () => this.shop.toggleSelectedEquipment(), true);
+        this.panels.upgradeActionButton = makeButton(panel, 'UpgradeAction', 348, 706, 170, 52, '#F8961E', '#94A3B8', () => this.shop.upgradeSelectedEquipment(), true);
+        this.panels.nextEquipmentButton = makeButton(panel, 'EquipmentNext', 532, 706, 104, 52, '#64748B', '#94A3B8', () => this.shop.changeEquipmentPage(1), true);
 
         // ── Pre-battle buff button (below action buttons) ──
-        this.panels.preBuffLabel = this.label(panel, 'PreBuffLabel', '', 46, 776, 580, 24, 16, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
-        this.panels.preBuffButton = this.button(panel, 'PreBuffButton', 174, 750, 324, 42, '#F8961E', '#94A3B8', () => this.requestPreBattleBuff(), true);
+        this.panels.preBuffLabel = makeLabel(panel, 'PreBuffLabel', '', 46, 776, 580, 24, 16, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
+        this.panels.preBuffButton = makeButton(panel, 'PreBuffButton', 174, 750, 324, 42, '#F8961E', '#94A3B8', () => this.requestPreBattleBuff(), true);
         this.panels.preBuffButton.label.string = '获取增益';
 
-        this.panels.startButton = this.button(panel, 'StartBattle', 174, 826, 324, 58, '#43AA8B', '#94A3B8', () => this.beginBattle(false), true);
+        this.panels.startButton = makeButton(panel, 'StartBattle', 174, 826, 324, 58, '#43AA8B', '#94A3B8', () => this.beginBattle(false), true);
 
         // ── Extract reward double button (hidden by default) ──
-        this.panels.extractDoubleButton = this.button(panel, 'ExtractDoubleButton', 174, 650, 324, 42, '#F9C74F', '#94A3B8', () => this.requestExtractDouble(), true);
+        this.panels.extractDoubleButton = makeButton(panel, 'ExtractDoubleButton', 174, 650, 324, 42, '#F9C74F', '#94A3B8', () => this.requestExtractDouble(), true);
         this.panels.extractDoubleButton.node.active = false;
         this.panels.extractDoubleButton.label.string = '看视频双倍领取';
+    }
+
+    private buildOffhandPanel(root: Node) {
+        const CARD_W = 184;
+        const CARD_H = 74;
+        const panel = this.spritePanel(root, 'OffhandPanel', 24, 184, 672, 936);
+        panel.active = false;
+        this.panels.offhandPanel = panel;
+        makeLabel(panel, 'OffhandTitle', '副武器', 36, 24, 600, 48, 28, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
+        for (let i = 0; i < 15; i++) {
+            const col = i % 3;
+            const row = Math.floor(i / 3);
+            const button = makeButton(panel, `OffhandCard_${i}`, 46 + col * 198, 150 + row * 84, CARD_W, CARD_H, '#F97316', '#1E293B', () => this.shop.selectOffhand(i), true);
+            this.panels.offhandButtons.push(button);
+        }
+        this.panels.offhandEquipButton = makeButton(panel, 'OffhandEquip', 164, 700, 170, 52, '#22D3EE', '#94A3B8', () => this.toggleSelectedOffhandEquip(), true);
+        this.panels.offhandCloseButton = makeButton(panel, 'OffhandClose', 532, 700, 104, 52, '#64748B', '#94A3B8', () => this.closeOffhandPanel(), true);
+        this.panels.offhandCloseButton.label.string = '关闭';
+    }
+
+    private openOffhandPanel(): void {
+        this.panels.hideAllOverlays();
+        if (this.panels.offhandPanel) this.panels.offhandPanel.active = true;
+        this.renderOffhandPanel();
+    }
+
+    private renderOffhandPanel(): void { }
+
+    private closeOffhandPanel(): void {
+        if (this.panels.offhandPanel) this.panels.offhandPanel.active = false;
+        if (this.panels.hangarPanel) this.panels.hangarPanel.active = true;
+    }
+
+    private buildForgePanel(root: Node) {
+        const panel = this.spritePanel(root, 'ForgePanel', 24, 184, 672, 936);
+        panel.active = false;
+        this.panels.forgePanel = panel;
+        makeLabel(panel, 'ForgeTitle', '传说熔炉', 36, 24, 600, 48, 28, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
+        for (let i = 0; i < 3; i++) {
+            const button = makeButton(panel, `ForgeRecipe_${i}`, 46, 92 + i * 178, 580, 154, '#B5179E', '#94A3B8', () => this.synthesizeLegendaryFromCard(i), true);
+            this.panels.forgeRecipeButtons.push(button);
+        }
+        this.panels.forgeCloseButton = makeButton(panel, 'ForgeClose', 532, 700, 104, 52, '#64748B', '#94A3B8', () => this.closeForgePanel(), true);
+        this.panels.forgeCloseButton.label.string = '关闭';
+    }
+
+    private openForgePanel(): void {
+        this.panels.hideAllOverlays();
+        if (this.panels.forgePanel) this.panels.forgePanel.active = true;
+        this.renderForgePanel();
+    }
+
+    private renderForgePanel(): void { }
+
+    private closeForgePanel(): void {
+        if (this.panels.forgePanel) this.panels.forgePanel.active = false;
+        if (this.panels.hangarPanel) this.panels.hangarPanel.active = true;
     }
 
     private buildJoystick(root: Node) {
@@ -1160,73 +1207,48 @@ export class RogueShooterGame extends Component {
         this.vfxOverlay = node.addComponent(Graphics);
     }
 
-    private buildRevivePanel(root: Node) {
-        const shadow = this.rect(root, 'ReviveShadow', 60, 370, 600, 350, RogueShooterGame.UI.panelShadow, 20);
-        shadow.active = false;
-        this.panels.revivePanelShadow = shadow;
-        const panel = this.rect(root, 'RevivePanel', 48, 358, 624, 350, RogueShooterGame.UI.panelBg, 20, RogueShooterGame.UI.panelBorder);
-        panel.active = false;
-        this.panels.revivePanel = panel;
-        this.panels.reviveTitleLabel = this.label(panel, 'ReviveTitle', '机体损毁', 48, 36, 528, 56, 34, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
-        this.label(panel, 'ReviveHint', '看视频立即复活，继续战斗！', 54, 100, 516, 42, 22, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
-        this.panels.reviveWatchButton = this.button(panel, 'ReviveWatch', 132, 168, 360, 56, '#F8961E', '#94A3B8', () => this.reviveFromAd(), true);
-        this.panels.reviveDeclineButton = this.button(panel, 'ReviveDecline', 162, 242, 300, 50, '#64748B', '#94A3B8', () => this.declineRevive(), true);
-    }
-
-    private showRevivePanel(): void {
+    private async showRevivePanel(): Promise<void> {
         if (this.revived) return;
         if (this.cs.phase !== 'combat') return;
         this.revived = true;
         this.cs.phase = 'paused';
-        if (this.panels.revivePanelShadow) this.panels.revivePanelShadow.active = true;
-        if (this.panels.revivePanel) this.panels.revivePanel.active = true;
-        const remaining = AdManager.getReviveRemaining();
-        if (this.panels.reviveWatchButton) {
-            this.panels.reviveWatchButton.label.string = `看视频复活 (今日剩余${remaining}次)`;
-        }
-        if (this.panels.reviveTitleLabel) {
-            this.panels.reviveTitleLabel.string = this.cs.bossKills > 0
-                ? `机体损毁 · 已击败 ${this.cs.bossKills} Boss`
-                : '机体损毁';
-        }
-        if (this.panels.reviveDeclineButton) {
-            this.panels.reviveDeclineButton.label.string = '放弃';
-        }
+        const result = await uiMgr.showDynamicPopupAsync(() => {
+            const node = new Node('RevivePopup');
+            node.addComponent(RevivePopup).setup({
+                bossKills: this.cs.bossKills,
+                remainingRevives: AdManager.getReviveRemaining(),
+                onWatch: () => this.reviveFromAd().then((ok) => ok ? 'revived' : 'decline'),
+                onDecline: () => 'decline',
+            });
+            return node;
+        }, 'RevivePopup');
+        if (result === 'decline') this.declineRevive();
     }
 
-    private reviveFromAd(): void {
-        if (!AdManager.canReviveToday()) {
-            this.showToast('今日复活次数已用完。');
-            this.declineRevive();
-            return;
-        }
-        if (this.panels.reviveWatchButton) {
-            this.panels.reviveWatchButton.label.string = '广告加载中...';
-            this.panels.reviveWatchButton.disabled = true;
-        }
-        this.panels.hideAllOverlays();
-        AdManager.playRewardedAd((result) => {
-            if (!result.success) {
-                this.showToast(result.reason || '广告播放失败，请重试。');
-                this.panels.hideAllOverlays();
-                if (this.panels.revivePanelShadow) this.panels.revivePanelShadow.active = true;
-                if (this.panels.revivePanel) this.panels.revivePanel.active = true;
-                if (this.panels.reviveWatchButton) {
-                    const remaining = AdManager.getReviveRemaining();
-                    this.panels.reviveWatchButton.label.string = `看视频复活 (今日剩余${remaining}次)`;
-                    this.panels.reviveWatchButton.disabled = false;
-                }
+    private reviveFromAd(): Promise<boolean> {
+        return new Promise((resolve) => {
+            if (!AdManager.canReviveToday()) {
+                this.showToast('今日复活次数已用完。');
+                resolve(false);
                 return;
             }
-            AdManager.useDailyRevive();
-            this.cs.playerHp = this.cs.playerMaxHp * 0.5;
-            this.cs.playerShield = 0;
-            this.cs.invulnerableTimer = 1.5;
-            this.playSfx('sfx_revive', 0.7, 0.2);
-            this.revived = false;
-            this.cs.phase = 'combat';
-            this.panels.hideAllOverlays();
-            this.showToast('已复活！半血重返战场。');
+            AdManager.playRewardedAd((result) => {
+                if (!result.success) {
+                    this.showToast(result.reason || '广告播放失败，请重试。');
+                    resolve(false);
+                    return;
+                }
+                AdManager.useDailyRevive();
+                this.cs.playerHp = this.cs.playerMaxHp * 0.5;
+                this.cs.playerShield = 0;
+                this.cs.invulnerableTimer = 1.5;
+                this.playSfx('sfx_revive', 0.7, 0.2);
+                this.revived = false;
+                this.cs.phase = 'combat';
+                this.panels.hideAllOverlays();
+                this.showToast('已复活！半血重返战场。');
+                resolve(true);
+            });
         });
     }
 
@@ -1250,19 +1272,27 @@ export class RogueShooterGame extends Component {
             if (sf) this.uiBtnPressedFrame = sf;
             this.uiTexturesReady = true;
         });
+        // HUD bar textures
+        resources.load('effects/hud_bar_hp/spriteFrame', SpriteFrame, () => {});
+        resources.load('effects/hud_bar_hp_bg/spriteFrame', SpriteFrame, () => {});
+        resources.load('effects/hud_bar_xp/spriteFrame', SpriteFrame, () => {});
+        resources.load('effects/hud_bar_xp_bg/spriteFrame', SpriteFrame, () => {});
+        resources.load('effects/hud_bar_shield/spriteFrame', SpriteFrame, () => {});
+        resources.load('effects/hud_bar_shield_bg/spriteFrame', SpriteFrame, () => {});
         this.loadIcons();
     }
 
     private loadIcons(): void {
         const names = [
-            'wpn_assault_rifle','wpn_shotgun','wpn_sniper','wpn_smg','wpn_rocket_launcher','wpn_laser_gun','wpn_plasma_gun','wpn_lightning_gun',
-            'wpn_ice_gun','wpn_fire_wand','wpn_poison_sprayer','wpn_crossbow','wpn_dual_pistols','wpn_axe','wpn_throwing_knives','wpn_orbital_beam',
-            'wpn_pulse_rifle','wpn_drone_spirit','wpn_chain_lightning','wpn_meteor','wpn_railgun','wpn_tesla',
+            'wpn_storm_rifle','wpn_plague_sprayer','wpn_frost_beam','wpn_echo_bow','wpn_split_barrel','wpn_mirror_prism','wpn_quantum_loom',
+            'wpn_ion_lance','wpn_thorn_crossbow','wpn_rail_cannon','wpn_void_needle','wpn_meteor_launcher','wpn_orbital_drone','wpn_gravity_hammer',
+            'wpn_void_tearer','wpn_icefire_judge',
             'stat_attack_power','stat_attack_speed','stat_crit_chance','stat_crit_damage',
             'stat_defense','stat_fire_def','stat_ice_def','stat_lightning_def','stat_lethal_chance','stat_lethal_damage',
             'slot_helmet','slot_armor','slot_boots','slot_accessory',
             'resource_alloy','resource_core','resource_shard','resource_biomass',
             'dmg_fire','dmg_ice','dmg_lightning','dmg_poison','dmg_physical','dmg_magic','stat_shield','stat_hp',
+            'hud_icon_alloy','hud_icon_hp','hud_icon_xp','hud_icon_shield',
         ];
         for (const name of names) {
             const path = `effects/ui_icons/${name}/spriteFrame`;
@@ -1285,9 +1315,9 @@ export class RogueShooterGame extends Component {
             parent.addChild(iconNode);
             if (local) {
                 const pt = parent.getComponent(UITransform);
-                this.placeLocal(iconNode, x + iconSize/2, y + h/2, pt?.width ?? w, pt?.height ?? h);
+                placeLocal(iconNode, x + iconSize/2, y + h/2, pt?.width ?? w, pt?.height ?? h);
             } else {
-                this.place(iconNode, x + iconSize/2, y + h/2);
+                place(iconNode, x + iconSize/2, y + h/2);
             }
             const it = iconNode.addComponent(UITransform);
             it.setContentSize(iconSize, iconSize);
@@ -1295,14 +1325,14 @@ export class RogueShooterGame extends Component {
             sp.spriteFrame = sf;
             sp.sizeMode = Sprite.SizeMode.CUSTOM;
         }
-        return this.label(parent, name, text, x + (sf ? iconSize + 8 : 0), y, w - (sf ? iconSize + 8 : 0), h, fontSize, color, hAlign, local);
+        return makeLabel(parent, name, text, x + (sf ? iconSize + 8 : 0), y, w - (sf ? iconSize + 8 : 0), h, fontSize, color, hAlign, local);
     }
 
     private spritePanel(parent: Node, name: string, x: number, y: number, width: number, height: number): Node {
         const node = new Node(name);
         node.layer = Layers.Enum.UI_2D;
         parent.addChild(node);
-        this.place(node, x + width / 2, y + height / 2);
+        place(node, x + width / 2, y + height / 2);
         const trans = node.addComponent(UITransform);
         trans.setContentSize(width, height);
         const gfx = node.addComponent(Graphics);
@@ -1320,34 +1350,34 @@ export class RogueShooterGame extends Component {
     private drawPremiumPanel(gfx: Graphics, width: number, height: number, radius = 20, borderColor: string = RogueShooterGame.UI.panelBorder, accentColor: string = RogueShooterGame.UI.neonCyan): void {
         gfx.clear();
         // Deep body
-        gfx.fillColor = this.hex(RogueShooterGame.UI.panelBgDeep, RogueShooterGame.UI.panelAlpha);
+        gfx.fillColor = hex(RogueShooterGame.UI.panelBgDeep, RogueShooterGame.UI.panelAlpha);
         gfx.roundRect(-width / 2, -height / 2, width, height, radius);
         gfx.fill();
         // Lifted inner surface
-        gfx.fillColor = this.hex(RogueShooterGame.UI.panelBg, 238);
+        gfx.fillColor = hex(RogueShooterGame.UI.panelBg, 238);
         gfx.roundRect(-width / 2 + 6, -height / 2 + 6, width - 12, height - 12, Math.max(10, radius - 6));
         gfx.fill();
         // Top glass sheen
-        gfx.fillColor = this.hex(RogueShooterGame.UI.panelBgLift, 118);
+        gfx.fillColor = hex(RogueShooterGame.UI.panelBgLift, 118);
         gfx.roundRect(-width / 2 + 10, height / 2 - Math.min(96, height * 0.26), width - 20, Math.min(80, height * 0.22), Math.max(8, radius - 10));
         gfx.fill();
         // Subtle bottom vignette for depth
-        gfx.fillColor = this.hex(RogueShooterGame.UI.glassLowlight, 156);
+        gfx.fillColor = hex(RogueShooterGame.UI.glassLowlight, 156);
         gfx.roundRect(-width / 2 + 10, -height / 2 + 10, width - 20, Math.min(110, height * 0.24), Math.max(8, radius - 10));
         gfx.fill();
         // Thin frame
-        gfx.strokeColor = this.hex(borderColor, 190);
+        gfx.strokeColor = hex(borderColor, 190);
         gfx.lineWidth = 1.5;
         gfx.roundRect(-width / 2 + 1, -height / 2 + 1, width - 2, height - 2, radius);
         gfx.stroke();
-        gfx.strokeColor = this.hex(RogueShooterGame.UI.glassHighlight, 72);
+        gfx.strokeColor = hex(RogueShooterGame.UI.glassHighlight, 72);
         gfx.lineWidth = 1;
         gfx.roundRect(-width / 2 + 8, -height / 2 + 8, width - 16, height - 16, Math.max(8, radius - 8));
         gfx.stroke();
         // Starship corner brackets
         const corner = Math.min(46, Math.max(24, Math.min(width, height) * 0.12));
         const inset = 15;
-        gfx.strokeColor = this.hex(accentColor, 210);
+        gfx.strokeColor = hex(accentColor, 210);
         gfx.lineWidth = 3;
         gfx.moveTo(-width / 2 + inset, height / 2 - inset - corner);
         gfx.lineTo(-width / 2 + inset, height / 2 - inset);
@@ -1369,54 +1399,54 @@ export class RogueShooterGame extends Component {
         node.layer = Layers.Enum.UI_2D;
         parent.addChild(node);
         const parentTransform = parent.getComponent(UITransform);
-        this.placeLocal(node, x + width / 2, y + height / 2, parentTransform?.width ?? width, parentTransform?.height ?? height);
+        placeLocal(node, x + width / 2, y + height / 2, parentTransform?.width ?? width, parentTransform?.height ?? height);
         node.addComponent(UITransform).setContentSize(width, height);
         return node.addComponent(Graphics);
     }
 
     private addTechDivider(parent: Node, name: string, x: number, y: number, width: number, color: string = RogueShooterGame.UI.neonCyan): void {
         const gfx = this.addLocalGraphic(parent, name, x, y, width, 18);
-        gfx.strokeColor = this.hex(color, 150);
+        gfx.strokeColor = hex(color, 150);
         gfx.lineWidth = 2;
         gfx.moveTo(-width / 2, 0);
         gfx.lineTo(-width / 2 + width * 0.38, 0);
         gfx.moveTo(width / 2 - width * 0.38, 0);
         gfx.lineTo(width / 2, 0);
         gfx.stroke();
-        gfx.fillColor = this.hex(color, 200);
+        gfx.fillColor = hex(color, 200);
         gfx.roundRect(-18, -3, 36, 6, 3);
         gfx.fill();
     }
 
     private drawMenuEmblem(parent: Node): void {
         const gfx = this.addLocalGraphic(parent, 'MenuCommandEmblem', 214, 168, 220, 132);
-        gfx.strokeColor = this.hex(RogueShooterGame.UI.neonCyan, 82);
+        gfx.strokeColor = hex(RogueShooterGame.UI.neonCyan, 82);
         gfx.lineWidth = 2;
         gfx.circle(0, 0, 62);
         gfx.stroke();
-        gfx.strokeColor = this.hex(RogueShooterGame.UI.alloyGold, 170);
+        gfx.strokeColor = hex(RogueShooterGame.UI.alloyGold, 170);
         gfx.lineWidth = 4;
         gfx.arc(0, 0, 50, Math.PI * 0.08, Math.PI * 0.82, false);
         gfx.stroke();
-        gfx.strokeColor = this.hex(RogueShooterGame.UI.neonCyan, 180);
+        gfx.strokeColor = hex(RogueShooterGame.UI.neonCyan, 180);
         gfx.lineWidth = 3;
         gfx.arc(0, 0, 42, Math.PI * 1.05, Math.PI * 1.84, false);
         gfx.stroke();
-        gfx.fillColor = this.hex(RogueShooterGame.UI.sectionBg, 235);
+        gfx.fillColor = hex(RogueShooterGame.UI.sectionBg, 235);
         gfx.circle(0, 0, 34);
         gfx.fill();
-        gfx.strokeColor = this.hex(RogueShooterGame.UI.glassHighlight, 180);
+        gfx.strokeColor = hex(RogueShooterGame.UI.glassHighlight, 180);
         gfx.lineWidth = 2;
         gfx.circle(0, 0, 34);
         gfx.stroke();
-        gfx.fillColor = this.hex(RogueShooterGame.UI.alloyOrange, 230);
+        gfx.fillColor = hex(RogueShooterGame.UI.alloyOrange, 230);
         gfx.moveTo(0, 26);
         gfx.lineTo(19, -22);
         gfx.lineTo(0, -12);
         gfx.lineTo(-19, -22);
         gfx.close();
         gfx.fill();
-        gfx.fillColor = this.hex(RogueShooterGame.UI.neonCyan, 190);
+        gfx.fillColor = hex(RogueShooterGame.UI.neonCyan, 190);
         gfx.roundRect(-92, -4, 54, 8, 4);
         gfx.roundRect(38, -4, 54, 8, 4);
         gfx.fill();
@@ -1431,7 +1461,7 @@ export class RogueShooterGame extends Component {
             this.vfxLevelUpFlash -= dt;
             const alpha = Math.min(255, this.vfxLevelUpFlash / 0.08 * 255);
             if (alpha > 5) {
-                this.vfxOverlay.fillColor = this.hex('#FFFFFF', Math.round(alpha * 0.35));
+                this.vfxOverlay.fillColor = hex('#FFFFFF', Math.round(alpha * 0.35));
                 this.vfxOverlay.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
                 this.vfxOverlay.fill();
             }
@@ -1443,7 +1473,7 @@ export class RogueShooterGame extends Component {
             const phase = this.vfxBossWarning;
             const maxAlpha = phase > 1.2 ? 40 : phase > 0.8 ? 70 : phase > 0.4 ? 50 : phase * 30;
             if (maxAlpha > 3) {
-                this.vfxOverlay.fillColor = this.hex('#EF4444', Math.round(maxAlpha));
+                this.vfxOverlay.fillColor = hex('#EF4444', Math.round(maxAlpha));
                 this.vfxOverlay.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
                 this.vfxOverlay.fill();
             }
@@ -1454,7 +1484,7 @@ export class RogueShooterGame extends Component {
             this.vfxPlayerHitOverlay -= dt;
             const a = Math.round(this.vfxPlayerHitOverlay / 0.3 * 180);
             if (a > 5) {
-                this.vfxOverlay.fillColor = this.hex('#EF4444', Math.min(a, 80));
+                this.vfxOverlay.fillColor = hex('#EF4444', Math.min(a, 80));
                 this.vfxOverlay.rect(-DESIGN_WIDTH / 2, -DESIGN_HEIGHT / 2, DESIGN_WIDTH, DESIGN_HEIGHT);
                 this.vfxOverlay.fill();
             }
@@ -1467,11 +1497,11 @@ export class RogueShooterGame extends Component {
             const radius = 50 + (1 - p / 1.5) * 400;
             const a = Math.round(p / 1.5 * 180);
             if (a > 5) {
-                this.vfxOverlay.strokeColor = this.hex('#22C55E', a);
+                this.vfxOverlay.strokeColor = hex('#22C55E', a);
                 this.vfxOverlay.lineWidth = 6;
                 this.vfxOverlay.circle(0, 0, radius);
                 this.vfxOverlay.stroke();
-                this.vfxOverlay.fillColor = this.hex('#22C55E', Math.round(a * 0.15));
+                this.vfxOverlay.fillColor = hex('#22C55E', Math.round(a * 0.15));
                 this.vfxOverlay.circle(0, 0, radius);
                 this.vfxOverlay.fill();
             }
@@ -1484,7 +1514,7 @@ export class RogueShooterGame extends Component {
             const radius = 30 + (1 - p / 1.2) * 300;
             const a = Math.round(p / 1.2 * 200);
             if (a > 5) {
-                this.vfxOverlay.strokeColor = this.hex('#F59E0B', a);
+                this.vfxOverlay.strokeColor = hex('#F59E0B', a);
                 this.vfxOverlay.lineWidth = 5;
                 this.vfxOverlay.circle(0, 0, radius);
                 this.vfxOverlay.stroke();
@@ -1493,120 +1523,120 @@ export class RogueShooterGame extends Component {
     }
 
     private buildLoadingPanel(root: Node) {
-        const panel = this.rect(root, 'LoadingPanel', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, RogueShooterGame.UI.panelBgDeep);
+        const panel = makeRect(root, 'LoadingPanel', 0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, RogueShooterGame.UI.panelBgDeep);
         panel.active = true;
         this.panels.loadingPanel = panel;
         const gfx = panel.getComponent(Graphics);
         if (gfx) {
             // Deep-space gradient impression: layered nebula discs + tactical scan lines.
-            gfx.fillColor = this.hex('#0B2A45', 205);
+            gfx.fillColor = hex('#0B2A45', 205);
             gfx.circle(570, 206, 285);
             gfx.fill();
-            gfx.fillColor = this.hex('#391B55', 150);
+            gfx.fillColor = hex('#391B55', 150);
             gfx.circle(92, 1084, 340);
             gfx.fill();
-            gfx.fillColor = this.hex(RogueShooterGame.UI.alloyOrange, 118);
+            gfx.fillColor = hex(RogueShooterGame.UI.alloyOrange, 118);
             gfx.circle(604, 1058, 160);
             gfx.fill();
-            gfx.strokeColor = this.hex(RogueShooterGame.UI.neonCyan, 72);
+            gfx.strokeColor = hex(RogueShooterGame.UI.neonCyan, 72);
             gfx.lineWidth = 1;
             for (let y = 160; y < 1120; y += 84) {
                 gfx.moveTo(72, y);
                 gfx.lineTo(648, y + ((y / 84) % 2 === 0 ? 10 : -10));
             }
             gfx.stroke();
-            gfx.strokeColor = this.hex(RogueShooterGame.UI.alloyGold, 145);
+            gfx.strokeColor = hex(RogueShooterGame.UI.alloyGold, 145);
             gfx.lineWidth = 6;
             gfx.circle(360, 596, 158);
             gfx.stroke();
-            gfx.strokeColor = this.hex(RogueShooterGame.UI.neonCyan, 150);
+            gfx.strokeColor = hex(RogueShooterGame.UI.neonCyan, 150);
             gfx.lineWidth = 2;
             gfx.circle(360, 596, 204);
             gfx.stroke();
-            gfx.fillColor = this.hex(RogueShooterGame.UI.panelBg, 185);
+            gfx.fillColor = hex(RogueShooterGame.UI.panelBg, 185);
             gfx.roundRect(118, 522, 484, 172, 28);
             gfx.fill();
-            gfx.strokeColor = this.hex(RogueShooterGame.UI.glassHighlight, 135);
+            gfx.strokeColor = hex(RogueShooterGame.UI.glassHighlight, 135);
             gfx.lineWidth = 2;
             gfx.roundRect(118, 522, 484, 172, 28);
             gfx.stroke();
         }
-        this.panels.loadingTitleLabel = this.label(panel, 'LoadingTitle', '星坠幸存者', 70, 426, 580, 72, 56, RogueShooterGame.UI.loadingTitle, Label.HorizontalAlign.CENTER, true);
-        this.label(panel, 'LoadingSubTitle', '星舰军械库正在点火', 92, 514, 536, 40, 24, RogueShooterGame.UI.loadingSub, Label.HorizontalAlign.CENTER, true);
-        this.panels.loadingProgressLabel = this.label(panel, 'LoadingProgress', '加载中...', 92, 606, 536, 44, 22, RogueShooterGame.UI.loadingProgress, Label.HorizontalAlign.CENTER, true);
-        this.label(panel, 'LoadingHint', '提示：升级、买道具、撤离带回资源；撑到 Boss 就有大收益', 76, 1040, 568, 58, 21, RogueShooterGame.UI.loadingHint, Label.HorizontalAlign.CENTER, true);
+        this.panels.loadingTitleLabel = makeLabel(panel, 'LoadingTitle', '星坠幸存者', 70, 426, 580, 72, 56, RogueShooterGame.UI.loadingTitle, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'LoadingSubTitle', '星舰军械库正在点火', 92, 514, 536, 40, 24, RogueShooterGame.UI.loadingSub, Label.HorizontalAlign.CENTER, true);
+        this.panels.loadingProgressLabel = makeLabel(panel, 'LoadingProgress', '加载中...', 92, 606, 536, 44, 22, RogueShooterGame.UI.loadingProgress, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'LoadingHint', '提示：升级、买道具、撤离带回资源；撑到 Boss 就有大收益', 76, 1040, 568, 58, 21, RogueShooterGame.UI.loadingHint, Label.HorizontalAlign.CENTER, true);
     }
 
     private buildMenuPanel(root: Node) {
-        this.panels.menuPanelShadow = this.rect(root, 'MenuPanelShadow', 48, 220, 624, 790, RogueShooterGame.UI.panelShadow, 28);
+        this.panels.menuPanelShadow = makeRect(root, 'MenuPanelShadow', 48, 220, 624, 790, RogueShooterGame.UI.panelShadow, 28);
         this.panels.menuPanelShadow.active = false;
         const panel = this.spritePanel(root, 'MenuPanel', 36, 206, 648, 790);
         panel.active = false;
         this.panels.menuPanel = panel;
 
-        this.label(panel, 'MenuKicker', 'STARFALL SURVIVOR', 58, 36, 532, 28, 16, RogueShooterGame.UI.cyanText, Label.HorizontalAlign.CENTER, true);
-        this.label(panel, 'MenuTitle', '星坠幸存者', 50, 64, 548, 72, 50, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'MenuKicker', 'STARFALL SURVIVOR', 58, 36, 532, 28, 16, RogueShooterGame.UI.cyanText, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'MenuTitle', '星坠幸存者', 50, 64, 548, 72, 50, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
         this.addTechDivider(panel, 'MenuTitleDivider', 96, 140, 456, RogueShooterGame.UI.alloyGold);
-        this.label(panel, 'MenuSubTitle', '自动开火 · 肉鸽成长 · Boss 撤离 · 激爽割草', 56, 150, 536, 36, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'MenuSubTitle', '自动开火 · 肉鸽成长 · Boss 撤离 · 激爽割草', 56, 150, 536, 36, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
         this.drawMenuEmblem(panel);
-        this.label(panel, 'MenuHook', '整备武器，冲入星潮；扛不住就撤，够强就打穿下一波。', 74, 286, 500, 44, 19, RogueShooterGame.UI.goldText, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'MenuHook', '整备武器，冲入星潮；扛不住就撤，够强就打穿下一波。', 74, 286, 500, 44, 19, RogueShooterGame.UI.goldText, Label.HorizontalAlign.CENTER, true);
 
-        const start = this.button(panel, 'MenuStart', 118, 350, 412, 66, RogueShooterGame.UI.neonGreen, '#94A3B8', () => this.openHangarFromMenu(), true);
+        const start = makeButton(panel, 'MenuStart', 118, 350, 412, 66, RogueShooterGame.UI.neonGreen, '#94A3B8', () => this.openHangarFromMenu(), true);
         start.label.string = '进入机库 · 整备出击';
-        const quick = this.button(panel, 'MenuQuickStart', 118, 432, 412, 62, RogueShooterGame.UI.neonCyan, '#94A3B8', () => this.beginBattle(false), true);
+        const quick = makeButton(panel, 'MenuQuickStart', 118, 432, 412, 62, RogueShooterGame.UI.neonCyan, '#94A3B8', () => this.beginBattle(false), true);
         quick.label.string = '快速出击';
-        const settings = this.button(panel, 'MenuSettings', 118, 510, 196, 56, '#64748B', '#94A3B8', () => this.openSettingsPanel(), true);
+        const settings = makeButton(panel, 'MenuSettings', 118, 510, 196, 56, '#64748B', '#94A3B8', () => this.openSettingsPanel(), true);
         settings.label.string = '设置';
-        const howto = this.button(panel, 'MenuHowTo', 334, 510, 196, 56, RogueShooterGame.UI.neonPurple, '#94A3B8', () => this.openHowToPanel(), true);
+        const howto = makeButton(panel, 'MenuHowTo', 334, 510, 196, 56, RogueShooterGame.UI.neonPurple, '#94A3B8', () => this.openHowToPanel(), true);
         howto.label.string = '玩法说明';
-        const privacy = this.button(panel, 'MenuPrivacy', 118, 584, 412, 56, RogueShooterGame.UI.alloyOrange, '#94A3B8', () => this.openPrivacyPanel(), true);
+        const privacy = makeButton(panel, 'MenuPrivacy', 118, 584, 412, 56, RogueShooterGame.UI.alloyOrange, '#94A3B8', () => this.openPrivacyPanel(), true);
         privacy.label.string = '隐私与适龄';
-        this.label(panel, 'AgeHint', '12+｜健康游戏，适度娱乐', 56, 660, 536, 30, 17, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
-        this.label(panel, 'MenuVersion', 'v0.2.0  审核前测试版', 56, 704, 536, 32, 17, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'AgeHint', '12+｜健康游戏，适度娱乐', 56, 660, 536, 30, 17, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'MenuVersion', 'v0.2.0  审核前测试版', 56, 704, 536, 32, 17, RogueShooterGame.UI.hint, Label.HorizontalAlign.CENTER, true);
     }
 
     private buildPausePanel(root: Node) {
-        this.panels.pausePanelShadow = this.rect(root, 'PausePanelShadow', 78, 372, 564, 520, RogueShooterGame.UI.panelShadow, 24);
+        this.panels.pausePanelShadow = makeRect(root, 'PausePanelShadow', 78, 372, 564, 520, RogueShooterGame.UI.panelShadow, 24);
         this.panels.pausePanelShadow.active = false;
         const panel = this.spritePanel(root, 'PausePanel', 66, 360, 588, 520);
         panel.active = false;
         this.panels.pausePanel = panel;
-        this.label(panel, 'PauseTitle', '暂停', 42, 38, 504, 58, 38, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
-        this.label(panel, 'PauseHint', '战斗已暂停，可继续、调整声音或返回机库。', 50, 104, 488, 44, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
-        const resume = this.button(panel, 'PauseResume', 124, 178, 340, 60, '#43AA8B', '#94A3B8', () => this.resumeFromPause(), true);
+        makeLabel(panel, 'PauseTitle', '暂停', 42, 38, 504, 58, 38, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
+        makeLabel(panel, 'PauseHint', '战斗已暂停，可继续、调整声音或返回机库。', 50, 104, 488, 44, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
+        const resume = makeButton(panel, 'PauseResume', 124, 178, 340, 60, '#43AA8B', '#94A3B8', () => this.resumeFromPause(), true);
         resume.label.string = '继续游戏';
-        const settings = this.button(panel, 'PauseSettings', 124, 254, 340, 58, '#64748B', '#94A3B8', () => this.openSettingsPanel(), true);
+        const settings = makeButton(panel, 'PauseSettings', 124, 254, 340, 58, '#64748B', '#94A3B8', () => this.openSettingsPanel(), true);
         settings.label.string = '设置';
-        const hangar = this.button(panel, 'PauseHangar', 124, 328, 340, 58, '#F8961E', '#94A3B8', () => this.returnToHangarFromPause(), true);
+        const hangar = makeButton(panel, 'PauseHangar', 124, 328, 340, 58, '#F8961E', '#94A3B8', () => this.returnToHangarFromPause(), true);
         hangar.label.string = '返回机库';
-        const help = this.button(panel, 'PauseHelp', 124, 402, 340, 58, '#B5179E', '#94A3B8', () => this.openHowToPanel(), true);
+        const help = makeButton(panel, 'PauseHelp', 124, 402, 340, 58, '#B5179E', '#94A3B8', () => this.openHowToPanel(), true);
         help.label.string = '玩法说明';
     }
 
     private buildSettingsPanel(root: Node) {
-        this.panels.settingsPanelShadow = this.rect(root, 'SettingsPanelShadow', 86, 386, 548, 490, RogueShooterGame.UI.panelShadow, 24);
+        this.panels.settingsPanelShadow = makeRect(root, 'SettingsPanelShadow', 86, 386, 548, 490, RogueShooterGame.UI.panelShadow, 24);
         this.panels.settingsPanelShadow.active = false;
         const panel = this.spritePanel(root, 'SettingsPanel', 74, 374, 572, 490);
         panel.active = false;
         this.panels.settingsPanel = panel;
-        this.label(panel, 'SettingsTitle', '设置', 44, 36, 484, 58, 36, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
-        this.panels.settingsBodyLabel = this.label(panel, 'SettingsBody', '', 54, 104, 464, 80, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
-        this.panels.bgmToggleButton = this.button(panel, 'BgmToggle', 116, 204, 340, 58, '#4CC9F0', '#94A3B8', () => this.audio.toggleBgm(), true);
-        this.panels.sfxToggleButton = this.button(panel, 'SfxToggle', 116, 278, 340, 58, '#B5179E', '#94A3B8', () => this.audio.toggleSfx(), true);
-        const close = this.button(panel, 'SettingsClose', 116, 366, 340, 58, '#43AA8B', '#94A3B8', () => this.closeSettingsPanel(), true);
+        makeLabel(panel, 'SettingsTitle', '设置', 44, 36, 484, 58, 36, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
+        this.panels.settingsBodyLabel = makeLabel(panel, 'SettingsBody', '', 54, 104, 464, 80, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.CENTER, true);
+        this.panels.bgmToggleButton = makeButton(panel, 'BgmToggle', 116, 204, 340, 58, '#4CC9F0', '#94A3B8', () => this.audio.toggleBgm(), true);
+        this.panels.sfxToggleButton = makeButton(panel, 'SfxToggle', 116, 278, 340, 58, '#B5179E', '#94A3B8', () => this.audio.toggleSfx(), true);
+        const close = makeButton(panel, 'SettingsClose', 116, 366, 340, 58, '#43AA8B', '#94A3B8', () => this.closeSettingsPanel(), true);
         close.label.string = '返回';
         this.refreshSettingsPanel();
     }
 
     private buildInfoPanel(root: Node) {
-        this.panels.infoPanelShadow = this.rect(root, 'InfoPanelShadow', 64, 304, 592, 636, RogueShooterGame.UI.panelShadow, 24);
+        this.panels.infoPanelShadow = makeRect(root, 'InfoPanelShadow', 64, 304, 592, 636, RogueShooterGame.UI.panelShadow, 24);
         this.panels.infoPanelShadow.active = false;
         const panel = this.spritePanel(root, 'InfoPanel', 52, 292, 616, 646);
         panel.active = false;
         this.panels.infoPanel = panel;
-        this.panels.infoTitleLabel = this.label(panel, 'InfoTitle', '', 44, 34, 528, 58, 34, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
-        this.panels.infoBodyLabel = this.label(panel, 'InfoBody', '', 54, 112, 508, 390, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.LEFT, true);
-        const close = this.button(panel, 'InfoClose', 148, 532, 320, 58, '#43AA8B', '#94A3B8', () => this.closeInfoPanel(), true);
+        this.panels.infoTitleLabel = makeLabel(panel, 'InfoTitle', '', 44, 34, 528, 58, 34, RogueShooterGame.UI.title, Label.HorizontalAlign.CENTER, true);
+        this.panels.infoBodyLabel = makeLabel(panel, 'InfoBody', '', 54, 112, 508, 390, 20, RogueShooterGame.UI.body, Label.HorizontalAlign.LEFT, true);
+        const close = makeButton(panel, 'InfoClose', 148, 532, 320, 58, '#43AA8B', '#94A3B8', () => this.closeInfoPanel(), true);
         close.label.string = '返回';
     }
 
@@ -1646,11 +1676,15 @@ export class RogueShooterGame extends Component {
         this.enemyMgr.currentWaveSpecs = [];
         this.pickupMgr.resetRun();
         this.shop.shopOffers = [];
+        this.offhandMgr.clearBattleState();
         this.weaponCooldowns = {};
         this.updateCamera(0, true);
         this.cs.playerMaxHp = this.getMaxHp();
-        // 高阶武器生存加成: boss_gate +20% HP, boss_clear +35% HP
         const weapon = this.getActiveWeapon();
+        // 副武器状态同步
+        const equippedOffhandId = this.shop.getEquippedOffhandId();
+        this.cs.equippedOffhandId = equippedOffhandId;
+        this.cs.offhandLevel = equippedOffhandId ? this.shop.getOffhandLevel(equippedOffhandId) : 0;
         if (weapon) {
             const familyId = weapon.id.replace(/-standard$/, '');
             const bossGateIds = new Set(['ion-lance', 'thorn-crossbow', 'rail-cannon', 'void-needle']);
@@ -1800,8 +1834,8 @@ export class RogueShooterGame extends Component {
     private updatePlayer(dt: number) {
         const move = this.getMoveVector();
         const speed = this.getMoveSpeed();
-        let nextX = this.clamp(this.cs.playerX + move.x * speed * dt, WORLD_LEFT + 42, WORLD_RIGHT - 42);
-        let nextY = this.clamp(this.cs.playerY + move.y * speed * dt, WORLD_BOTTOM + 42, WORLD_TOP - 42);
+        let nextX = clamp(this.cs.playerX + move.x * speed * dt, WORLD_LEFT + 42, WORLD_RIGHT - 42);
+        let nextY = clamp(this.cs.playerY + move.y * speed * dt, WORLD_BOTTOM + 42, WORLD_TOP - 42);
         const resolved = this.resolvePlayerEnemyCollision(nextX, nextY);
         nextX = resolved.x;
         nextY = resolved.y;
@@ -1918,8 +1952,8 @@ export class RogueShooterGame extends Component {
                 pushY /= rawDist;
             }
             const maxPush = Math.max(1.5, speed * 0.016) * 0.7;
-            x = this.clamp(x + pushX * maxPush, WORLD_LEFT + 42, WORLD_RIGHT - 42);
-            y = this.clamp(y + pushY * maxPush, WORLD_BOTTOM + 42, WORLD_TOP - 42);
+            x = clamp(x + pushX * maxPush, WORLD_LEFT + 42, WORLD_RIGHT - 42);
+            y = clamp(y + pushY * maxPush, WORLD_BOTTOM + 42, WORLD_TOP - 42);
         }
         return new Vec2(x, y);
     }
@@ -1936,8 +1970,8 @@ export class RogueShooterGame extends Component {
         } else {
             this.cs.shakeIntensity = 0;
         }
-        const targetX = this.clamp(CAMERA_FOCUS_X - this.cs.playerX, VIEW_RIGHT - WORLD_RIGHT, VIEW_LEFT - WORLD_LEFT);
-        const targetY = this.clamp(CAMERA_FOCUS_Y - this.cs.playerY, VIEW_TOP - WORLD_TOP, VIEW_BOTTOM - WORLD_BOTTOM);
+        const targetX = clamp(CAMERA_FOCUS_X - this.cs.playerX, VIEW_RIGHT - WORLD_RIGHT, VIEW_LEFT - WORLD_LEFT);
+        const targetY = clamp(CAMERA_FOCUS_Y - this.cs.playerY, VIEW_TOP - WORLD_TOP, VIEW_BOTTOM - WORLD_BOTTOM);
         const follow = snap ? 1 : Math.min(1, dt * 8.5);
         this.cs.cameraX += (targetX - this.cs.cameraX) * follow;
         this.cs.cameraY += (targetY - this.cs.cameraY) * follow;
@@ -1952,343 +1986,11 @@ export class RogueShooterGame extends Component {
     }
 
     private botAiTick(dt: number): void {
-        this.touchActive = false;
-        this.touchVector.set(0, 0);
-
-        if (this.cs.killCount > this._botLastKillCount) {
-            // Like a normal player: after a kill, briefly sweep nearby XP only
-            // when the route is safe.  This changes behaviour, not XP numbers.
-            this._botPickupChaseTimer = 5.5;
-        }
-        // Extend chase window when danger is low and XP is on ground nearby
-        const xpPickups = (this.pickupMgr.pickups || []).filter((p: {type: string}) => p.type === 'xp');
-        if (xpPickups.length > 0 && this._botPickupChaseTimer <= 1) {
-            this._botPickupChaseTimer = Math.max(this._botPickupChaseTimer, 2);
-        }
-        this._botLastKillCount = this.cs.killCount;
-        this._botPickupChaseTimer = Math.max(0, this._botPickupChaseTimer - dt);
-
-        const px = this.cs.playerX;
-        const py = this.cs.playerY;
-        const stats = this.getCharacterStats();
-        const hpRatio = this.cs.playerMaxHp > 0 ? this.cs.playerHp / this.cs.playerMaxHp : 1;
-        const attackRange = this.getAttackRange();
-        const speed = this.getMoveSpeed();
-        const lookahead = this.clamp(speed > 0 ? 96 / speed : 0.34, 0.24, 0.48);
-
-        if (this._botLastPlayerPos && this._botState !== 'idle') {
-            const movedX = px - this._botLastPlayerPos.x;
-            const movedY = py - this._botLastPlayerPos.y;
-            const moved = Math.sqrt(movedX * movedX + movedY * movedY);
-            const expectedStep = Math.max(1.2, speed * dt * 0.16);
-            this._botStuckTimer = moved < expectedStep ? this._botStuckTimer + dt : 0;
-        } else {
-            this._botStuckTimer = 0;
-        }
-        this._botLastPlayerPos = new Vec2(px, py);
-
-        if (this._botStuckTimer >= 1.05 && (!this._botTargetPos || this._botMoveTimer <= 0)) {
-            const escape = this.botFindSafestEscapePoint(px, py, speed, lookahead, attackRange, hpRatio);
-            this._botTargetPos = escape;
-            this._botMoveTimer = 0.9;
-        }
-
-        let bestMoveX = 0;
-        let bestMoveY = 0;
-        let bestScore = Number.NEGATIVE_INFINITY;
-        let bestState: 'idle' | 'moving' | 'fighting' | 'fleeing' = 'idle';
-
-        for (const dir of this.botCandidateDirections()) {
-            const candidateX = this.clamp(px + dir.x * speed * lookahead, WORLD_LEFT + 42, WORLD_RIGHT - 42);
-            const candidateY = this.clamp(py + dir.y * speed * lookahead, WORLD_BOTTOM + 42, WORLD_TOP - 42);
-            const scored = this.botScoreMoveCandidate(candidateX, candidateY, dir.x, dir.y, attackRange, hpRatio);
-            if (scored.score > bestScore) {
-                bestScore = scored.score;
-                bestMoveX = dir.x;
-                bestMoveY = dir.y;
-                bestState = scored.state;
-            }
-        }
-
-        if (this._botTargetPos && this._botMoveTimer > 0) {
-            this._botMoveTimer = Math.max(0, this._botMoveTimer - dt);
-            if (this.distanceSq(px, py, this._botTargetPos.x, this._botTargetPos.y) < 70 * 70 || this._botMoveTimer <= 0) {
-                this._botTargetPos = null;
-                this._botStuckTimer = 0;
-            }
-        }
-
-        this._botState = bestState;
-        this.botSetMoveKeys(bestMoveX, bestMoveY);
-    }
-
-    private botCandidateDirections(): Vec2[] {
-        const dirs: Vec2[] = [new Vec2(0, 0)];
-        for (let i = 0; i < 16; i++) {
-            const angle = (Math.PI * 2 * i) / 16;
-            dirs.push(new Vec2(Math.cos(angle), Math.sin(angle)));
-        }
-        return dirs;
-    }
-
-    private botScoreMoveCandidate(
-        candidateX: number,
-        candidateY: number,
-        dirX: number,
-        dirY: number,
-        attackRange: number,
-        hpRatio: number,
-    ): { score: number; state: 'idle' | 'moving' | 'fighting' | 'fleeing' } {
-        const px = this.cs.playerX;
-        const py = this.cs.playerY;
-        const playerRadius = this.cs.playerRadius;
-        const lowHpRiskMultiplier = hpRatio < 0.32 ? 2.2 : hpRatio < 0.52 ? 1.45 : 1;
-        let score = 0;
-        let dangerScore = 0;
-        let nearestEnemyDist = Number.POSITIVE_INFINITY;
-        let nearestEnemyInRange = false;
-
-        for (const enemy of this.enemyMgr.enemies) {
-            if (!this.enemyMgr.enemySet.has(enemy) || enemy.hp <= 0) continue;
-            const pos = this.enemyMgr.getEnemyPosition(enemy);
-            const dx = candidateX - pos.x;
-            const dy = candidateY - pos.y;
-            const dist = Math.sqrt(Math.max(0.001, dx * dx + dy * dy));
-            nearestEnemyDist = Math.min(nearestEnemyDist, dist);
-            if (dist <= attackRange) nearestEnemyInRange = true;
-
-            const contactRadius = playerRadius + enemy.radius + 6;
-            if (dist < contactRadius) {
-                score -= 220000 + (contactRadius - dist) * 2600;
-            }
-
-            const threatRadius = Math.min(
-                980,
-                Math.max(280, enemy.radius + enemy.speed * 1.05 + (enemy.boss ? 250 : enemy.elite ? 190 : 145)),
-            );
-            if (dist < threatRadius) {
-                const t = (threatRadius - dist) / threatRadius;
-                const threatWeight = (enemy.boss ? 135 : enemy.elite ? 58 : 30) * (enemy.damage + 6) * lowHpRiskMultiplier;
-                const penalty = t * t * threatWeight;
-                score -= penalty;
-                dangerScore += penalty;
-            }
-
-            // Do not kite directly into the closest monster's movement line.
-            const fromPlayerToEnemyX = pos.x - px;
-            const fromPlayerToEnemyY = pos.y - py;
-            const playerEnemyLen = Math.sqrt(Math.max(0.001, fromPlayerToEnemyX * fromPlayerToEnemyX + fromPlayerToEnemyY * fromPlayerToEnemyY));
-            const movingTowardEnemy = (dirX * fromPlayerToEnemyX + dirY * fromPlayerToEnemyY) / playerEnemyLen;
-            if (movingTowardEnemy > 0.45 && playerEnemyLen < 420) {
-                score -= movingTowardEnemy * 180 * lowHpRiskMultiplier;
-            }
-        }
-
-        for (const projectile of this.proj.enemyProjectiles) {
-            const futureX = projectile.x + projectile.vx * 0.38;
-            const futureY = projectile.y + projectile.vy * 0.38;
-            const nowDistSq = this.distanceSq(candidateX, candidateY, projectile.x, projectile.y);
-            const futureDistSq = this.distanceSq(candidateX, candidateY, futureX, futureY);
-            const dangerRadius = playerRadius + projectile.radius + 48;
-            const dangerSq = dangerRadius * dangerRadius;
-            if (nowDistSq < dangerSq || futureDistSq < dangerSq) {
-                const d = Math.sqrt(Math.max(0.001, Math.min(nowDistSq, futureDistSq)));
-                const t = (dangerRadius - d) / dangerRadius;
-                const penalty = 4200 * t * t * lowHpRiskMultiplier;
-                score -= penalty;
-                dangerScore += penalty;
-            }
-        }
-
-        if (Number.isFinite(nearestEnemyDist)) {
-            const desiredDistance = this.clamp(attackRange * 0.64, 220, 480);
-            if (nearestEnemyInRange) score += 430;
-            score -= Math.abs(nearestEnemyDist - desiredDistance) * 0.34;
-            if (nearestEnemyDist < desiredDistance * 0.68) {
-                score -= (desiredDistance * 0.68 - nearestEnemyDist) * 1.3 * lowHpRiskMultiplier;
-            }
-            if (nearestEnemyDist > attackRange) {
-                score -= Math.min(420, (nearestEnemyDist - attackRange) * 1.2);
-            }
-        }
-
-        const pickupScore = this.botScorePickupRoute(candidateX, candidateY, dangerScore, hpRatio);
-        score += pickupScore;
-
-        const edgeMargin = 686;
-        const leftEdge = candidateX - WORLD_LEFT;
-        const rightEdge = WORLD_RIGHT - candidateX;
-        const bottomEdge = candidateY - WORLD_BOTTOM;
-        const topEdge = WORLD_TOP - candidateY;
-        const currentEdgeMin = Math.min(px - WORLD_LEFT, WORLD_RIGHT - px, py - WORLD_BOTTOM, WORLD_TOP - py);
-        const candidateEdgeMin = Math.min(leftEdge, rightEdge, bottomEdge, topEdge);
-        for (const edgeDist of [leftEdge, rightEdge, bottomEdge, topEdge]) {
-            if (edgeDist < edgeMargin) {
-                const t = (edgeMargin - edgeDist) / edgeMargin;
-                score -= t * t * 7600;
-            }
-            if (edgeDist < 266) score -= 90000;
-        }
-        if (currentEdgeMin < edgeMargin) {
-            score += (candidateEdgeMin - currentEdgeMin) * 9.5;
-        }
-
-        // Ordinary players avoid getting boxed into arena corners even if the
-        // immediate monster distance looks acceptable.  Keep the bot's patrol
-        // path biased toward playable middle lanes rather than map extremes.
-        const absX = Math.abs(candidateX);
-        const absY = Math.abs(candidateY);
-        if (absX > 1120) score -= (absX - 1120) * 7.2;
-        if (absY > 1520) score -= (absY - 1520) * 7.2;
-        if (absX > 1435 || absY > 1870) score -= 80000;
-        score -= Math.sqrt(candidateX * candidateX + candidateY * candidateY) * 0.05;
-
-        if (this._botTargetPos) {
-            const currentTargetDist = Math.sqrt(this.distanceSq(px, py, this._botTargetPos.x, this._botTargetPos.y));
-            const candidateTargetDist = Math.sqrt(this.distanceSq(candidateX, candidateY, this._botTargetPos.x, this._botTargetPos.y));
-            score += (currentTargetDist - candidateTargetDist) * 3.2;
-        }
-
-        const standingStill = Math.abs(dirX) + Math.abs(dirY) <= 0.001;
-        if (standingStill && dangerScore < 80 && nearestEnemyInRange) score += 120;
-        if (standingStill && (dangerScore > 160 || hpRatio < 0.42)) score -= 260;
-
-        let state: 'idle' | 'moving' | 'fighting' | 'fleeing' = 'idle';
-        if (dangerScore > 180 || hpRatio < 0.34) state = 'fleeing';
-        else if (pickupScore > 90) state = 'moving';
-        else if (nearestEnemyInRange && standingStill) state = 'fighting';
-        else if (Number.isFinite(nearestEnemyDist)) state = nearestEnemyInRange ? 'fighting' : 'moving';
-        return { score, state };
-    }
-
-    private botScorePickupRoute(candidateX: number, candidateY: number, dangerScore: number, hpRatio: number): number {
-        if (hpRatio < 0.32) return 0;
-        const px = this.cs.playerX;
-        const py = this.cs.playerY;
-        let score = 0;
-        const chaseWindow = this._botPickupChaseTimer > 0;
-        const maxXpDistance = chaseWindow ? 2000 : 1100;
-        for (const pickup of this.pickupMgr.pickups) {
-            const isXp = pickup.type === 'xp';
-            const isChest = pickup.type === 'chest-common' || pickup.type === 'chest-rare';
-            if (!isXp && !isChest && pickup.type !== 'alloy') continue;
-            const currentDist = Math.sqrt(this.distanceSq(px, py, pickup.x, pickup.y));
-            const candidateDist = Math.sqrt(this.distanceSq(candidateX, candidateY, pickup.x, pickup.y));
-            const maxDistance = isXp ? maxXpDistance : isChest ? 620 : 360;
-            if (currentDist > maxDistance) continue;
-            const value = isXp
-                ? 700 + Math.min(360, pickup.amount * 20)
-                : isChest
-                    ? (pickup.type === 'chest-rare' ? 240 : 170)
-                    : 44;
-            // Gradual safety reduction instead of hard cutoff at dangerScore > 2000
-            const safety = dangerScore > 800 ? 0.2 : dangerScore > 420 ? 0.5 : dangerScore > 120 ? 0.8 : 1;
-            const progress = Math.max(-80, currentDist - candidateDist);
-            const nearCollectBonus = isXp && candidateDist < 220 ? 520 : 0;
-            score += ((1 - candidateDist / maxDistance) * value + progress * 6.2 + nearCollectBonus) * safety;
-        }
-        return score;
-    }
-
-    private botFindSafestEscapePoint(
-        px: number,
-        py: number,
-        speed: number,
-        lookahead: number,
-        attackRange: number,
-        hpRatio: number,
-    ): Vec2 {
-        let best = new Vec2(this.clamp(-px, -1, 1), this.clamp(-py, -1, 1));
-        let bestScore = Number.NEGATIVE_INFINITY;
-        for (const dir of this.botCandidateDirections()) {
-            if (Math.abs(dir.x) + Math.abs(dir.y) <= 0.001) continue;
-            const candidateX = this.clamp(px + dir.x * speed * lookahead * 2.2, WORLD_LEFT + 80, WORLD_RIGHT - 80);
-            const candidateY = this.clamp(py + dir.y * speed * lookahead * 2.2, WORLD_BOTTOM + 80, WORLD_TOP - 80);
-            const score = this.botScoreMoveCandidate(candidateX, candidateY, dir.x, dir.y, attackRange, hpRatio).score;
-            if (score > bestScore) {
-                bestScore = score;
-                best = new Vec2(candidateX, candidateY);
-            }
-        }
-        return best;
-    }
-
-    private botSetMoveKeys(x: number, y: number): void {
-        this.pressedKeys.delete(KeyCode.KEY_A);
-        this.pressedKeys.delete(KeyCode.KEY_D);
-        this.pressedKeys.delete(KeyCode.KEY_W);
-        this.pressedKeys.delete(KeyCode.KEY_S);
-
-        const len = Math.sqrt(x * x + y * y);
-        if (len <= 0.001) return;
-
-        const nx = x / len;
-        const ny = y / len;
-        const threshold = 0.25;
-        if (nx < -threshold) this.pressedKeys.add(KeyCode.KEY_A);
-        if (nx > threshold) this.pressedKeys.add(KeyCode.KEY_D);
-        if (ny > threshold) this.pressedKeys.add(KeyCode.KEY_W);
-        if (ny < -threshold) this.pressedKeys.add(KeyCode.KEY_S);
+        this.botAI.tick(dt);
     }
 
     private botPickUpgrade(): void {
-        const externalOptions = (this as unknown as { pendingUpgradeOptions?: LevelUpgrade[] }).pendingUpgradeOptions;
-        const isLevelChoice = this.cs.phase === 'level-up';
-        const isItemChoice = this.cs.phase === 'item-choice';
-        if (!isLevelChoice && !isItemChoice) return;
-
-        const options = isLevelChoice
-            ? (externalOptions && externalOptions.length > 0 ? externalOptions : this.pickupMgr.pendingLevelChoices)
-            : this.pickupMgr.pendingItemChoices;
-        if (!options || options.length <= 0) return;
-
-        const index = this.botChooseUpgradeIndex(options);
-        if (isLevelChoice) this.pickupMgr.chooseLevelUpgrade(index);
-        else this.pickupMgr.chooseRunItem(index);
-    }
-
-    private botChooseUpgradeIndex(options: LevelUpgrade[]): number {
-        const stats = this.getCharacterStats();
-        const statsAreHigh = stats.dronePower >= 12
-            && stats.attackPower >= 72
-            && stats.attackSpeed >= 0.9
-            && stats.pierce >= 3
-            && stats.critChance >= 0.2;
-        if (statsAreHigh) return 0;
-
-        const priority: Partial<Record<StatKey, number>> = {
-            dronePower: 10000,
-            attackPower: 8000,
-            attackSpeed: 7000,
-            pierce: 6000,
-            critChance: 5000,
-        };
-        const weakness: Partial<Record<StatKey, boolean>> = {
-            dronePower: stats.dronePower < 8,
-            attackPower: stats.attackPower < 56,
-            attackSpeed: stats.attackSpeed < 0.6,
-            pierce: stats.pierce < 2,
-            critChance: stats.critChance < 0.14,
-        };
-
-        let bestIndex = 0;
-        let bestScore = Number.NEGATIVE_INFINITY;
-        options.forEach((option, index) => {
-            let score = option.tier * 20 - index;
-            for (const effect of option.effects) {
-                const base = priority[effect.stat] ?? 0;
-                const normalizedAmount = (effect.stat === 'attackSpeed' || effect.stat === 'critChance')
-                    ? effect.amount * 1000
-                    : effect.amount * 10;
-                score += base + normalizedAmount;
-                if (weakness[effect.stat]) score += 4500;
-            }
-            if (score > bestScore) {
-                bestScore = score;
-                bestIndex = index;
-            }
-        });
-        return bestIndex;
+        this.botAI.pickUpgrade();
     }
 
     private getMoveVector(): Vec2 {
@@ -2400,7 +2102,7 @@ export class RogueShooterGame extends Component {
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 if (Math.abs(diff) > 0.55) continue;
                 const beforeStacks = enemy.poisonStacks || 0;
-                const afterStacks = this.proj.applyPoisonStack(enemy, damage, 1);
+                const afterStacks = this.proj.applyPoisonStack(enemy, damage, 3);
                 if (afterStacks > beforeStacks && this.cs.shotCounter % 2 === 0) {
                     this.proj.spawnBulletHitSpark(pos.x, pos.y, weaponStyle, weaponColor, '#BBF7D0');
                 }
@@ -2459,10 +2161,10 @@ export class RogueShooterGame extends Component {
         this.worldNode.addChild(node);
         node.setPosition(x, y, 8);
         const gfx = node.addComponent(Graphics);
-        gfx.fillColor = this.hex(color, 35);
+        gfx.fillColor = hex(color, 35);
         gfx.circle(0, 0, radius);
         gfx.fill();
-        gfx.strokeColor = this.hex(color, 210);
+        gfx.strokeColor = hex(color, 210);
         gfx.lineWidth = 4;
         gfx.circle(0, 0, radius);
         gfx.stroke();
@@ -2478,7 +2180,7 @@ export class RogueShooterGame extends Component {
         }
 
         const defense = this.getDefenseAgainst(type, stats);
-        const defenseRatio = 1 - this.clamp(defense / (defense + 80), 0, 0.7);
+        const defenseRatio = 1 - clamp(defense / (defense + 80), 0, 0.7);
         let damage = Math.max(1, amount * defenseRatio * (1 - stats.damageReduction));
         const shieldDamage = Math.min(this.cs.playerShield, damage);
         if (shieldDamage > 0) {
@@ -2497,6 +2199,7 @@ export class RogueShooterGame extends Component {
         }
         this.cs.invulnerableTimer = 0.42;
         this.cs.shieldRechargeDelay = 1.6;
+        this.offhandMgr.onPlayerHit();
     }
 
     private getDefenseAgainst(type: DamageType, stats: CharacterStats) {
@@ -2612,11 +2315,38 @@ export class RogueShooterGame extends Component {
             this.panels.preBuffLabel.string = '';
         }
 
-        if (settlementFlow.phase === 'loot') {
-            this.openSettlementLoot(reason);
-        } else {
+        const lootChoices = settlementFlow.phase === 'loot'
+            ? this.pickupMgr.createLootChoices()
+            : [];
+        this.pickupMgr.pendingLootChoices = lootChoices;
+
+        void uiMgr.showDynamicPopupAsync(() => {
+            const node = new Node('SettlementPopup');
+            node.addComponent(SettlementPopup).setup({
+                reason,
+                title: settlementFlow.title,
+                combatTime: this.cs.combatTime,
+                bossKills: this.cs.bossKills,
+                killCount: this.cs.killCount,
+                level: this.cs.level,
+                reward,
+                inventoryWallet: this.getInventoryWallet(),
+                lootChoices: lootChoices.map((choice) => ({
+                    title: choice.title,
+                    desc: choice.desc,
+                    color: choice.color,
+                })),
+                onLootChosen: (index: number) => {
+                    const choice = this.pickupMgr.pendingLootChoices[index];
+                    if (choice) choice.apply();
+                    this.pickupMgr.pendingLootChoices = [];
+                },
+            });
+            return node;
+        }, 'SettlementPopup').then(() => {
             this.openSettlementHangarActions(reason);
-        }
+            this.refreshHud();
+        });
         this.refreshHud();
     }
 
@@ -2655,7 +2385,7 @@ export class RogueShooterGame extends Component {
             button.label.fontSize = 17;
             button.label.lineHeight = 19;
             button.label.string = `${choice.title}\n${choice.desc}`;
-            this.drawButton(button, false);
+            drawButton(button, false);
         });
     }
 
@@ -2897,17 +2627,17 @@ export class RogueShooterGame extends Component {
             const canSwitch = this.cs.phase === 'combat' && this.shop.getEquippedWeapons().length > 1;
             this.panels.switchWeaponButton.node.active = inRun;
             this.panels.switchWeaponButton.label.string = '切武器';
-            this.drawButton(this.panels.switchWeaponButton, !canSwitch);
+            drawButton(this.panels.switchWeaponButton, !canSwitch);
         }
         if (this.panels.shopButton) {
             this.panels.shopButton.node.active = inRun;
             this.panels.shopButton.label.string = '商店';
-            this.drawButton(this.panels.shopButton, this.cs.phase !== 'combat');
+            drawButton(this.panels.shopButton, this.cs.phase !== 'combat');
         }
         if (this.panels.extractButton) {
             this.panels.extractButton.node.active = inRun;
             this.panels.extractButton.label.string = '撤离';
-            this.drawButton(this.panels.extractButton, this.cs.phase !== 'combat');
+            drawButton(this.panels.extractButton, this.cs.phase !== 'combat');
         }
         this.refreshDebugHud(inRun);
         this.drawBars();
@@ -2931,51 +2661,33 @@ export class RogueShooterGame extends Component {
     }
 
     private drawBars() {
-        // HP bar — full-width thin strip (26..694, 6px tall)
-        if (this.panels.hpBar) {
+        // HP bar fill — sprite width tracks ratio
+        if (this._hpBarFill) {
             const ratio = this.cs.playerMaxHp > 0 ? this.cs.playerHp / this.cs.playerMaxHp : 0;
+            const ut = this._hpBarFill.getComponent(UITransform)!;
+            ut.setContentSize(668 * clamp(ratio, 0, 1), 6);
+        }
+        // Shield overlay on HP bar Graphics (dual-layer effect)
+        if (this.panels.hpBar) {
             const shieldRatio = this.cs.playerShieldMax > 0 ? this.cs.playerShield / this.cs.playerShieldMax : 0;
             this.panels.hpBar.clear();
-            // Background
-            this.panels.hpBar.fillColor = this.hex('#0F172A', 160);
-            this.panels.hpBar.roundRect(-334, -3, 668, 6, 3);
-            this.panels.hpBar.fill();
-            // Shield overlay (on top of HP bar for dual-layer effect)
             if (shieldRatio > 0) {
-                this.panels.hpBar.fillColor = this.hex('#38BDF8', 110);
-                this.panels.hpBar.roundRect(-334, -3, 668 * this.clamp(shieldRatio, 0, 1), 6, 3);
+                this.panels.hpBar.fillColor = hex('#38BDF8', 110);
+                this.panels.hpBar.roundRect(-334, -3, 668 * clamp(shieldRatio, 0, 1), 6, 3);
                 this.panels.hpBar.fill();
             }
-            // HP fill
-            const hpColor = ratio > 0.45 ? '#22D3EE' : (ratio > 0.2 ? '#F97316' : '#F43F5E');
-            this.panels.hpBar.fillColor = this.hex(hpColor);
-            this.panels.hpBar.roundRect(-334, -2, 668 * this.clamp(ratio, 0, 1), 4, 2);
-            this.panels.hpBar.fill();
-            // HP text label inline
-            this.panels.hpBar.strokeColor = this.hex('#F8FAFC', 200);
-            this.panels.hpBar.lineWidth = 1;
         }
-        // XP bar — thin strip (26..360, 5px tall)
-        if (this.panels.xpBar) {
+        // XP bar fill
+        if (this._xpBarFill) {
             const ratio = this.cs.xpToNext > 0 ? this.cs.xp / this.cs.xpToNext : 0;
-            this.panels.xpBar.clear();
-            this.panels.xpBar.fillColor = this.hex('#0F172A', 120);
-            this.panels.xpBar.roundRect(-167, -3, 334, 6, 3);
-            this.panels.xpBar.fill();
-            this.panels.xpBar.fillColor = this.hex('#A78BFA');
-            this.panels.xpBar.roundRect(-167, -2, 334 * this.clamp(ratio, 0, 1), 4, 2);
-            this.panels.xpBar.fill();
+            const ut = this._xpBarFill.getComponent(UITransform)!;
+            ut.setContentSize(334 * clamp(ratio, 0, 1), 5);
         }
-        // Shield bar — thin strip (374..708, 5px tall)
-        if (this.panels.shieldBar) {
+        // Shield bar fill
+        if (this._shieldBarFill) {
             const ratio = this.cs.playerShieldMax > 0 ? this.cs.playerShield / this.cs.playerShieldMax : 0;
-            this.panels.shieldBar.clear();
-            this.panels.shieldBar.fillColor = this.hex('#0F172A', 120);
-            this.panels.shieldBar.roundRect(-167, -3, 334, 6, 3);
-            this.panels.shieldBar.fill();
-            this.panels.shieldBar.fillColor = this.hex('#38BDF8');
-            this.panels.shieldBar.roundRect(-167, -2, 334 * this.clamp(ratio, 0, 1), 4, 2);
-            this.panels.shieldBar.fill();
+            const ut = this._shieldBarFill.getComponent(UITransform)!;
+            ut.setContentSize(334 * clamp(ratio, 0, 1), 5);
         }
     }
 
@@ -2987,7 +2699,7 @@ export class RogueShooterGame extends Component {
         }
 
         const dronePower = this.getCharacterStats().dronePower;
-        const targetCount = dronePower > 0 ? this.clamp(Math.ceil(dronePower / 1.35), 1, 4) : 0;
+        const targetCount = dronePower > 0 ? clamp(Math.ceil(dronePower / 1.35), 1, 4) : 0;
         while (this.droneVisuals.length < targetCount) {
             this.droneVisuals.push(this.createDroneVisual(this.droneVisuals.length));
         }
@@ -3028,17 +2740,17 @@ export class RogueShooterGame extends Component {
         const gfx = visual.gfx;
         const core = 5 + Math.min(4, dronePower * 0.35) + pulse * 1.4;
         gfx.clear();
-        gfx.strokeColor = this.hex('#90BE6D', this.droneHitPulse > 0 ? 220 : 120);
+        gfx.strokeColor = hex('#90BE6D', this.droneHitPulse > 0 ? 220 : 120);
         gfx.lineWidth = 2;
         gfx.circle(0, 0, core + 7);
         gfx.stroke();
-        gfx.fillColor = this.hex('#020617', 135);
+        gfx.fillColor = hex('#020617', 135);
         gfx.circle(2, -2, core + 4);
         gfx.fill();
-        gfx.fillColor = this.hex('#90BE6D', this.droneHitPulse > 0 ? 255 : 220);
+        gfx.fillColor = hex('#90BE6D', this.droneHitPulse > 0 ? 255 : 220);
         gfx.circle(0, 0, core);
         gfx.fill();
-        gfx.fillColor = this.hex('#F8FAFC', 230);
+        gfx.fillColor = hex('#F8FAFC', 230);
         gfx.circle(-2, 2, Math.max(2.2, core * 0.35));
         gfx.fill();
     }
@@ -3065,30 +2777,30 @@ export class RogueShooterGame extends Component {
         const pulse = this.cs.invulnerableTimer > 0 ? 120 : 255;
         this.playerGfx.clear();
         if (this.playerSprite) {
-            this.playerSprite.color = this.hex('#FFFFFF', pulse);
-            this.playerGfx.fillColor = this.hex('#020617', 95);
+            this.playerSprite.color = hex('#FFFFFF', pulse);
+            this.playerGfx.fillColor = hex('#020617', 95);
             this.playerGfx.circle(3, -6, 27);
             this.playerGfx.fill();
-            this.playerGfx.strokeColor = this.hex(this.cs.invulnerableTimer > 0 ? '#F8FAFC' : '#4CC9F0', pulse);
+            this.playerGfx.strokeColor = hex(this.cs.invulnerableTimer > 0 ? '#F8FAFC' : '#4CC9F0', pulse);
             this.playerGfx.lineWidth = 3;
             this.playerGfx.circle(0, 0, 29);
             this.playerGfx.stroke();
             return;
         }
-        this.playerGfx.fillColor = this.hex('#020617', 110);
+        this.playerGfx.fillColor = hex('#020617', 110);
         this.playerGfx.circle(3, -5, 25);
         this.playerGfx.fill();
-        this.playerGfx.fillColor = this.hex('#E2E8F0', pulse);
+        this.playerGfx.fillColor = hex('#E2E8F0', pulse);
         this.playerGfx.circle(0, 0, 21);
         this.playerGfx.fill();
-        this.playerGfx.fillColor = this.hex('#4CC9F0', pulse);
+        this.playerGfx.fillColor = hex('#4CC9F0', pulse);
         this.playerGfx.moveTo(0, 24);
         this.playerGfx.lineTo(17, -12);
         this.playerGfx.lineTo(0, -4);
         this.playerGfx.lineTo(-17, -12);
         this.playerGfx.close();
         this.playerGfx.fill();
-        this.playerGfx.strokeColor = this.hex('#0F172A', pulse);
+        this.playerGfx.strokeColor = hex('#0F172A', pulse);
         this.playerGfx.lineWidth = 3;
         this.playerGfx.circle(0, 0, 21);
         this.playerGfx.stroke();
@@ -3101,7 +2813,7 @@ export class RogueShooterGame extends Component {
         node.setPosition(0, 0, 8);
         const gfx = node.addComponent(Graphics);
         gfx.lineWidth = 3;
-        gfx.strokeColor = this.hex('#90BE6D', 210);
+        gfx.strokeColor = hex('#90BE6D', 210);
         gfx.moveTo(fromX, fromY);
         const midX = (fromX + toX) / 2 + this.randomRange(-16, 16);
         const midY = (fromY + toY) / 2 + this.randomRange(-16, 16);
@@ -3114,19 +2826,19 @@ export class RogueShooterGame extends Component {
     private drawJoystick() {
         if (!this.joystickBaseGfx || !this.joystickKnobGfx) return;
         this.joystickBaseGfx.clear();
-        this.joystickBaseGfx.fillColor = this.hex('#F8FAFC', 52);
+        this.joystickBaseGfx.fillColor = hex('#F8FAFC', 52);
         this.joystickBaseGfx.circle(0, 0, 74);
         this.joystickBaseGfx.fill();
-        this.joystickBaseGfx.strokeColor = this.hex('#CBD5E1', 120);
+        this.joystickBaseGfx.strokeColor = hex('#CBD5E1', 120);
         this.joystickBaseGfx.lineWidth = 3;
         this.joystickBaseGfx.circle(0, 0, 74);
         this.joystickBaseGfx.stroke();
 
         this.joystickKnobGfx.clear();
-        this.joystickKnobGfx.fillColor = this.hex('#4CC9F0', 150);
+        this.joystickKnobGfx.fillColor = hex('#4CC9F0', 150);
         this.joystickKnobGfx.circle(0, 0, 36);
         this.joystickKnobGfx.fill();
-        this.joystickKnobGfx.strokeColor = this.hex('#F8FAFC', 160);
+        this.joystickKnobGfx.strokeColor = hex('#F8FAFC', 160);
         this.joystickKnobGfx.lineWidth = 3;
         this.joystickKnobGfx.circle(0, 0, 36);
         this.joystickKnobGfx.stroke();
@@ -3243,17 +2955,17 @@ export class RogueShooterGame extends Component {
         }
 
         stats.attackPower = Math.max(2, stats.attackPower);
-        stats.attackSpeed = this.clamp(stats.attackSpeed, -0.55, 4.5);
-        stats.attackRange = this.clamp(stats.attackRange, 180, 1500);
-        stats.critChance = this.clamp(stats.critChance + stats.luck * 0.00045, 0, 0.86);
+        stats.attackSpeed = clamp(stats.attackSpeed, -0.55, 4.5);
+        stats.attackRange = clamp(stats.attackRange, 180, 1500);
+        stats.critChance = clamp(stats.critChance + stats.luck * 0.00045, 0, 0.86);
         stats.critDamage = Math.max(2, stats.critDamage);
-        stats.lethalChance = this.clamp(stats.lethalChance + stats.luck * 0.00012, 0, 0.28);
+        stats.lethalChance = clamp(stats.lethalChance + stats.luck * 0.00012, 0, 0.28);
         stats.lethalDamage = Math.max(2.5, stats.lethalDamage);
-        stats.lethalMaxHpPct = this.clamp(stats.lethalMaxHpPct, 0.05, 0.16);
-        stats.damageReduction = this.clamp(stats.damageReduction, -0.35, 0.72);
-        stats.dodgeChance = this.clamp(stats.dodgeChance + stats.luck * 0.0002, 0, 0.72);
-        stats.xpGain = this.clamp(stats.xpGain + stats.luck * 0.001, -0.5, 3);
-        stats.resourceGain = this.clamp(stats.resourceGain + stats.luck * 0.0014, -0.6, 4);
+        stats.lethalMaxHpPct = clamp(stats.lethalMaxHpPct, 0.05, 0.16);
+        stats.damageReduction = clamp(stats.damageReduction, -0.35, 0.72);
+        stats.dodgeChance = clamp(stats.dodgeChance + stats.luck * 0.0002, 0, 0.72);
+        stats.xpGain = clamp(stats.xpGain + stats.luck * 0.001, -0.5, 3);
+        stats.resourceGain = clamp(stats.resourceGain + stats.luck * 0.0014, -0.6, 4);
         return stats;
     }
 
@@ -3415,195 +3127,6 @@ export class RogueShooterGame extends Component {
         if (this.toastPanelNode) this.toastPanelNode.active = visible;
         if (this.toastPanelShadowNode) this.toastPanelShadowNode.active = visible;
         this.toastTimer = visible ? 2.5 : 0;
-    }
-
-    private button(
-        parent: Node,
-        name: string,
-        x: number,
-        y: number,
-        width: number,
-        height: number,
-        color: string,
-        disabledColor: string,
-        onClick: () => void,
-        local = false,
-    ): ButtonView {
-        const node = new Node(name);
-        node.layer = Layers.Enum.UI_2D;
-        parent.addChild(node);
-        if (local) {
-            const parentTransform = parent.getComponent(UITransform);
-            this.placeLocal(node, x + width / 2, y + height / 2, parentTransform?.width ?? width, parentTransform?.height ?? height);
-        } else {
-            this.place(node, x + width / 2, y + height / 2);
-        }
-        node.addComponent(UITransform).setContentSize(width, height);
-        const gfx = node.addComponent(Graphics);
-        const label = this.label(node, `${name}_Label`, '', 0, 0, width, height, 18, '#F8FAFC', Label.HorizontalAlign.CENTER, true);
-        const view: ButtonView = { node, gfx, label, width, height, color, disabledColor, disabled: false };
-        this.drawButton(view, false);
-
-        node.on(Node.EventType.TOUCH_START, () => {
-            if (!view.disabled) node.setScale(new Vec3(0.97, 0.97, 1));
-        }, this);
-        node.on(Node.EventType.TOUCH_CANCEL, () => node.setScale(Vec3.ONE), this);
-        node.on(Node.EventType.TOUCH_END, () => {
-            node.setScale(Vec3.ONE);
-            if (!view.disabled) {
-                this.unlockAudio();
-                this.playSfx('sfx_ui_click', 0.55, 0.045);
-                onClick();
-            }
-        }, this);
-
-        return view;
-    }
-
-    private drawButton(button: ButtonView, disabled: boolean) {
-        button.disabled = disabled;
-        const mainColor = disabled ? button.disabledColor : button.color;
-        const alpha = disabled ? RogueShooterGame.UI.btnDisabledAlpha : 255;
-        const w = button.width;
-        const h = button.height;
-        const r = Math.min(18, Math.max(10, h * 0.24));
-        button.gfx.clear();
-        // Contact shadow
-        button.gfx.fillColor = this.hex(RogueShooterGame.UI.btnShadow, disabled ? 48 : 92);
-        button.gfx.roundRect(-w / 2 + 4, -h / 2 + 7, w, h, r);
-        button.gfx.fill();
-        // Dark bevel backing keeps saturated action colors premium instead of toy-flat.
-        button.gfx.fillColor = this.hex(RogueShooterGame.UI.panelBgDeep, disabled ? 170 : 235);
-        button.gfx.roundRect(-w / 2, -h / 2, w, h, r);
-        button.gfx.fill();
-        // Accent body
-        button.gfx.fillColor = this.hex(mainColor, Math.round(alpha * (disabled ? 0.52 : 0.88)));
-        button.gfx.roundRect(-w / 2 + 3, -h / 2 + 3, w - 6, h - 6, Math.max(8, r - 3));
-        button.gfx.fill();
-        // Bottom depth layer
-        button.gfx.fillColor = this.hex('#000000', disabled ? 54 : 76);
-        button.gfx.roundRect(-w / 2 + 5, -h / 2 + 5, w - 10, Math.max(12, h * 0.38), Math.max(7, r - 5));
-        button.gfx.fill();
-        // Glass highlight / clickable strip
-        button.gfx.fillColor = this.hex(RogueShooterGame.UI.btnHighlight, disabled ? 18 : 54);
-        button.gfx.roundRect(-w / 2 + 12, h / 2 - Math.max(18, h * 0.32), w - 24, Math.max(8, h * 0.14), 5);
-        button.gfx.fill();
-        // Left energy rail
-        button.gfx.fillColor = this.hex(disabled ? RogueShooterGame.UI.hint : RogueShooterGame.UI.glassHighlight, disabled ? 46 : 150);
-        button.gfx.roundRect(-w / 2 + 8, -h / 2 + 10, 5, h - 20, 3);
-        button.gfx.fill();
-        // Dual border
-        button.gfx.strokeColor = this.hex(disabled ? RogueShooterGame.UI.btnBorder : RogueShooterGame.UI.glassHighlight, disabled ? 80 : 165);
-        button.gfx.lineWidth = 1.4;
-        button.gfx.roundRect(-w / 2 + 1, -h / 2 + 1, w - 2, h - 2, r);
-        button.gfx.stroke();
-        button.gfx.strokeColor = this.hex(disabled ? RogueShooterGame.UI.btnBorder : mainColor, disabled ? 80 : 210);
-        button.gfx.lineWidth = 2.2;
-        button.gfx.roundRect(-w / 2 + 4, -h / 2 + 4, w - 8, h - 8, Math.max(8, r - 4));
-        button.gfx.stroke();
-        button.label.color = this.hex(disabled ? RogueShooterGame.UI.btnDisabled : RogueShooterGame.UI.btnText, disabled ? 165 : 255);
-    }
-
-    private rect(
-        parent: Node,
-        name: string,
-        x: number,
-        y: number,
-        width: number,
-        height: number,
-        color: string,
-        radius = 0,
-        strokeColor?: string,
-    ): Node {
-        const node = new Node(name);
-        node.layer = Layers.Enum.UI_2D;
-        parent.addChild(node);
-        this.place(node, x + width / 2, y + height / 2);
-        node.addComponent(UITransform).setContentSize(width, height);
-        const gfx = node.addComponent(Graphics);
-        const isPanelLike = !!strokeColor && (color === RogueShooterGame.UI.panelBg || color === RogueShooterGame.UI.hudBg || color === RogueShooterGame.UI.panelBgDeep);
-        if (isPanelLike) {
-            this.drawPremiumPanel(
-                gfx,
-                width,
-                height,
-                radius || 18,
-                strokeColor,
-                color === RogueShooterGame.UI.hudBg ? RogueShooterGame.UI.hudAccent : RogueShooterGame.UI.neonCyan,
-            );
-        } else {
-            gfx.fillColor = this.hex(color);
-            if (radius > 0) {
-                gfx.roundRect(-width / 2, -height / 2, width, height, radius);
-            } else {
-                gfx.rect(-width / 2, -height / 2, width, height);
-            }
-            gfx.fill();
-            if (strokeColor) {
-                gfx.lineWidth = 1.5;
-                gfx.strokeColor = this.hex(strokeColor, 180);
-                if (radius > 0) {
-                    gfx.roundRect(-width / 2, -height / 2, width, height, radius);
-                } else {
-                    gfx.rect(-width / 2, -height / 2, width, height);
-                }
-                gfx.stroke();
-            }
-        }
-        return node;
-    }
-
-    private label(
-        parent: Node,
-        name: string,
-        text: string,
-        x: number,
-        y: number,
-        width: number,
-        height: number,
-        fontSize: number,
-        color: string,
-        align = Label.HorizontalAlign.CENTER,
-        local = false,
-    ): Label {
-        const node = new Node(name);
-        node.layer = Layers.Enum.UI_2D;
-        parent.addChild(node);
-        if (local) {
-            const parentTransform = parent.getComponent(UITransform);
-            this.placeLocal(node, x + width / 2, y + height / 2, parentTransform?.width ?? width, parentTransform?.height ?? height);
-        } else {
-            this.place(node, x + width / 2, y + height / 2);
-        }
-        node.addComponent(UITransform).setContentSize(width, height);
-        const label = node.addComponent(Label);
-        label.string = text;
-        label.fontSize = fontSize;
-        label.lineHeight = Math.round(fontSize * 1.18);
-        label.color = this.hex(color);
-        label.horizontalAlign = align;
-        label.verticalAlign = Label.VerticalAlign.CENTER;
-        label.enableWrapText = true;
-        return label;
-    }
-
-    private place(node: Node, designX: number, designY: number) {
-        node.setPosition(designX - DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2 - designY, 0);
-    }
-
-    private placeLocal(node: Node, localX: number, localY: number, parentWidth: number, parentHeight: number) {
-        node.setPosition(localX - parentWidth / 2, parentHeight / 2 - localY, 0);
-    }
-
-    private hex(hex: string, alpha = 255): Color {
-        const color = new Color();
-        color.fromHEX(hex.startsWith('#') ? hex.slice(1) : hex);
-        color.a = alpha;
-        return color;
-    }
-
-    private clamp(value: number, min: number, max: number) {
-        return Math.min(max, Math.max(min, value));
     }
 
     private distanceSq(ax: number, ay: number, bx: number, by: number) {

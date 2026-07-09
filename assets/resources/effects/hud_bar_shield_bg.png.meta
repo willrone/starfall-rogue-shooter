@@ -1,0 +1,49 @@
+{
+  "ver": "1.0.22",
+  "importer": "texture",
+  "imported": true,
+  "uuid": "945c7916-5088-4637-a6e8-c0da48c678ca",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "945c7916-5088-4637-a6e8-c0da48c678ca@6c48a": {
+      "ver": "3.8.8",
+      "importer": "texture",
+      "imported": true,
+      "uuid": "945c7916-5088-4637-a6e8-c0da48c678ca@6c48a",
+      "files": [],
+      "subMetas": {},
+      "userData": {},
+      "displayName": "",
+      "id": "",
+      "name": ""
+    },
+    "945c7916-5088-4637-a6e8-c0da48c678ca@f9941": {
+      "ver": "3.8.8",
+      "importer": "sprite-frame",
+      "imported": true,
+      "uuid": "945c7916-5088-4637-a6e8-c0da48c678ca@f9941",
+      "files": [],
+      "subMetas": {},
+      "userData": {
+        "spriteType": "sliced",
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 3,
+        "borderRight": 3
+      },
+      "displayName": "",
+      "id": "",
+      "name": ""
+    }
+  },
+  "userData": {
+    "wrapModeS": "repeat",
+    "wrapModeT": "repeat",
+    "minfilter": "linear",
+    "magfilter": "linear",
+    "mipfilter": "none",
+    "anisotropy": 0
+  }
+}

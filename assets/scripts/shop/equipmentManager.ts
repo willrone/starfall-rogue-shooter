@@ -2,7 +2,7 @@ import { Color, Graphics, Label, Layers, Node, Sprite, SpriteFrame, UITransform,
 import { PanelManager } from '../ui/panels';
 import { CombatState } from '../state/combatState';
 import { EQUIPMENT, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from '../catalogs/equipmentCatalog';
-import { WEAPON_CATALOG, WEAPON_COUNT, getWeaponStyleName, getWeaponTierForId } from '../catalogs/weaponCatalog';
+import { WEAPON_CATALOG, WEAPON_COUNT, getWeaponStyleName, getWeaponTierForId, getWeaponFamilyId } from '../catalogs/weaponCatalog';
 import { RUN_ITEMS, RUN_ITEM_COUNT, formatRunItemEffect } from '../catalogs/runItemCatalog';
 import { OFFHAND_CATALOG, findOffhand } from '../catalogs/offhandCatalog';
 import {
@@ -37,13 +37,15 @@ import type {
     LootChoice,
 } from '../core/types';
 import { AdManager } from '../ad/AdManager';
+import { uiMgr } from '../ui/UIManager';
+import { ShopPopup } from '../ui/ShopPopup';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const SHOP_REFRESH_COST = 22;
 const SHOP_ITEM_COUNT = 6;
 const CHEST_REFRESH_COST = 34;
 const SAVE_KEY = 'starfall-rogue-shooter-progress-v1';
-const HANGAR_EQUIPMENT_SLOTS = 8;
+const HANGAR_EQUIPMENT_SLOTS = 9;
 const EQUIPPED_SLOT_COUNT = 6;
 const MAX_EQUIPPED_WEAPONS = 2;
 const MAX_EQUIPPED_GEAR = 4;
@@ -107,6 +109,7 @@ export class EquipmentManager {
     equippedEquipment: string[] = [];
     selectedEquipmentId = '';
     equipmentPage = 0;
+    hangarTab: 'weapon' | 'gear' | 'all' = 'weapon';
     visibleHangarEquipment: EquipmentDef[] = [];
     shopOffers: (LevelUpgrade | null)[] = [];
 
@@ -118,20 +121,10 @@ export class EquipmentManager {
 
     // ── Equipment → icon key mapping ──────────────────────────────────
     private equipIconKey(equipment: EquipmentDef): string {
-        if (equipment.id.startsWith('wpn_') || equipment.id.startsWith('weapon_')) {
-            // Map weapon id to icon key: weapon_storm_rifle → wpn_assault_rifle
-            const id = equipment.id.replace('weapon_', '').replace('wpn_', '');
-            const map: Record<string, string> = {
-                'storm_rifle': 'wpn_assault_rifle', 'split_barrel': 'wpn_shotgun',
-                'rail_cannon': 'wpn_railgun', 'nova_shotgun': 'wpn_shotgun',
-                'ion_lance': 'wpn_laser_gun', 'orbital_drone': 'wpn_drone_spirit',
-                'pulse_rifle': 'wpn_assault_rifle', 'tesla_coil': 'wpn_tesla',
-                'meteor_launcher': 'wpn_meteor', 'chain_lightning': 'wpn_chain_lightning',
-                'frost_emitter': 'wpn_ice_gun', 'inferno_cannon': 'wpn_fire_wand',
-                'venom_sprayer': 'wpn_poison_sprayer', 'arc_crossbow': 'wpn_crossbow',
-            };
-            return map[id] || 'wpn_assault_rifle';
-        }
+        // Weapon: extract family id → wpn_family_id icon
+        const familyId = getWeaponFamilyId(equipment.id);
+        if (familyId) return `wpn_${familyId.replace(/-/g, '_')}`;
+        // Gear slot icon
         if (equipment.gearSlot) {
             const slotMap: Record<string, string> = {
                 'hat': 'slot_helmet', 'armor': 'slot_armor',
@@ -187,7 +180,7 @@ export class EquipmentManager {
             if (!raw) return;
             const data = JSON.parse(raw);
             this.ctx.cs.battlesWon = Math.max(0, Number(data.battlesWon) || 0);
-            this.ctx.cs.alloy = 0;
+            this.ctx.cs.alloy = Math.max(0, Number(data.alloy) || 0);
             this.ctx.cs.cores = Math.max(0, Number(data.cores) || 0);
             this.ctx.cs.shards = Math.max(0, Number(data.shards) || this.ctx.cs.shards);
             this.ctx.cs.biomass = Math.max(0, Number(data.biomass) || this.ctx.cs.biomass);
@@ -230,6 +223,7 @@ export class EquipmentManager {
         try {
             sys.localStorage.setItem(SAVE_KEY, JSON.stringify({
                 battlesWon: this.ctx.cs.battlesWon,
+                alloy: this.ctx.cs.alloy,
                 cores: this.ctx.cs.cores,
                 shards: this.ctx.cs.shards,
                 biomass: this.ctx.cs.biomass,
@@ -505,12 +499,25 @@ export class EquipmentManager {
     }
 
     getWarehouseEquipmentList(): EquipmentDef[] {
-        return EQUIPMENT.filter((equipment) => this.isEquipmentDiscoverable(equipment)).sort((a, b) => {
+        return EQUIPMENT
+            .filter((equipment) => this.isEquipmentDiscoverable(equipment))
+            .filter((equipment) => {
+                if (this.hangarTab === 'weapon') return equipment.kind === 'weapon';
+                if (this.hangarTab === 'gear') return equipment.kind === 'gear';
+                return true;
+            })
+            .sort((a, b) => {
             const aScore = this.getWarehouseSortScore(a);
             const bScore = this.getWarehouseSortScore(b);
             if (aScore !== bScore) return aScore - bScore;
             return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
         });
+    }
+
+    changeHangarTab(tab: 'weapon' | 'gear' | 'all'): void {
+        this.hangarTab = tab;
+        this.equipmentPage = 0;
+        this.refreshEquipmentButtons();
     }
 
     getEquipmentPageCount(): number {
@@ -564,7 +571,7 @@ export class EquipmentManager {
 
     getInventoryWallet(): ResourceWallet {
         return {
-            alloy: 0,
+            alloy: this.ctx.cs.alloy,
             cores: this.ctx.cs.cores,
             shards: this.ctx.cs.shards,
             biomass: this.ctx.cs.biomass,
@@ -597,19 +604,31 @@ export class EquipmentManager {
     spendResources(cost: ResourceWallet) {
         const next = spendWalletResources(this.getInventoryWallet(), cost);
         if (!next) return;
+        this.ctx.cs.alloy = next.alloy;
         this.ctx.cs.cores = next.cores;
         this.ctx.cs.shards = next.shards;
         this.ctx.cs.biomass = next.biomass;
         this.ctx.cs.circuits = next.circuits;
         this.ctx.cs.crystals = next.crystals;
+        this.ctx.cs.voidFragment = next.voidFragment;
+        this.ctx.cs.energyCore = next.energyCore;
+        this.ctx.cs.frostCore = next.frostCore;
+        this.ctx.cs.infernoCore = next.infernoCore;
+        this.ctx.cs.webSilk = next.webSilk;
     }
 
     addWalletToInventory(wallet: ResourceWallet) {
+        this.ctx.cs.alloy += wallet.alloy;
         this.ctx.cs.cores += wallet.cores;
         this.ctx.cs.shards += wallet.shards;
         this.ctx.cs.biomass += wallet.biomass;
         this.ctx.cs.circuits += wallet.circuits;
         this.ctx.cs.crystals += wallet.crystals;
+        this.ctx.cs.voidFragment += wallet.voidFragment;
+        this.ctx.cs.energyCore += wallet.energyCore;
+        this.ctx.cs.frostCore += wallet.frostCore;
+        this.ctx.cs.infernoCore += wallet.infernoCore;
+        this.ctx.cs.webSilk += wallet.webSilk;
     }
 
     formatCost(cost: ResourceWallet): string {
@@ -946,18 +965,81 @@ export class EquipmentManager {
     }
 
     // ── Shop UI ─────────────────────────────────────────────────────────
-    openShop() {
+    async openShop() {
         if (this.ctx.cs.phase !== 'combat') return;
         this.ctx.cs.phase = 'shop';
         this.ctx.touchActive = false;
         this.ctx.touchVector.set(0, 0);
         this.ctx.updateJoystickView();
         this.ensureShopOffers();
-        this.ctx.panels.setShopPanelActive(true);
-        if (this.ctx.panels.levelPanel) this.ctx.panels.levelPanel.active = false;
-        if (this.ctx.panels.levelPanelShadow) this.ctx.panels.levelPanelShadow.active = false;
-        this.renderShop();
-        this.ctx.showToast('战场商店已打开，购买或刷新单个格子。');
+
+        // Bot mode: skip popup, auto-buy first affordable item
+        if ((this.ctx as any).__cdpBotMode) {
+            for (let i = 0; i < this.shopOffers.length; i++) {
+                const offer = this.shopOffers[i];
+                if (!offer) continue;
+                const cost = this.getShopItemCost(offer);
+                if (this.ctx.cs.battleAlloy >= cost) {
+                    this.buyShopItem(i);
+                    this.ctx.showToast(`[Bot] 购买道具：${offer.name}`);
+                    break;
+                }
+            }
+            this.ctx.cs.phase = 'combat';
+            return;
+        }
+
+        const popupResult = await uiMgr.showDynamicPopupAsync(() => {
+            const node = new Node('ShopPopup');
+            const scpt = node.addComponent(ShopPopup);
+            scpt.setup(this._buildShopOptions());
+            return node;
+        }, 'ShopPopup');
+
+        // After popup: return to combat
+        if (this.ctx.cs.phase === 'shop') {
+            this.ctx.cs.phase = 'combat';
+            this.ctx.showToast('商店离开，战斗继续。');
+        }
+    }
+
+    private _buildShopOptions() {
+        return {
+            combatTime: this.ctx.cs.combatTime,
+            spendableAlloy: this.getSpendableAlloy(),
+            slots: this.shopOffers.map((item: LevelUpgrade | null) => ({
+                item,
+                cost: item ? this.getShopItemCost(item) : 0,
+                canAfford: item ? this.getSpendableAlloy() >= this.getShopItemCost(item) : false,
+            })),
+            onBuy: async (index: number) => {
+                if (this.ctx.cs.phase !== 'shop') return { success: false, message: '商店已关闭' };
+                const item = this.shopOffers[index];
+                if (!item) return { success: false, message: '该格已空' };
+                const cost = this.getShopItemCost(item);
+                if (!this.spendRunAlloy(cost)) {
+                    return { success: false, message: `合金不足，需要 ${cost}。` };
+                }
+                this.ctx.pickupMgr.applyRunItem(item.id);
+                if (this.ctx.pickupMgr.pendingNewItem) {
+                    // Discard mode — reopen shop later via popup
+                    return { success: true, message: `购买${item.name}，但道具栏已满，请选择丢弃。` };
+                }
+                this.shopOffers[index] = this.pickShopOfferForSlot(index);
+                return { success: true, message: `购买${item.name}，该格已补货。` };
+            },
+            onRefresh: async (index: number) => {
+                if (this.ctx.cs.phase !== 'shop') return { success: false, message: '商店已关闭' };
+                if (!this.spendRunAlloy(SHOP_REFRESH_COST)) {
+                    return { success: false, message: `合金不足，刷新需要 ${SHOP_REFRESH_COST}。` };
+                }
+                this.shopOffers[index] = this.pickShopOfferForSlot(index);
+                return { success: true, message: '该格商品已刷新。' };
+            },
+            onClose: () => {
+                // popup handles close
+            },
+        };
     }
 
     buyShopItem(index: number) {
@@ -1250,9 +1332,101 @@ export class EquipmentManager {
     }
 
     // ── Equipment button refresh ─────────────────────────────────────────
+    private refreshHangarTabButtons(): void {
+        const labels = [
+            { text: '武器', tab: 'weapon' },
+            { text: '副武器', tab: 'offhand' },
+            { text: '装备', tab: 'gear' },
+            { text: '熔炉', tab: 'forge' },
+            { text: '全部', tab: 'all' },
+        ];
+        this.ctx.panels.hangarTabButtons.forEach((button: ButtonView, index: number) => {
+            const item = labels[index];
+            if (!item) { button.node.active = false; return; }
+            button.node.active = this.ctx.cs.phase === 'hangar';
+            const active = item.tab === this.hangarTab;
+            // Tab: dark base when inactive, bright cyan when active
+            button.color = active ? '#22D3EE' : '#1E293B';
+            button.label.string = item.text;
+            this.ctx.drawButton(button, false);
+            // Active tab gets brighter label
+            button.label.color = this.ctx.hex(active ? '#FFFFFF' : '#64748B');
+        });
+    }
+
+    private refreshLoadoutCards(): void {
+        const weapons = this.getEquippedWeapons();
+        this.ctx.panels.loadoutWeaponButtons.forEach((button: ButtonView, index: number) => {
+            const weapon = weapons[index];
+            const slotName = index === 0 ? '主武器A' : '主武器B';
+            button.node.active = this.ctx.cs.phase === 'hangar';
+            if (!weapon) {
+                button.color = '#1E293B';
+                button.label.string = `${slotName}\n空槽\n点击武器库装备`;
+                this.ctx.drawButton(button, false);
+                this.setButtonIcon(button, 'wpn_storm_rifle');
+                return;
+            }
+            const active = this.getActiveWeapon()?.id === weapon.id;
+            button.color = active ? '#22D3EE' : weapon.color;
+            button.label.string = `${slotName}${active ? ' 当前' : ''}\n${weapon.name}\nLv.${this.getEquipmentLevel(weapon.id)}`;
+            this.ctx.drawButton(button, false);
+            this.setButtonIcon(button, this.equipIconKey(weapon));
+        });
+
+        if (this.ctx.panels.offhandLoadoutButton) {
+            const button = this.ctx.panels.offhandLoadoutButton;
+            const def = this.equippedOffhandId ? findOffhand(this.equippedOffhandId) : undefined;
+            button.node.active = this.ctx.cs.phase === 'hangar';
+            if (!def) {
+                button.color = '#1E293B';
+                button.label.string = '副武器\n未装备\n点击选择';
+                this.ctx.drawButton(button, false);
+                this.setButtonIcon(button, 'stat_shield');
+            } else {
+                const level = this.getOffhandLevel(def.id);
+                button.color = def.color;
+                button.label.string = `副武器 已装备\n${def.name}\nT${level} · ${this.getOffhandCategoryName(def.category)}`;
+                this.ctx.drawButton(button, false);
+                this.setButtonIcon(button, def.iconKey);
+            }
+        }
+
+        const gearSlots = GEAR_SLOT_ORDER;
+        this.ctx.panels.gearLoadoutButtons.forEach((button: ButtonView, index: number) => {
+            const slot = gearSlots[index];
+            const gear = slot ? this.getEquippedGearForSlot(slot) : null;
+            button.node.active = this.ctx.cs.phase === 'hangar';
+            if (!gear) {
+                button.color = '#1E293B';
+                button.label.string = `${slot ? GEAR_SLOT_LABELS[slot] : '装备'}\n空`;
+                this.ctx.drawButton(button, false);
+                this.setButtonIcon(button, 'stat_shield');
+                return;
+            }
+            button.color = gear.color;
+            button.label.string = `${GEAR_SLOT_LABELS[slot]}\n${gear.name}\nLv.${this.getEquipmentLevel(gear.id)}`;
+            this.ctx.drawButton(button, false);
+            this.setButtonIcon(button, this.equipIconKey(gear));
+        });
+    }
+
+    private getOffhandCategoryName(category: string): string {
+        switch (category) {
+            case 'orbit': return '环绕';
+            case 'summon': return '召唤';
+            case 'control': return '控场';
+            case 'burst': return '爆发';
+            case 'support': return '防御';
+            default: return '协同';
+        }
+    }
+
     refreshEquipmentButtons() {
         this.normalizeEquippedEquipment();
         this.visibleHangarEquipment = this.getVisibleHangarEquipment();
+        this.refreshLoadoutCards();
+        this.refreshHangarTabButtons();
         this.refreshEquippedButtons();
         this.ctx.panels.equipmentButtons.forEach((button: ButtonView, index: number) => {
             const equipment = this.visibleHangarEquipment[index];
@@ -1300,7 +1474,7 @@ export class EquipmentManager {
                 button.color = '#1E293B';
                 button.label.string = `${slotName}\n空`;
                 this.ctx.drawButton(button, false);
-                this.setButtonIcon(button, index < MAX_EQUIPPED_WEAPONS ? 'wpn_assault_rifle' : 'stat_shield');
+                this.setButtonIcon(button, index < MAX_EQUIPPED_WEAPONS ? 'wpn_storm_rifle' : 'stat_shield');
                 return;
             }
             const level = this.getEquipmentLevel(equipment.id);

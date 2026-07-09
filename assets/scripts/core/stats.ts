@@ -39,6 +39,8 @@ export const STAT_META: Record<StatKey, StatMeta> = {
     luck: { name: '幸运值', kind: 'number' },
     xpGain: { name: '经验收益', kind: 'percent' },
     resourceGain: { name: '资源收益', kind: 'percent' },
+    aoeDamagePct: { name: '爆炸伤害', kind: 'percent' },
+    aoeRangePct: { name: '爆炸范围', kind: 'percent' },
 };
 
 export function createEmptyCharacterStats(): CharacterStats {
@@ -74,6 +76,8 @@ export function createEmptyCharacterStats(): CharacterStats {
         luck: 0,
         xpGain: 0,
         resourceGain: 0,
+        aoeDamagePct: 0,
+        aoeRangePct: 0,
     };
 }
 
@@ -110,6 +114,8 @@ export function createBaseCharacterStats(): CharacterStats {
         luck: 0,
         xpGain: 0,
         resourceGain: 0,
+        aoeDamagePct: 0,
+        aoeRangePct: 0,
     };
 }
 

@@ -1,0 +1,49 @@
+{
+  "ver": "1.0.22",
+  "importer": "texture",
+  "imported": true,
+  "uuid": "e9703a8a-1560-4ace-a8f1-a5913242a640",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {
+    "e9703a8a-1560-4ace-a8f1-a5913242a640@6c48a": {
+      "ver": "3.8.8",
+      "importer": "texture",
+      "imported": true,
+      "uuid": "e9703a8a-1560-4ace-a8f1-a5913242a640@6c48a",
+      "files": [],
+      "subMetas": {},
+      "userData": {},
+      "displayName": "",
+      "id": "",
+      "name": ""
+    },
+    "e9703a8a-1560-4ace-a8f1-a5913242a640@f9941": {
+      "ver": "3.8.8",
+      "importer": "sprite-frame",
+      "imported": true,
+      "uuid": "e9703a8a-1560-4ace-a8f1-a5913242a640@f9941",
+      "files": [],
+      "subMetas": {},
+      "userData": {
+        "spriteType": "sliced",
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 3,
+        "borderRight": 3
+      },
+      "displayName": "",
+      "id": "",
+      "name": ""
+    }
+  },
+  "userData": {
+    "wrapModeS": "repeat",
+    "wrapModeT": "repeat",
+    "minfilter": "linear",
+    "magfilter": "linear",
+    "mipfilter": "none",
+    "anisotropy": 0
+  }
+}

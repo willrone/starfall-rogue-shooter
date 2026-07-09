@@ -46,6 +46,10 @@ import {
 import type { CombatState } from '../state/combatState';
 import { AdManager } from '../ad/AdManager';
 
+import { uiMgr } from '../ui/UIManager';
+import { ChoicePopup } from '../ui/ChoicePopup';
+import type { ChoiceDisplayItem, ChoiceResult } from '../ui/ChoicePopup';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -522,20 +526,108 @@ export class PickupManager {
     }
 
     // ── Choice panels ──────────────────────────────────────────────────────
+    // Popup resolver for programmatic close (bot mode compatibility)
+    private _choicePopupResolve: ((result: ChoiceResult) => void) | null = null;
+    private _activePopupName = '';
 
-    openLevelChoices(): void {
+    /**
+     * Show ChoicePopup and return chosen index.
+     * Returns -1 if popup was closed without choice (shouldn't happen in normal flow).
+     */
+    private async _showChoicePopupAsync(
+        title: string, hint: string,
+        choices: LevelUpgrade[], refreshCost: number,
+        onRefresh: () => Promise<LevelUpgrade[] | null>,
+    ): Promise<number> {
+        const displayItems: ChoiceDisplayItem[] = choices.map((c: any) => ({
+            id: c.id, title: c.name || c.title, desc: c.desc, color: c.color,
+        }));
+
+        const iconMap: Record<string, string> = {
+            'fire-control': 'stat_attack_power', 'neural-rapid': 'stat_attack_speed',
+            'pierce-drill': 'stat_defense', 'multi-control': 'dmg_physical',
+            'drone-command': 'wpn_drone_spirit', 'crit-instinct': 'stat_crit_chance',
+            'weakpoint-study': 'stat_crit_damage', 'lethal-judgement': 'stat_lethal_chance',
+        };
+
+        const result = await uiMgr.showDynamicPopupAsync(() => {
+            const node = new Node('ChoicePopup');
+            const scpt = node.addComponent(ChoicePopup);
+            scpt.setup({
+                title, hint,
+                choices: displayItems,
+                refreshCost,
+                onRefresh: async () => {
+                    const newChoices = await onRefresh();
+                    if (!newChoices) return null;
+                    return newChoices.map((c: any) => ({
+                        id: c.id, title: c.name || c.title, desc: c.desc, color: c.color,
+                    }));
+                },
+                getIcon: (id: string) => {
+                    const iconKey = iconMap[id];
+                    return iconKey ? this.ctx.getIcon(iconKey) : null;
+                },
+            });
+            return node;
+        }, 'ChoicePopup');
+
+        if (result && (result as ChoiceResult).action === 'chosen') {
+            return (result as ChoiceResult).index ?? -1;
+        }
+        return -1;
+    }
+
+    async openLevelChoices(): Promise<void> {
         this.cs.phase = 'level-up';
         if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('levelUp');
         this.pendingLevelChoices = this.ctx.pickLevelChoices();
-        this.renderChoicePanel(
+
+        // Bot mode: skip popup, pick first
+        if ((this.ctx as any).__cdpBotMode) {
+            this.applyLevelUpgrade(this.pendingLevelChoices[0]);
+            this.ctx.showToast(`属性成长：${this.pendingLevelChoices[0]?.name}`);
+            this.resumeCombatAfterChoice();
+            return;
+        }
+
+        const chosenIndex = await this._showChoicePopupAsync(
             `角色 Lv.${this.cs.level} 属性成长`,
             `选择 1 项自身属性成长。刷新消耗 ${LEVEL_REFRESH_COST} 合金。`,
             this.pendingLevelChoices,
             LEVEL_REFRESH_COST,
+            async () => {
+                // Refresh logic
+                if (!this.ctx.spendRunAlloy(LEVEL_REFRESH_COST)) {
+                    // Try ad refresh
+                    this.ctx.showToast(`合金不足，正在尝试视频免费刷新...`);
+                    if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('adRefresh');
+                    const adResult = await new Promise<boolean>((resolve) => {
+                        AdManager.playRewardedAd((r) => resolve(r.success));
+                    });
+                    if (!adResult) {
+                        this.ctx.showToast('刷新失败，请重试。');
+                        return null;
+                    }
+                    this.pendingLevelChoices = this.ctx.pickLevelChoices();
+                    this.ctx.showToast('看视频免费刷新成功！');
+                    return this.pendingLevelChoices;
+                }
+                this.pendingLevelChoices = this.ctx.pickLevelChoices();
+                this.ctx.showToast('属性成长选项已刷新。');
+                return this.pendingLevelChoices;
+            },
         );
+
+        if (chosenIndex >= 0 && chosenIndex < this.pendingLevelChoices.length) {
+            const choice = this.pendingLevelChoices[chosenIndex];
+            this.applyLevelUpgrade(choice);
+            this.ctx.showToast(`属性成长：${choice.name}`);
+            this.resumeCombatAfterChoice();
+        }
     }
 
-    openItemChoices(quality: ItemChoiceQuality, refreshed = false): void {
+    async openItemChoices(quality: ItemChoiceQuality, refreshed = false): Promise<void> {
         this.cs.phase = 'item-choice';
         this.currentItemChoiceQuality = quality;
         this.pendingItemChoices = this.ctx.pickItemChoices(quality);
@@ -543,137 +635,104 @@ export class PickupManager {
         const hint = quality === 'rare'
             ? `选择 1 件高级本局道具。刷新消耗 ${CHEST_REFRESH_COST} 合金。`
             : `选择 1 件普通本局道具。刷新消耗 ${CHEST_REFRESH_COST} 合金。`;
-        this.renderChoicePanel(title, hint, this.pendingItemChoices, CHEST_REFRESH_COST);
+
         if (!refreshed) this.ctx.showToast(`${title}开启，选择一件道具。`);
-    }
 
-    renderChoicePanel(title: string, hint: string, choices: LevelUpgrade[], refreshCost: number): void {
-        if (this.panels.levelPanel) this.panels.levelPanel.active = true;
-        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = true;
-        if (this.panels.levelTitleLabel) this.panels.levelTitleLabel.string = title;
-        if (this.panels.levelHintLabel) this.panels.levelHintLabel.string = hint;
-        const iconMap: Record<string, string> = {
-            'fire-control': 'stat_attack_power', 'neural-rapid': 'stat_attack_speed',
-            'pierce-drill': 'stat_defense', 'multi-control': 'dmg_physical',
-            'drone-command': 'wpn_drone_spirit', 'crit-instinct': 'stat_crit_chance',
-            'weakpoint-study': 'stat_crit_damage', 'lethal-judgement': 'stat_lethal_chance',
-        };
-        this.panels.levelChoiceButtons.forEach((button, index) => {
-            const choice = choices[index];
-            button.node.active = !!choice;
-            if (!choice) return;
-            button.color = choice.color;
-            button.label.string = `${choice.category}｜${choice.name}\n${choice.desc}`;
-            this.ctx.drawButton(button, false);
-            // Add icon to button
-            const iconNodeName = `ChoiceIcon_${index}`;
-            let iconNode = button.node.getChildByName(iconNodeName);
-            const iconKey = iconMap[choice.id] || '';
-            const sf = iconKey ? this.ctx.getIcon(iconKey) : null;
-            if (sf) {
-                if (!iconNode) {
-                    iconNode = new Node(iconNodeName);
-                    iconNode.layer = Layers.Enum.UI_2D;
-                    button.node.addChild(iconNode);
-                    const it = iconNode.addComponent(UITransform);
-                    it.setContentSize(28, 28);
-                    iconNode.addComponent(Sprite);
-                }
-                const sp = iconNode!.getComponent(Sprite)!;
-                sp.spriteFrame = sf;
-                sp.sizeMode = Sprite.SizeMode.CUSTOM;
-                iconNode!.setPosition(-button.width / 2 + 22, 0);
-            } else if (iconNode) {
-                iconNode.active = false;
-            }
-        });
-        if (this.panels.levelRefreshButton) {
-            if (refreshCost > 0) {
-                this.panels.levelRefreshButton.node.active = true;
-                this.panels.levelRefreshButton.label.string = `刷新 -${refreshCost}合金`;
-                this.ctx.drawButton(this.panels.levelRefreshButton, this.ctx.getSpendableAlloy() < refreshCost);
-            } else {
-                this.panels.levelRefreshButton.node.active = false;
-            }
-        }
-    }
-
-    choosePanelChoice(index: number): void {
-        if (this.cs.phase === 'level-up') {
-            this.chooseLevelUpgrade(index);
-        } else if (this.cs.phase === 'item-choice') {
-            this.chooseRunItem(index);
-        } else if (this.cs.phase === 'discard') {
-            this.chooseDiscard(index);
-        }
-    }
-
-    chooseLevelUpgrade(index: number): void {
-        if (this.cs.phase !== 'level-up') return;
-        const choice = this.pendingLevelChoices[index];
-        if (!choice) return;
-        this.applyLevelUpgrade(choice);
-        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
-        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
-        this.resumeCombatAfterChoice();
-        this.ctx.showToast(`属性成长：${choice.name}`);
-    }
-
-    chooseRunItem(index: number): void {
-        if (this.cs.phase !== 'item-choice') return;
-        const choice = this.pendingItemChoices[index];
-        if (!choice) return;
-        this.applyRunItem(choice.id);
-        // If slots were full, discard is pending — don't close
-        if (this.pendingNewItem) return;
-        if (this.panels.levelPanel) this.panels.levelPanel.active = false;
-        if (this.panels.levelPanelShadow) this.panels.levelPanelShadow.active = false;
-        this.resumeCombatAfterChoice();
-        this.ctx.showToast(`获得本局道具：${choice.name}`);
-    }
-
-    resumeCombatAfterChoice(): void {
-        this.cs.phase = 'combat';
-        if (this.cs.xp >= this.cs.xpToNext) {
-            this.openLevelChoices();
-        }
-    }
-
-    applyLevelUpgrade(upgrade: LevelUpgrade): void {
-        this.applyStatEffects(upgrade.effects);
-    }
-
-    applyRunItem(id: string): void {
-        const item = RUN_ITEMS.find((upgrade) => upgrade.id === id);
-        if (!item) return;
-
-        // 道具格满 → 进入丢弃模式
-        if (this.acquiredRunItemIds.size >= MAX_RUN_ITEM_SLOTS && !this.acquiredRunItemIds.has(id)) {
-            this.pendingNewItem = item;
-            this.openDiscardChoices();
+        // Bot mode: skip popup, pick first
+        if ((this.ctx as any).__cdpBotMode) {
+            if (this.pendingItemChoices.length > 0) this.chooseRunItem(0);
             return;
         }
 
-        this.acquiredRunItemIds.add(id);
-        this.applyStatEffects(item.effects);
+        const chosenIndex = await this._showChoicePopupAsync(
+            title, hint,
+            this.pendingItemChoices,
+            CHEST_REFRESH_COST,
+            async () => {
+                if (!this.ctx.spendRunAlloy(CHEST_REFRESH_COST)) {
+                    this.ctx.showToast(`合金不足，刷新需要 ${CHEST_REFRESH_COST}。`);
+                    return null;
+                }
+                this.pendingItemChoices = this.ctx.pickItemChoices(quality);
+                this.ctx.showToast('宝箱选项已刷新。');
+                return this.pendingItemChoices;
+            },
+        );
+
+        if (chosenIndex >= 0 && chosenIndex < this.pendingItemChoices.length) {
+            this.chooseRunItem(chosenIndex);
+        }
     }
 
-    // ── 丢弃流程 ──────────────────────────────────────────────────────────
-
-    openDiscardChoices(): void {
+    async openDiscardChoices(): Promise<void> {
         this.cs.phase = 'discard';
-        // 构建当前道具列表供选择丢弃
+        // Build the list of items to discard
         this.pendingDiscardChoices = [];
         for (const id of this.acquiredRunItemIds) {
             const item = RUN_ITEMS.find(i => i.id === id);
             if (item) this.pendingDiscardChoices.push(item);
         }
-        this.renderChoicePanel(
+
+        // Bot mode: skip popup, pick first
+        if ((this.ctx as any).__cdpBotMode) {
+            if (this.pendingDiscardChoices.length > 0) this.chooseDiscard(0);
+            return;
+        }
+
+        const chosenIndex = await this._showChoicePopupAsync(
             `道具栏已满 (${this.acquiredRunItemIds.size}/${MAX_RUN_ITEM_SLOTS})`,
             '选择一件丢弃，替换为新道具。已花费的合金不退还。',
             this.pendingDiscardChoices,
-            0, // 无刷新按钮
+            0, // no refresh
+            async () => null,
         );
+
+        if (chosenIndex >= 0 && chosenIndex < this.pendingDiscardChoices.length) {
+            this.chooseDiscard(chosenIndex);
+        }
+    }
+
+    // ── 应用升级效果 ─────────────────────────────────────────────────────
+
+    applyLevelUpgrade(choice: LevelUpgrade): void {
+        const hpBefore = this.cs.playerMaxHp;
+        const shieldBefore = this.cs.playerShieldMax;
+        const stats = this.runStats as unknown as Record<string, number>;
+        for (const effect of choice.effects) {
+            stats[effect.stat] = (stats[effect.stat] || 0) + effect.amount;
+        }
+        this.cs.playerMaxHp = this.ctx.getMaxHp();
+        this.cs.playerShieldMax = this.ctx.getShieldMax();
+        const hpDelta = this.cs.playerMaxHp - hpBefore;
+        const shieldDelta = this.cs.playerShieldMax - shieldBefore;
+        if (hpDelta > 0) this.cs.playerHp += hpDelta * 0.65;
+        if (shieldDelta > 0) this.cs.playerShield += shieldDelta * 0.55;
+        this.cs.playerHp = Math.max(1, Math.min(this.cs.playerHp, this.cs.playerMaxHp));
+        this.cs.playerShield = Math.max(0, Math.min(this.cs.playerShield, this.cs.playerShieldMax));
+    }
+
+    // ── Bot/CDP 面板选择：选第 index 个升级/道具选项 ──────────────────────────
+
+    choosePanelChoice(index: number): void {
+        if (this.cs.phase === 'level-up' && this.pendingLevelChoices && this.pendingLevelChoices.length > 0) {
+            const idx = Math.max(0, Math.min(index, this.pendingLevelChoices.length - 1));
+            this.applyLevelUpgrade(this.pendingLevelChoices[idx]);
+            this.ctx.showToast(`属性成长：${this.pendingLevelChoices[idx]?.name}`);
+            this.resumeCombatAfterChoice();
+            return;
+        }
+        if (this.cs.phase === 'item-choice' && this.pendingItemChoices && this.pendingItemChoices.length > 0) {
+            const idx = Math.max(0, Math.min(index, this.pendingItemChoices.length - 1));
+            this.chooseRunItem(idx);
+            return;
+        }
+    }
+
+    //─ 丢弃 ──────────────────────────────────────────────────────────
+
+    /** 从升级/道具选择恢复战斗 */
+    private resumeCombatAfterChoice(): void {
+        this.cs.phase = 'combat';
     }
 
     chooseDiscard(index: number): void {
@@ -710,48 +769,7 @@ export class PickupManager {
         this.cs.playerShield = this.ctx.clamp(this.cs.playerShield, 0, this.cs.playerShieldMax);
     }
 
-    refreshCurrentChoices(): void {
-        if (this.cs.phase === 'level-up') {
-            if (!this.ctx.spendRunAlloy(LEVEL_REFRESH_COST)) {
-                // Try ad refresh instead
-                this.ctx.showToast(`合金不足，正在尝试视频免费刷新...`);
-                if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('adRefresh');
-                AdManager.playRewardedAd((result) => {
-                    if (!result.success) {
-                        this.ctx.showToast('刷新失败，请重试。');
-                        return;
-                    }
-                    this.pendingLevelChoices = this.ctx.pickLevelChoices();
-                    this.renderChoicePanel(
-                        `角色 Lv.${this.cs.level} 属性成长`,
-                        `免费刷新成功！选择 1 项成长。`,
-                        this.pendingLevelChoices,
-                        LEVEL_REFRESH_COST,
-                    );
-                    this.ctx.showToast('看视频免费刷新成功！');
-                });
-                return;
-            }
-            this.pendingLevelChoices = this.ctx.pickLevelChoices();
-            this.renderChoicePanel(
-                `角色 Lv.${this.cs.level} 属性成长`,
-                `选择 1 项自身属性成长。刷新消耗 ${LEVEL_REFRESH_COST} 合金。`,
-                this.pendingLevelChoices,
-                LEVEL_REFRESH_COST,
-            );
-            this.ctx.showToast('属性成长选项已刷新。');
-            return;
-        }
-
-        if (this.cs.phase === 'item-choice') {
-            if (!this.ctx.spendRunAlloy(CHEST_REFRESH_COST)) {
-                this.ctx.showToast(`合金不足，刷新需要 ${CHEST_REFRESH_COST}。`);
-                return;
-            }
-            this.openItemChoices(this.currentItemChoiceQuality, true);
-            this.ctx.showToast('宝箱选项已刷新。');
-        }
-    }
+    // refreshCurrentChoices removed — replaced by ChoicePopup.onRefresh callback
 
     applyStatEffects(effects: StatEffect[]): void {
         const hpBefore = this.ctx.getMaxHp();
@@ -806,6 +824,36 @@ export class PickupManager {
                 this.cs.crystals += wallet.crystals;
             },
         }, spec);
+    }
+
+    // ── 道具选择/购买流程 ──────────────────────────────────────────────
+
+    /** 从宝箱/商店选择道具 index */
+    chooseRunItem(index: number): void {
+        if (this.cs.phase !== 'item-choice' && this.cs.phase !== 'shop') return;
+        const choices = this.cs.phase === 'item-choice' ? this.pendingItemChoices : [];
+        const itemId = choices[index]?.id;
+        if (!itemId) return;
+        this.applyRunItem(itemId);
+        if (this.cs.phase === 'item-choice') {
+            this.pendingItemChoices = [];
+            this.resumeCombatAfterChoice();
+        }
+    }
+
+    /** 按 ID 购买/获得道具（处理道具栏满的情况） */
+    applyRunItem(id: string): void {
+        const item = RUN_ITEMS.find(i => i.id === id);
+        if (!item) return;
+        if (this.acquiredRunItemIds.size >= MAX_RUN_ITEM_SLOTS) {
+            this.pendingNewItem = item;
+            this.cs.phase = 'discard';
+            this.ctx.showToast('道具栏已满，请丢弃一件已有道具。');
+            return;
+        }
+        this.applyStatEffects(item.effects);
+        this.acquiredRunItemIds.add(id);
+        this.ctx.showToast(`获得道具：${item.name}`);
     }
 
     public refreshHud(): void {

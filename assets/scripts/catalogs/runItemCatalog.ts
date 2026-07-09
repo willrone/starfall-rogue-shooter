@@ -68,6 +68,9 @@ export const RUN_ITEM_BLUEPRINTS: RunItemBlueprint[] = [
     { id: 'stable-core', name: '稳态核心', category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp', amount: 96 }, { stat: 'shieldMax', amount: 48 }] },
     { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.08 }, { stat: 'attackRange', amount: 40 }] },
     { id: 'frenzy-injector', name: '狂热注射', category: '攻击', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.60 }, { stat: 'moveSpeed', amount: 8 }] },
+    // ── 爆炸/燃烧特化（2件） ──────────────────────────────────────
+    { id: 'blast-focuser', name: '爆破聚焦器', category: '攻击', color: '#F97316', effects: [{ stat: 'aoeDamagePct', amount: 0.54 }, { stat: 'aoeRangePct', amount: 0.24 }] },
+    { id: 'napalm-catalyst', name: '燃油催化', category: '攻击', color: '#EF4444', effects: [{ stat: 'aoeRangePct', amount: 0.48 }, { stat: 'aoeDamagePct', amount: 0.18 }] },
 ];
 
 // ── RUN_ITEM (chest/shop) catalog ──────────────────────────────────

@@ -671,6 +671,8 @@ export class EnemyManager {
                 enemy.poisonStacks = 0;
                 enemy.poisonDps = 0;
                 enemy.poisonTimer = 0;
+                enemy.poisonBurstDmg = 0;
+                enemy.poisonBurstRange = 0;
             } else {
                 enemy.poisonTimer -= dt;
                 if (enemy.poisonTimer <= 0) {
@@ -678,6 +680,22 @@ export class EnemyManager {
                     const dot = (enemy.poisonDps || 2) * enemy.poisonStacks * POISON_TICK_INTERVAL;
                     enemy.hp -= dot;
                     if (enemy.hp <= 0) {
+                        // 瘟疫喷射器: 被毒杀时触发尸体爆炸 (半径50)
+                        if (enemy.poisonBurstDmg > 0) {
+                            const deathDmg = enemy.poisonBurstDmg * 0.5;
+                            const deathRange = Math.round((enemy.poisonBurstRange || 70) * 0.7);
+                            const p = this.getEnemyPosition(enemy);
+                            for (const other of this.enemies) {
+                                if (other === enemy || !this.enemySet.has(other)) continue;
+                                const oPos = this.getEnemyPosition(other);
+                                const dx = oPos.x - p.x;
+                                const dy = oPos.y - p.y;
+                                if (dx * dx + dy * dy <= deathRange * deathRange) {
+                                    this.damageEnemy(other, deathDmg, '#84CC16', '毒尸爆 ');
+                                }
+                            }
+                            this.ctx.drawAreaPulse(p.x, p.y, deathRange, '#84CC16');
+                        }
                         this.killEnemy(enemy);
                     } else {
                         const p = this.getEnemyPosition(enemy);
@@ -1657,6 +1675,8 @@ export class EnemyManager {
             poisonTimer: 0,
             poisonDuration: 0,
             poisonDps: 0,
+            poisonBurstDmg: 0,
+            poisonBurstRange: 0,
             knockbackVx: 0,
             knockbackVy: 0,
             burrowedTimer: 0,
@@ -2190,7 +2210,7 @@ export class EnemyManager {
                 break;
         }
     }
-    public findNearestEnemy(range: number): Enemy | null {
+    public findNearestEnemy(x: number, y: number, range: number): Enemy | null {
         let best: Enemy | null = null;
         let bestDist = range * range;
         const enemies = this.enemies;
@@ -2198,7 +2218,7 @@ export class EnemyManager {
             const enemy = enemies[i];
             if (!this.enemySet.has(enemy)) continue;
             const { x: ex, y: ey } = this.getEnemyPosition(enemy);
-            const dist = this.ctx.distanceSq(this.cs.playerX, this.cs.playerY, ex, ey);
+            const dist = this.ctx.distanceSq(x, y, ex, ey);
             if (dist < bestDist) {
                 best = enemy;
                 bestDist = dist;

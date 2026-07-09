@@ -60,6 +60,8 @@ export interface CombatState {
     droneCharge: number;
     overheatStacks: number;    // 冲锋枪: 连续射击层数 (0-5), +10%射速/层
     overheatTimer: number;     // 冲锋枪: 距上次射击时间, >0.8s 开始衰减
+    offhandAttackSpeedMultiplier: number; // 副武器临时攻速倍率（如时间扭曲）
+    offhandAttackSpeedTimer: number;      // 副武器临时攻速剩余时间
 
     // ── Wave state ──────────────────────────────────────────────
     combatTime: number;
@@ -151,6 +153,8 @@ export function createCombatState(): CombatState {
         droneCharge: 0,
         overheatStacks: 0,
         overheatTimer: 0,
+        offhandAttackSpeedMultiplier: 1,
+        offhandAttackSpeedTimer: 0,
 
         // Wave state
         combatTime: 0,
@@ -242,6 +246,10 @@ export function resetCombatSession(state: CombatState): void {
     state.playerY = -190;
     state.shieldRechargeDelay = 0;
     state.invulnerableTimer = 0;
+    state.overheatStacks = 0;
+    state.overheatTimer = 0;
+    state.offhandAttackSpeedMultiplier = 1;
+    state.offhandAttackSpeedTimer = 0;
 
     // Boss 机制区域
     state.frostZones = [];

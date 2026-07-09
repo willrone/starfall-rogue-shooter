@@ -113,6 +113,8 @@ export interface ProjectileHostContext {
         pierceStackTimer: number;
         droneCharge: number;
         overheatStacks: number;
+        offhandAttackSpeedMultiplier: number;
+        offhandAttackSpeedTimer: number;
         shakeIntensity: number;
     };
     worldNode: Node | null;
@@ -186,11 +188,18 @@ export class ProjectileManager {
     constructor(public ctx: ProjectileHostContext) {
         // Per-battle pools — must be cleared on battle reset to prevent memory leaks
         (this as any)._burnZones = [];
+        (this as any)._burnZoneNodes = [];
     }
 
     /** Clear all per-battle state. Call from beginBattle / resetCombatSession. */
     public clearBattleState(): void {
         (this as any)._burnZones = [];
+        // 清理燃烧圈节点
+        const burnNodes: Node[] = (this as any)._burnZoneNodes || [];
+        for (const node of burnNodes) {
+            if (node && node.isValid) node.destroy();
+        }
+        (this as any)._burnZoneNodes = [];
         this.sprayCones = [];
         if (this.sprayOverlayGfx && !this.sprayOverlayShared) this.sprayOverlayGfx.clear();
         for (let i = 0; i < this.sprayTimer.length; i++) {
@@ -525,7 +534,8 @@ export class ProjectileManager {
         // 机制词条: overheat (冲锋枪) 每层 +10% 射速, 上限 5 层
         const levelScale = 1 + (level - 1) * 0.10;
         const overheatBoost = this.ctx.cs.overheatStacks * 0.10;
-        const baseRate = Math.max(0.1, weaponFireRate * (levelScale + (stats.weaponFireRatePct || 0) + overheatBoost));
+        const offhandBoost = this.ctx.cs.offhandAttackSpeedTimer > 0 ? Math.max(0, this.ctx.cs.offhandAttackSpeedMultiplier - 1) : 0;
+        const baseRate = Math.max(0.1, weaponFireRate * (levelScale + (stats.weaponFireRatePct || 0) + overheatBoost + offhandBoost));
         return Math.max(0.07, 1 / Math.max(0.15, baseRate + stats.attackSpeed * 0.45));
     }
 
@@ -555,6 +565,16 @@ export class ProjectileManager {
         const bonus = this.ctx.getCharacterStats().pierceDamagePct;
         // 默认每穿透一层保留 50% 伤害；升级道具提高保留比例，上限 90%。
         return Math.min(0.9, Math.max(0.35, 0.5 + bonus));
+    }
+
+    /** 爆炸/AOE 伤害倍率 (1 = 100%) */
+    getAoeDamageMultiplier(): number {
+        return 1 + (this.ctx.getCharacterStats().aoeDamagePct || 0);
+    }
+
+    /** 爆炸/AOE 范围倍率 (1 = 100%) */
+    getAoeRangeMultiplier(): number {
+        return 1 + (this.ctx.getCharacterStats().aoeRangePct || 0);
     }
 
     // ── 机制词条状态 (Phase 2) ─────────────────────────────────────────────
@@ -597,7 +617,11 @@ export class ProjectileManager {
                 this.onAoeBurnHit(bullet, enemy);
                 break;
             case 'webmaster_lifesteal':
-                // 在命中循环内处理
+                // 命中时施加缓速
+                this.onWebmasterHit(bullet, enemy);
+                break;
+            case 'echo_chain':
+                // 弹射在 updateBullets 的 kill 检测中处理
                 break;
         }
     }
@@ -611,7 +635,7 @@ export class ProjectileManager {
     }
 
     // ── 机制 3: poison (瘟疫喷射器) ──────────────────────────────────
-    // 喷雾命中只叠毒，不做多次直伤；攻速提升 = 更快叠层。
+    // 喷雾命中只叠毒（逻辑在 RogueShooterGame.ts），此处仅保留辅助方法
     public applyPoisonStack(enemy: Enemy, sourceDamage: number, layers = 1): number {
         if (enemy.boss) return enemy.poisonStacks || 0;
         const previous = enemy.poisonStacks || 0;
@@ -619,6 +643,11 @@ export class ProjectileManager {
         enemy.poisonTimer = enemy.poisonTimer > 0 ? enemy.poisonTimer : 1.0;
         enemy.poisonDuration = POISON_STACK_DURATION;
         enemy.poisonDps = calcPoisonDpsPerStack(sourceDamage);
+        // 毒爆伤害：与武器伤害挂钩 + 爆炸伤害加成，满层15层时 burst = sourceDamage * 4
+        const aoeDmg = this.getAoeDamageMultiplier();
+        const aoeRange = this.getAoeRangeMultiplier();
+        enemy.poisonBurstDmg = sourceDamage * 4 * aoeDmg;
+        enemy.poisonBurstRange = Math.round(70 * aoeRange);
         return enemy.poisonStacks;
     }
 
@@ -638,6 +667,9 @@ export class ProjectileManager {
         const force = isCrit ? 180 : 100;
         enemy.knockbackVx = nx * force;
         enemy.knockbackVy = ny * force;
+        // 冲击波视觉
+        const waveRadius = isCrit ? 120 : 80;
+        this.ctx.drawAreaPulse(bullet.x, bullet.y, waveRadius, '#CBD5E1');
     }
 
     private distance(dx: number, dy: number): number {
@@ -646,17 +678,20 @@ export class ProjectileManager {
 
     // ── 无人机爆炸 (drone_charge 充能满后触发) ───────────────────────────
     private spawnDroneExplosion(x: number, y: number, damage: number): void {
+        const aoeMult = this.getAoeDamageMultiplier();
+        const rangeMult = this.getAoeRangeMultiplier();
+        const radius = Math.round(80 * rangeMult);
         // 对爆炸范围内所有敌人造成伤害
         for (const enemy of this.ctx.enemyMgr.enemies) {
             if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
             const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
             const dx = x - pos.x;
             const dy = y - pos.y;
-            if (dx * dx + dy * dy <= 80 * 80) {
-                this.ctx.enemyMgr.damageEnemy(enemy, damage * 5, '#F9C74F', '无人机爆炸 ');
+            if (dx * dx + dy * dy <= radius * radius) {
+                this.ctx.enemyMgr.damageEnemy(enemy, damage * 5 * aoeMult, '#F9C74F', '无人机爆炸 ');
             }
         }
-        this.ctx.drawAreaPulse(x, y, 80, '#F9C74F');
+        this.ctx.drawAreaPulse(x, y, radius, '#F9C74F');
     }
 
     // ── 机制 5: pierce_stacks (回声弓) ───────────────────────────────
@@ -671,7 +706,10 @@ export class ProjectileManager {
     // 命中留下 3 秒燃烧区, 每秒 12% 攻击力的伤害
     private onAoeBurnHit(bullet: Bullet, enemy: Enemy): void {
         const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
-        const burnDmg = 0.12 * bullet.damage;
+        const aoeMult = this.getAoeDamageMultiplier();
+        const rangeMult = this.getAoeRangeMultiplier();
+        const burnDmg = 0.12 * bullet.damage * aoeMult;
+        const radius = Math.round(60 * rangeMult);
         // 创建燃烧区 ID
         const zoneId = `burn_${bullet.node.uuid}_${Date.now()}`;
         const burnZones = (this as any)._burnZones || [];
@@ -679,7 +717,7 @@ export class ProjectileManager {
             id: zoneId,
             x: bullet.x,
             y: bullet.y,
-            radius: 60,
+            radius,
             lifetime: 3.0,
             tickTimer: 0,
             tickInterval: 1.0,
@@ -688,8 +726,16 @@ export class ProjectileManager {
             hitSet: new Set<number>(),
         });
         (this as any)._burnZones = burnZones;
-        // 火焰视觉效果: 绘制一个圆环
-        this.ctx.drawAreaPulse(bullet.x, bullet.y, 60, '#EF4444');
+        // 火焰视觉效果: Sprite帧动画爆炸
+        this.ctx.drawAreaPulse(bullet.x, bullet.y, radius, '#EF4444');
+    }
+
+    // ── 机制: webmaster_lifesteal (织网支配者) ──────────────────────
+    // 命中缓速
+    private onWebmasterHit(bullet: Bullet, enemy: Enemy): void {
+        if (enemy.boss || enemy.elite) return; // Boss 和精英不吃缓速
+        enemy.slowTimer = 0.8;
+        enemy.slowFactor = 0.6; // 移动速度 × 0.6
     }
 
     // ── Bullet creation / pooling ─────────────────────────────────────────
@@ -1648,6 +1694,7 @@ export class ProjectileManager {
                         // 反射方向
                         if (bullet.x < WORLD_LEFT - 180 || bullet.x > WORLD_RIGHT + 180) bullet.vx = -bullet.vx;
                         if (bullet.y < WORLD_BOTTOM - 180 || bullet.y > WORLD_TOP + 180) bullet.vy = -bullet.vy;
+                        bullet.node.angle = Math.atan2(bullet.vy, bullet.vx) * 180 / Math.PI;
                         // 弹回场内
                         bullet.x = Math.max(WORLD_LEFT, Math.min(WORLD_RIGHT, bullet.x));
                         bullet.y = Math.max(WORLD_BOTTOM, Math.min(WORLD_TOP, bullet.y));
@@ -1764,17 +1811,51 @@ export class ProjectileManager {
                             if (bullet.mechanic === 'icefire_judge') {
                                 const isDead = !this.ctx.enemyMgr.enemySet.has(enemy);
                                 if (isDead) {
+                                    const aoeMult = this.getAoeDamageMultiplier();
+                                    const rangeMult = this.getAoeRangeMultiplier();
+                                    const radius = Math.round(90 * rangeMult);
                                     // 对周围敌人造成爆炸伤害
                                     for (const other of this.ctx.enemyMgr.enemies) {
                                         if (!this.ctx.enemyMgr.enemySet.has(other)) continue;
                                         const oPos = this.ctx.enemyMgr.getEnemyPosition(other);
                                         const dx = oPos.x - bullet.x;
                                         const dy = oPos.y - bullet.y;
-                                        if (dx * dx + dy * dy <= 90 * 90) {
-                                            this.ctx.enemyMgr.damageEnemy(other, bullet.damage * 0.4, '#FB923C', '冰火爆炸 ');
+                                        if (dx * dx + dy * dy <= radius * radius) {
+                                            this.ctx.enemyMgr.damageEnemy(other, bullet.damage * 0.4 * aoeMult, '#FB923C', '冰火爆炸 ');
                                         }
                                     }
-                                    this.ctx.drawAreaPulse(bullet.x, bullet.y, 90, '#FB923C');
+                                    this.ctx.drawAreaPulse(bullet.x, bullet.y, radius, '#FB923C');
+                                }
+                            }
+                            // 机制: echo_chain (回声弓) — 击杀弹射到最近敌人，与穿透互斥
+                            if (bullet.mechanic === 'echo_chain') {
+                                const isDead = !this.ctx.enemyMgr.enemySet.has(enemy);
+                                if (isDead) {
+                                    const chainCount = (bullet.mechData?.chainCount || 0);
+                                    if (chainCount < 12) {
+                                        const nearest = this.ctx.enemyMgr.findNearestEnemy(bullet.x, bullet.y, 600);
+                                        if (nearest) {
+                                            const nPos = this.ctx.enemyMgr.getEnemyPosition(nearest);
+                                            const dx = nPos.x - bullet.x;
+                                            const dy = nPos.y - bullet.y;
+                                            const dist = Math.sqrt(dx * dx + dy * dy);
+                                            if (dist > 1) {
+                                                const speed = Math.max(Math.sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy), 500);
+                                                bullet.vx = dx / dist * speed;
+                                                bullet.vy = dy / dist * speed;
+                                                bullet.node.angle = Math.atan2(bullet.vy, bullet.vx) * 180 / Math.PI;
+                                                bullet.hitIds.clear();
+                                                if (!bullet.mechData) bullet.mechData = {};
+                                                bullet.mechData.chainCount = chainCount + 1;
+                                                bullet.pierce = 0;
+                                                this.ctx.drawAreaPulse(bullet.x, bullet.y, 50, '#2DD4BF');
+                                                this.ctx.spawnFloatingText('弹射 ' + (chainCount + 1), bullet.x, bullet.y - 20, '#2DD4BF', 16);
+                                                // 跳出命中循环，不减少穿透
+                                                bulletRemoved = true;
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             // 机制词条调度 (Phase 2)
@@ -1813,10 +1894,50 @@ export class ProjectileManager {
         const zones: any[] = (this as any)._burnZones;
         if (!zones || zones.length === 0) return;
         const toRemove: number[] = [];
+        const burnNodes: Node[] = (this as any)._burnZoneNodes || [];
+        
         for (let i = 0; i < zones.length; i++) {
             const zone = zones[i];
             zone.lifetime -= dt;
-            if (zone.lifetime <= 0) { toRemove.push(i); continue; }
+            
+            // 更新持续燃烧圈视觉
+            if (!zone.visualNode && this.ctx.worldNode) {
+                const node = new Node('BurnZone');
+                node.layer = Layers.Enum.UI_2D;
+                this.ctx.worldNode.addChild(node);
+                node.setPosition(zone.x, zone.y, 7);
+                const gfx = node.addComponent(Graphics);
+                zone.visualNode = node;
+                zone.visualGfx = gfx;
+                burnNodes.push(node);
+            }
+            
+            // 每帧更新燃烧圈透明度和大小
+            if (zone.visualNode && zone.visualGfx) {
+                const progress = 1 - (zone.lifetime / 3.0);
+                const alpha = Math.max(15, Math.min(80, zone.lifetime * 30)); // 生命值越低越淡
+                const pulseScale = 1 + Math.sin(this.ctx.perfNow() * 3) * 0.08; // 脉动效果
+                
+                zone.visualGfx.clear();
+                // 外圈
+                zone.visualGfx.fillColor = this.ctx.hex('#EF4444', alpha * 0.4);
+                zone.visualGfx.circle(0, 0, zone.radius * pulseScale);
+                zone.visualGfx.fill();
+                // 内圈
+                zone.visualGfx.strokeColor = this.ctx.hex('#F97316', Math.min(160, alpha * 2));
+                zone.visualGfx.lineWidth = 3;
+                zone.visualGfx.circle(0, 0, zone.radius * 0.7 * pulseScale);
+                zone.visualGfx.stroke();
+            }
+            
+            if (zone.lifetime <= 0) { 
+                if (zone.visualNode && zone.visualNode.isValid) {
+                    zone.visualNode.destroy();
+                }
+                toRemove.push(i); 
+                continue; 
+            }
+            
             zone.tickTimer += dt;
             if (zone.tickTimer >= zone.tickInterval) {
                 zone.tickTimer = 0;
@@ -1839,6 +1960,7 @@ export class ProjectileManager {
             zones.splice(idx, 1);
         }
         (this as any)._burnZones = zones;
+        (this as any)._burnZoneNodes = burnNodes.filter(n => n && n.isValid);
     }
 
     // ── Muzzle flash / hit spark ──────────────────────────────────────────

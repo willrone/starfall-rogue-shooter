@@ -26,6 +26,7 @@ export class PanelManager {
     hpBar: Graphics | null = null;
     xpBar: Graphics | null = null;
     shieldBar: Graphics | null = null;
+    levelLabel: Label | null = null;
 
     // Menu panel
     menuPanel: Node | null = null;
@@ -39,11 +40,15 @@ export class PanelManager {
     // Pause panel
     pausePanel: Node | null = null;
     pausePanelShadow: Node | null = null;
+    pauseResumeButton: ButtonView | null = null;
+    pauseHangarButton: ButtonView | null = null;
+    pauseSettingsButton: ButtonView | null = null;
 
     // Settings panel
     settingsPanel: Node | null = null;
     settingsPanelShadow: Node | null = null;
     settingsBodyLabel: Label | null = null;
+    settingsBackButton: ButtonView | null = null;
     bgmToggleButton: ButtonView | null = null;
     sfxToggleButton: ButtonView | null = null;
 
@@ -58,6 +63,7 @@ export class PanelManager {
     infoPanelShadow: Node | null = null;
     infoTitleLabel: Label | null = null;
     infoBodyLabel: Label | null = null;
+    infoBackButton: ButtonView | null = null;
 
     // Level panel
     levelPanel: Node | null = null;
@@ -86,6 +92,10 @@ export class PanelManager {
     lootButtons: ButtonView[] = [];
     equipmentButtons: ButtonView[] = [];
     equippedButtons: ButtonView[] = [];
+    hangarTabButtons: ButtonView[] = [];
+    loadoutWeaponButtons: ButtonView[] = [];
+    offhandLoadoutButton: ButtonView | null = null;
+    gearLoadoutButtons: ButtonView[] = [];
     switchWeaponButton: ButtonView | null = null;
     shopButton: ButtonView | null = null;
     extractButton: ButtonView | null = null;
@@ -104,6 +114,7 @@ export class PanelManager {
 
     // ── 副武器面板 ─────────────────────────────────────────────
     offhandPanel: Node | null = null;
+    offhandPanelShadow: Node | null = null;
     offhandTitleLabel: Label | null = null;
     offhandListButtons: ButtonView[] = [];
     offhandDetailLabel: Label | null = null;
@@ -111,6 +122,15 @@ export class PanelManager {
     offhandUpgradeButton: ButtonView | null = null;
     offhandSynthesizeButton: ButtonView | null = null;
     offhandBackButton: ButtonView | null = null;
+    offhandResourceLabel: Label | null = null;
+
+    // ── 传说熔炉面板 ───────────────────────────────────────────
+    forgePanel: Node | null = null;
+    forgePanelShadow: Node | null = null;
+    forgeTitleLabel: Label | null = null;
+    forgeResourceLabel: Label | null = null;
+    forgeRecipeButtons: ButtonView[] = [];
+    forgeBackButton: ButtonView | null = null;
 
     // ── 复活遮罩（独立于 revivePanel 按钮面板） ─────────────
     revivePanelShadow: Node | null = null;
@@ -130,6 +150,9 @@ export class PanelManager {
         if (this.hangarPanel) this.hangarPanel.active = false;
         if (this.hangarPanelShadow) this.hangarPanelShadow.active = false;
         if (this.offhandPanel) this.offhandPanel.active = false;
+        if (this.offhandPanelShadow) this.offhandPanelShadow.active = false;
+        if (this.forgePanel) this.forgePanel.active = false;
+        if (this.forgePanelShadow) this.forgePanelShadow.active = false;
         if (this.revivePanel) this.revivePanel.active = false;
         if (this.revivePanelShadow) this.revivePanelShadow.active = false;
     }
@@ -247,6 +270,10 @@ export class PanelManager {
 
     setHangarControlsActive(active: boolean): void {
         this.equippedButtons.forEach((button) => button.node.active = active);
+        this.loadoutWeaponButtons.forEach((button) => button.node.active = active);
+        if (this.offhandLoadoutButton) this.offhandLoadoutButton.node.active = active;
+        this.gearLoadoutButtons.forEach((button) => button.node.active = active);
+        this.hangarTabButtons.forEach((button) => button.node.active = active);
         this.equipmentButtons.forEach((button) => button.node.active = active);
         if (this.prevEquipmentButton) this.prevEquipmentButton.node.active = active;
         if (this.nextEquipmentButton) this.nextEquipmentButton.node.active = active;

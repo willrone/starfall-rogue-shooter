@@ -27,7 +27,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 1 回旋利刃 ──────────────────────────────────────────────
     {
         id: 'orbit-blade', name: '回旋利刃', category: 'orbit',
-        mechanic: 'orbit_blade', color: '#F97316', iconKey: 'wpn_assault_rifle',
+        mechanic: 'orbit_blade', color: '#F97316', iconKey: 'wpn_storm_rifle',
         baseStats: { damage: 12, damagePct: 0, cooldown: 0, duration: 0, radius: 180, count: 3, speed: 1.0, pierce: 1, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ count: 4, speed: 1.2, damage: 16 }),
@@ -74,7 +74,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 4 影刃猎手 ──────────────────────────────────────────────
     {
         id: 'summon-blade', name: '影刃猎手', category: 'summon',
-        mechanic: 'summon_blade', color: '#B5179E', iconKey: 'wpn_railgun',
+        mechanic: 'summon_blade', color: '#B5179E', iconKey: 'wpn_rail_cannon',
         baseStats: { damage: 18, damagePct: 0, cooldown: 2.0, duration: 0, radius: 400, count: 3, speed: 400, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ cooldown: 1.6, count: 4, damage: 22 }),
@@ -88,7 +88,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 5 静电蜂群 ──────────────────────────────────────────────
     {
         id: 'summon-bee', name: '静电蜂群', category: 'summon',
-        mechanic: 'summon_bee', color: '#FACC15', iconKey: 'wpn_chain_lightning',
+        mechanic: 'summon_bee', color: '#FACC15', iconKey: 'wpn_meteor_launcher',
         baseStats: { damage: 8, damagePct: 0, cooldown: 1.0, duration: 0, radius: 300, count: 4, speed: 200, pierce: 2, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ damage: 11, count: 5, pierce: 3 }),
@@ -135,7 +135,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 8 冰霜地雷 ──────────────────────────────────────────────
     {
         id: 'control-mine', name: '冰霜地雷', category: 'control',
-        mechanic: 'control_mine', color: '#A7F3D0', iconKey: 'wpn_ice_gun',
+        mechanic: 'control_mine', color: '#A7F3D0', iconKey: 'wpn_frost_beam',
         baseStats: { damage: 0, damagePct: 0, cooldown: 3.0, duration: 1.5, radius: 60, count: 3, speed: 0, pierce: 0, slowFactor: 0.40, slowDuration: 1.5, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ count: 4, cooldown: 2.5, radius: 70, slowFactor: 0.45 }),
