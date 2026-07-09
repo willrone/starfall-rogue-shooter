@@ -112,10 +112,14 @@ cycleFee = (endlessCycle-1) × 10
 **道具全是纯正面效果**，无负面。22 件 blueprint × 5 个 tier = 110 个道具实例。
 按 category 分布：攻击(12) / 防御/生存/机动(10) / 资源/成长/其他(5) / 混合(5)。
 
-### 2.6 XP 曲线（`combatState.ts`）
+### 2.6 XP 曲线（`pickupManager.ts gainXp`）
 
 ```
-xpToNext = 65 × 1.24^level + 22 + level × 5
+初始 xpToNext = 65
+每升一级: xpToNext = Math.round(xpToNext × 1.24 + 22 + level × 5)
+  Lv.1→2: round(65×1.24 + 22 + 2×5) = 113
+  Lv.2→3: round(113×1.24 + 22 + 3×5) = 177
+  非指数增长，递归叠乘
 XP 掉率 = 56%，掉落量 = monsterXP × 2.6
 ```
 
@@ -126,7 +130,7 @@ XP 掉率 = 56%，掉落量 = monsterXP × 2.6
 | 怪 | HP | 伤害 | 速度 | 权重 | 首次出 |
 |---|---:|---:|---:|---:|---:|
 | 碎壳虫 mite | 18 | 4 | 126 | 7.0 | 波 1+ |
-| 疾行体 runner | 24 | 6 | 196 | 4.0 | 波 10+ |
+| 疾行体 runner | 24 | 6 | 196 | 4.0 | **波 3+ (slot 3-4 解锁)** |
 | 重甲块 brute | 88 | 10 | 78 | 3.0 | 波 18+ |
 | 裂变囊 splitter | 54 | 7 | 112 | 3.0 | 波 28+ |
 | 磁暴卫士 warden | 160 | 15 | 92 | 2.0 | 波 46+ |
@@ -146,10 +150,28 @@ interval = max(hardFloor, 1.62 - slot×0.035 - earlyRelief)
 
 **每批数量**：波 1-2: 2 / 波 3-4: 3 / 波 5-6: 4 / 波 7+: 5 / 波 11+: min(60, 5×1.05^(wave-10))
 
-**场上限**：波 1: 40 → 波 8+: 240 / Boss波: 60 / 波 11+: max(240, 200×1.05^(wave-10)), min(600)
+**场上限**（正式Cocos环境）：波 1: 40 / 波 2: 55 / 波 3: 75 / 波 4: 95 / 波 5: 130 / 波 6: 170 / 波 7: 200 / 波 8+: 240 / Boss波: 60 / 波 11+: max(240, 200×1.05^(wave-10)), min(600)
+各波上限额外 + battleIndex×2。
 
-**HP 缩放** = 1 + wave×0.028 + combatTime×0.0018
-**伤害缩放** = 1 + wave×0.012 + combatTime×0.0009
+**HP 缩放**（enemyManager.ts createEnemy 完整公式）：
+```
+scale = (1 + battleIndex×0.06 + (endlessCycle-1)×0.28
+         + (waveIndex×0.028 + combatTime×0.0018) × ENEMY_HP_PROGRESS_SCALE × earlyProgressFactor)
+         × endlessScale
+ENEMY_HP_PROGRESS_SCALE = 2.5 (enemyConstants.ts)
+earlyProgressFactor: 波 1-2=0.3 / 波 3-4=0.4 / 波 5-6=0.55 / 波 7-8=0.7 / 波 9-10=0.85 / 波 11+=1
+endlessScale: 波<11 =1, 波≥11 = 1.05^(wave-10)
+最终HP = Math.round(spec.hp × scale × eliteScale)
+```
+**伤害缩放**（完整公式）：
+```
+enemyDamage = spec.damage × (boss?1.85 : elite?1.42 : 1.05)
+             × (1 + (endlessCycle-1)×0.16
+                + (waveIndex×0.012 + combatTime×0.0009) × ENEMY_DAMAGE_PROGRESS_SCALE × earlyProgressFactor)
+             × earlyDamageFactor × endlessScale
+ENEMY_DAMAGE_PROGRESS_SCALE = 1.3
+earlyDamageFactor: 波 1-2=0.82 / 波 3-4=0.75 / 波 5-6=0.85 / 波 7-8=0.95 / 波 9+=1
+```
 
 **无尽缩放**：波 ≥ 11 时，scale = 1.05^(wave-10)，作用于 HP/伤害/间隔/上限。
 
@@ -367,11 +389,15 @@ tests/                               # 纯 TS 测试
 
 | 问题 | 状态 | 位置 |
 |---|---|---|
+| echo_chain 弹射搜索范围 400→600, 链数 8→12 | ✅ 已改（待验证波次） | projectileManager.ts |
+| 回声弓 damage 38→48 | ✅ 已改（待试玩验证） | weaponCatalog.ts |
+| `findNearestEnemy` 签名不匹配（波 10+ 怪找玩家坐标非击杀点） | ✅ 已修复 | enemyManager.ts |
+| 弹射/反弹后缺 `node.angle` 更新 | ✅ 已修复 | projectileManager.ts |
 | 裂变囊分裂旧残留代码（spawn mite） | ✅ 已修复（删重复） | enemyManager.ts L1827 |
 | 波 10 Boss 需要走位风筝，Bot 打不过但真人可过 | 已确认 | enemyManager.ts spawnBoss() |
 | boss_gate/boss_clear 武器偏弱 | 待调 | 需 CDP 重新跑 1200s 验证 |
 | 瘟疫 DoT 每层 1%/秒（代码），文档写 0.4%/层 | 需确认是否过强 | projectileManager.ts onPoisonHit / enemyManager.ts dot |
 | T3 脉冲 damage 系数 ×4.44（代码），文档写 ×1.04 | 文档已更正，代码值正确 | weaponCatalog.ts T3 pulse |
 
-*最后更新：2026-07-01*
+*最后更新：2026-07-07*
 *本文件是 AI 修改代码前的必读文件。违反以上规则的修改不会被接受。*
