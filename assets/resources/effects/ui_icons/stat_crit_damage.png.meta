@@ -42,11 +42,11 @@
         "trimThreshold": 1,
         "rotated": false,
         "offsetX": 0,
-        "offsetY": 0,
-        "trimX": 0,
-        "trimY": 0,
-        "width": 128,
-        "height": 128,
+        "offsetY": -3,
+        "trimX": 18,
+        "trimY": 29,
+        "width": 92,
+        "height": 76,
         "rawWidth": 128,
         "rawHeight": 128,
         "borderTop": 0,
@@ -60,17 +60,17 @@
         "meshType": 0,
         "vertices": {
           "rawPosition": [
-            -64,
-            -64,
+            -46,
+            -38,
             0,
-            64,
-            -64,
+            46,
+            -38,
             0,
-            -64,
-            64,
+            -46,
+            38,
             0,
-            64,
-            64,
+            46,
+            38,
             0
           ],
           "indexes": [
@@ -82,33 +82,33 @@
             3
           ],
           "uv": [
-            0,
-            128,
-            128,
-            128,
-            0,
-            0,
-            128,
-            0
+            18,
+            99,
+            110,
+            99,
+            18,
+            23,
+            110,
+            23
           ],
           "nuv": [
-            0,
-            0,
-            1,
-            0,
-            0,
-            1,
-            1,
-            1
+            0.140625,
+            0.1796875,
+            0.859375,
+            0.1796875,
+            0.140625,
+            0.7734375,
+            0.859375,
+            0.7734375
           ],
           "minPos": [
-            -64,
-            -64,
+            -46,
+            -38,
             0
           ],
           "maxPos": [
-            64,
-            64,
+            46,
+            38,
             0
           ]
         },
@@ -128,7 +128,7 @@
   "userData": {
     "type": "sprite-frame",
     "fixAlphaTransparencyArtifacts": false,
-    "hasAlpha": false,
+    "hasAlpha": true,
     "redirect": "93cbe35d-80bb-43be-a4e5-7ed1329d6c38@6c48a"
   }
 }

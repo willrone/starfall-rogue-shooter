@@ -1,0 +1,11 @@
+{
+  "__version__": "1.0.1",
+  "general": {
+    "start_scene": "7a62e49e-945d-49e8-896b-52446b570cc8"
+  },
+  "preview": {
+    "current": {
+      "platform": "browser"
+    }
+  }
+}

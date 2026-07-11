@@ -41,12 +41,12 @@
       "userData": {
         "trimThreshold": 1,
         "rotated": false,
-        "offsetX": 0,
+        "offsetX": 3.5,
         "offsetY": 0,
-        "trimX": 0,
-        "trimY": 0,
-        "width": 128,
-        "height": 128,
+        "trimX": 21,
+        "trimY": 18,
+        "width": 93,
+        "height": 92,
         "rawWidth": 128,
         "rawHeight": 128,
         "borderTop": 0,
@@ -60,17 +60,17 @@
         "meshType": 0,
         "vertices": {
           "rawPosition": [
-            -64,
-            -64,
+            -46.5,
+            -46,
             0,
-            64,
-            -64,
+            46.5,
+            -46,
             0,
-            -64,
-            64,
+            -46.5,
+            46,
             0,
-            64,
-            64,
+            46.5,
+            46,
             0
           ],
           "indexes": [
@@ -82,33 +82,33 @@
             3
           ],
           "uv": [
-            0,
-            128,
-            128,
-            128,
-            0,
-            0,
-            128,
-            0
+            21,
+            110,
+            114,
+            110,
+            21,
+            18,
+            114,
+            18
           ],
           "nuv": [
-            0,
-            0,
-            1,
-            0,
-            0,
-            1,
-            1,
-            1
+            0.1640625,
+            0.140625,
+            0.890625,
+            0.140625,
+            0.1640625,
+            0.859375,
+            0.890625,
+            0.859375
           ],
           "minPos": [
-            -64,
-            -64,
+            -46.5,
+            -46,
             0
           ],
           "maxPos": [
-            64,
-            64,
+            46.5,
+            46,
             0
           ]
         },
@@ -128,7 +128,7 @@
   "userData": {
     "type": "sprite-frame",
     "fixAlphaTransparencyArtifacts": false,
-    "hasAlpha": false,
+    "hasAlpha": true,
     "redirect": "1ff90784-3f2b-40a8-a280-ee37e0ca3e4d@6c48a"
   }
 }

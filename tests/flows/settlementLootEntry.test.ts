@@ -3,24 +3,47 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
-const rogueShooterGame = readFileSync(join(root, 'assets/scripts/RogueShooterGame.ts'), 'utf8');
+const source = readFileSync(join(root, 'assets/scripts/RogueShooterGame.ts'), 'utf8');
 
+// Settlement flow gating
 assert(
-    rogueShooterGame.includes('const settlementFlow = getSettlementFlow(reason, this.cs.bossKills)')
-        && rogueShooterGame.includes("if (settlementFlow.phase === 'loot')"),
+    source.includes('const settlementFlow = getSettlementFlow(reason, this.cs.bossKills)')
+        && source.includes("settlementFlow.phase === 'loot'"),
     'settlement flow should gate Boss loot from bossKills via getSettlementFlow',
 );
+
+// Uses SettlementPopup
 assert(
-    rogueShooterGame.includes('private openSettlementLoot(reason: BattleEndReason): void'),
-    'settlement flow should have an explicit loot entry method',
+    source.includes('SettlementPopup'),
+    'settlement should use SettlementPopup component',
 );
 assert(
-    rogueShooterGame.includes("this.cs.phase = 'loot'"),
-    'settlement loot entry should switch to loot phase so chooseLoot can run',
+    source.includes('uiMgr.showDynamicPopupAsync'),
+    'settlement should use UIManager dynamic popup',
 );
+
+// Creates loot choices via pickup manager
 assert(
-    rogueShooterGame.includes('this.pickupMgr.pendingLootChoices = this.pickupMgr.createLootChoices()'),
-    'settlement loot entry should populate pendingLootChoices before showing loot buttons',
+    source.includes('this.pickupMgr.createLootChoices()'),
+    'settlement should create loot choices via pickupManager.createLootChoices()',
+);
+
+// Apply uses choice.apply() closure
+assert(
+    source.includes('choice.apply()'),
+    'settlement should apply loot choice via closure',
+);
+
+// After settlement, transitions to hangar
+assert(
+    source.includes("this.cs.phase = 'hangar'"),
+    'settlement should transition to hangar phase after popup closes',
+);
+
+// SettlementPopup data object includes all needed fields
+assert(
+    source.includes('lootChoices:') && source.includes('onLootChosen:'),
+    'settlement popup should receive lootChoices and callback',
 );
 
 console.log('settlementLootEntry tests passed.');

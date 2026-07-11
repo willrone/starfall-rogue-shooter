@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "notes": "Candidate art spec only; not wired into runtime yet. Coordinates are pixels in the processed right-facing weapon sprite.",
+  "weaponVisuals": {
+    "storm-rifle": {
+      "displayName": "过热冲锋枪",
+      "conceptName": "overheat_smg",
+      "sprite": "overheat_smg_handheld_yuz_v1_84x56.png",
+      "icon": "overheat_smg_icon_yuz_v1_128x128.png",
+      "facing": "right",
+      "gripPivot": {
+        "x": 29,
+        "y": 34
+      },
+      "muzzle": {
+        "x": 78,
+        "y": 24
+      },
+      "bodyAnchor": {
+        "x": 41,
+        "y": 44
+      },
+      "runtimeScale": 1.0,
+      "frontLayerSinThreshold": 0.35,
+      "overheatGlowRegion": {
+        "x": 24,
+        "y": 16,
+        "w": 18,
+        "h": 14
+      },
+      "recommendedSize": {
+        "w": 84,
+        "h": 56
+      }
+    }
+  },
+  "characterVisuals": {
+    "baseIdleNoWeapon": "player_body_no_weapon_idle_yuz_v1_480x80.png",
+    "anchorPolicy": "Use aim angle for torso/weapon layer; use movement vector for legs. If no target, aim follows movement or last aim.",
+    "zPolicy": "Weapon behind body when aiming upward/back; weapon in front when aiming downward/front."
+  }
+}

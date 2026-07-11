@@ -9,6 +9,19 @@ import {
 } from 'cc';
 import type { ButtonView } from './panels';
 
+/**
+ * Cocos render components (Label / Sprite / Graphics / BlockInputEvents) may
+ * auto-require UITransform. Always create or reuse it BEFORE adding a render
+ * component; adding another UITransform afterwards leaves the first one at the
+ * default 100×100 and causes clipping / wrong touch bounds.
+ */
+export function ensureUITransform(node: Node, width?: number, height?: number): UITransform {
+    let transform = node.getComponent(UITransform);
+    if (!transform) transform = node.addComponent(UITransform);
+    if (width !== undefined && height !== undefined) transform.setContentSize(width, height);
+    return transform;
+}
+
 export function makeLabel(
     parent: Node, name: string, text: string,
     x: number, y: number, w: number, h: number,
@@ -25,15 +38,18 @@ export function makeLabel(
     } else {
         place(node, x + w / 2, y + h / 2);
     }
+    ensureUITransform(node, w, h);
     const label = node.addComponent(Label);
     label.string = text;
     label.fontSize = fontSize;
-    label.lineHeight = h;
+    // UI coordinates in this project are authored from the top-left of a
+    // panel. A line height tied to the full box height makes multi-line labels
+    // shrink to unreadable text, especially in the hangar grid.
+    label.lineHeight = Math.max(fontSize + 3, Math.min(h, Math.round(fontSize * 1.35)));
     label.horizontalAlign = hAlign;
+    label.verticalAlign = Label.VerticalAlign.CENTER;
     label.overflow = Label.Overflow.SHRINK;
     label.color = new Color().fromHEX(color);
-    const ut = node.addComponent(UITransform);
-    ut.setContentSize(w, h);
     return label;
 }
 
@@ -83,6 +99,7 @@ export function makeButton(
     const label = makeLabel(node, `${name}_Label`, '', 0, 0, w, h, fs, '#F8FAFC', Label.HorizontalAlign.CENTER, true);
     const view: ButtonView = { node, gfx, label, width: w, height: h, color, disabledColor, disabled: false };
     drawButton(gfx, w, h, color, false);
+    updateButtonSkin(view, false);
 
     node.on(Node.EventType.TOUCH_START, () => {
         if (!view.disabled) tween(node).to(0.08, { scale: new Vec3(0.97, 0.97, 1) }, { easing: 'sineOut' }).start();
@@ -123,7 +140,26 @@ export function place(node: Node, designX: number, designY: number): void {
 }
 
 export function placeLocal(node: Node, localX: number, localY: number, pw: number, ph: number): void {
-    node.setPosition(localX - pw / 2, localY - ph / 2, node.position.z);
+    // Local layout values are expressed from a panel's top-left, while Cocos
+    // UI positions use a centered coordinate system with positive Y upward.
+    node.setPosition(localX - pw / 2, ph / 2 - localY, node.position.z);
+}
+
+function getButtonSkin(color: string): string {
+    const normalized = color.toUpperCase();
+    if (normalized === '#43AA8B' || normalized === '#22C55E' || normalized === '#34D399') return 'ui/buttons/btn_green/spriteFrame';
+    if (normalized === '#F8961E' || normalized === '#F59E0B' || normalized === '#F97316' || normalized === '#F9C74F') return 'ui/buttons/btn_alloy/spriteFrame';
+    if (normalized === '#B5179E' || normalized === '#8B5CF6') return 'ui/buttons/btn_purple/spriteFrame';
+    if (normalized === '#EF4444' || normalized === '#F43F5E') return 'ui/buttons/btn_red/spriteFrame';
+    if (normalized === '#64748B' || normalized === '#475569' || normalized === '#1E293B') return 'ui/buttons/btn_disabled/spriteFrame';
+    if (normalized === '#22D3EE' || normalized === '#4CC9F0' || normalized === '#38BDF8') return 'ui/buttons/btn_cyan/spriteFrame';
+    return 'ui/buttons/btn_blue/spriteFrame';
+}
+
+export function updateButtonSkin(view: ButtonView, disabled: boolean): void {
+    const path = disabled ? 'ui/buttons/btn_disabled/spriteFrame' : getButtonSkin(view.color);
+    const skin = applySlicedSprite(view.node, path);
+    skin.color = hex('#FFFFFF', disabled ? 120 : 176);
 }
 
 export function hex(hexStr: string, alpha = 255): Color {
@@ -141,12 +177,59 @@ export function distanceSq(ax: number, ay: number, bx: number, by: number): numb
     return dx * dx + dy * dy;
 }
 
-const _sfCache: Record<string, SpriteFrame | null> = {};
+const _sfCache: Record<string, SpriteFrame> = {};
 export function loadSprite(path: string): SpriteFrame | null {
-    if (path in _sfCache) return _sfCache[path];
+    if (_sfCache[path]) return _sfCache[path];
     const sf = resources.get(path, SpriteFrame);
-    _sfCache[path] = sf || null;
-    return sf;
+    if (sf) _sfCache[path] = sf;
+    // Never cache a miss: startup builds UI before resources.load callbacks
+    // finish, and a permanent null cache would keep every panel textureless.
+    return sf || null;
+}
+
+/** Attach a SLICED Sprite now or as soon as the resource finishes loading. */
+export function applySlicedSprite(node: Node, path: string): Sprite {
+    const hostTransform = ensureUITransform(node);
+    const needsSkinChild = !!node.getComponent(Graphics) || !!node.getComponent(Label);
+    let spriteNode = node;
+    if (needsSkinChild) {
+        spriteNode = node.getChildByName('__sliced_skin') || new Node('__sliced_skin');
+        spriteNode.layer = node.layer;
+        ensureUITransform(spriteNode, hostTransform.contentSize.width, hostTransform.contentSize.height);
+        if (!spriteNode.parent) {
+            node.addChild(spriteNode);
+            spriteNode.setSiblingIndex(0);
+        }
+        spriteNode.setPosition(0, 0, 0);
+    }
+
+    let sprite = spriteNode.getComponent(Sprite);
+    if (!sprite) sprite = spriteNode.addComponent(Sprite);
+
+    const apply = (frame: SpriteFrame) => {
+        if (!node.isValid || !spriteNode.isValid) return;
+        const currentHost = ensureUITransform(node);
+        const intendedWidth = currentHost.contentSize.width;
+        const intendedHeight = currentHost.contentSize.height;
+        const transform = ensureUITransform(spriteNode, intendedWidth, intendedHeight);
+        const target = spriteNode.getComponent(Sprite) || spriteNode.addComponent(Sprite);
+        target.type = Sprite.Type.SLICED;
+        target.sizeMode = Sprite.SizeMode.CUSTOM;
+        target.spriteFrame = frame;
+        transform.setContentSize(intendedWidth, intendedHeight);
+    };
+
+    const loaded = loadSprite(path);
+    if (loaded) {
+        apply(loaded);
+    } else {
+        resources.load(path, SpriteFrame, (error, frame) => {
+            if (error || !frame) return;
+            _sfCache[path] = frame;
+            apply(frame);
+        });
+    }
+    return sprite;
 }
 
 /**
@@ -172,12 +255,6 @@ export function makePanelBg(
     gfx.fill();
 
     // Sprite 九宫格纹理贴面
-    const sf = loadSprite(skinPath);
-    if (sf) {
-        const sp = node.addComponent(Sprite);
-        sp.spriteFrame = sf;
-        sp.type = Sprite.Type.SLICED;
-        sp.sizeMode = Sprite.SizeMode.CUSTOM;
-    }
+    applySlicedSprite(node, skinPath);
     return node;
 }

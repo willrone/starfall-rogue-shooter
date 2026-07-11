@@ -5,16 +5,14 @@
  * 背景/按钮使用九宫格 Sprite，替代旧版 Graphics 绘制。
  */
 import {
-    _decorator, Node, Label, Color, Graphics, UITransform, Sprite,
+    _decorator, Node, Label, Color, Graphics,
 } from 'cc';
 import { PopupBase } from './PopupBase';
-import { loadSprite } from './UIHelpers';
+import { applySlicedSprite, ensureUITransform } from './UIHelpers';
 const { ccclass, property } = _decorator;
 
 const PANEL_W = 624;
 const PANEL_H = 350;
-const PANEL_X = -PANEL_W / 2;
-const PANEL_Y = -PANEL_H / 2;
 
 interface RevivePopupOptions {
     bossKills: number;
@@ -34,34 +32,31 @@ export class RevivePopup extends PopupBase {
 
     setup(opts: RevivePopupOptions): void {
         this.opts = opts;
+        ensureUITransform(this.node, PANEL_W, PANEL_H);
         this.buildUI(opts);
     }
 
     private _skin(node: Node, skinPath: string): void {
-        const sf = loadSprite(skinPath);
-        if (sf) { const sp = node.addComponent(Sprite); sp.spriteFrame = sf; sp.type = Sprite.Type.SLICED; sp.sizeMode = Sprite.SizeMode.CUSTOM; }
+        applySlicedSprite(node, skinPath);
     }
 
     private buildUI(opts: RevivePopupOptions): void {
         const w = PANEL_W;
         const h = PANEL_H;
-        const x = -w / 2;
-        const y = -h / 2;
-
         // 阴影
         const shadow = this._makeRect(w + 12, h + 12, '#00000040');
-        shadow.setPosition(x - 6, y - 6, -10);
+        shadow.setPosition(0, -6, -10);
         this.node.addChild(shadow);
 
         // 面板背景 (Graphics 底色 + Sprite.SLICED 九宫格)
         const bg = this._makeRect(w, h, '#1E293B');
         this._skin(bg, 'ui/panels/panel_bg_dark/spriteFrame');
-        bg.setPosition(x, y, 0);
+        bg.setPosition(0, 0, 0);
         this.node.addChild(bg);
 
         // 边框 (Graphics outline)
         const border = this._makeRect(w, h, '#334155', true);
-        border.setPosition(x, y, 0);
+        border.setPosition(0, 0, 1);
         this.node.addChild(border);
 
         // 标题
@@ -101,52 +96,54 @@ export class RevivePopup extends PopupBase {
 
     private _makeRect(w: number, h: number, color: string, stroke = false): Node {
         const node = new Node();
+        ensureUITransform(node, w, h);
         const g = node.addComponent(Graphics);
         const c = new Color().fromHEX(color);
         if (stroke) {
-            g.strokeColor = c; g.lineWidth = 1; g.roundRect(0, 0, w, h, 8); g.stroke();
+            g.strokeColor = c; g.lineWidth = 1; g.roundRect(-w / 2, -h / 2, w, h, 8); g.stroke();
         } else {
-            g.fillColor = c; g.roundRect(0, 0, w, h, 8); g.fill();
+            g.fillColor = c; g.roundRect(-w / 2, -h / 2, w, h, 8); g.fill();
         }
         return node;
     }
 
     private _label(text: string, fontSize: number, color: string, w: number, h: number, hAlign: number): Node {
         const node = new Node();
+        ensureUITransform(node, w, h);
         const label = node.addComponent(Label);
         label.string = text;
         label.fontSize = fontSize;
-        label.lineHeight = h;
+        label.lineHeight = Math.max(fontSize + 3, Math.min(h, Math.round(fontSize * 1.35)));
         label.horizontalAlign = hAlign;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
         label.overflow = 2;
         label.color = new Color().fromHEX(color);
-        const ut = node.addComponent(UITransform);
-        ut.setContentSize(w, h);
         this.node.addChild(node);
         return node;
     }
 
     private _btn(text: string, cx: number, cy: number, w: number, h: number, color: string, skinPath: string, onClick: () => void): Node {
         const node = new Node();
-        const x = cx - w / 2;
-        const y = cy - h / 2;
+        ensureUITransform(node, w, h);
         const g = node.addComponent(Graphics);
         const c = new Color().fromHEX(color);
         g.fillColor = c;
-        g.roundRect(0, 0, w, h, 6);
+        g.roundRect(-w / 2, -h / 2, w, h, 10);
         g.fill();
         this._skin(node, skinPath);
 
-        const label = node.addComponent(Label);
+        const labelNode = new Node('Label');
+        ensureUITransform(labelNode, w - 20, h);
+        const label = labelNode.addComponent(Label);
         label.string = text;
         label.fontSize = 20;
-        label.lineHeight = h;
+        label.lineHeight = 24;
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
         label.overflow = Label.Overflow.SHRINK;
         label.color = new Color().fromHEX('#FFFFFF');
+        node.addChild(labelNode);
 
-        const ut = node.addComponent(UITransform);
-        ut.setContentSize(w + 20, h + 20);
         node.setPosition(cx, cy, 0);
         node.on(Node.EventType.TOUCH_END, () => {
             if (!this.watchDisabled || node === this.declineBtn) onClick();
@@ -156,7 +153,7 @@ export class RevivePopup extends PopupBase {
     }
 
     private _setBtnLabel(btn: Node, text: string): void {
-        const label = btn.getComponent(Label);
+        const label = btn.getChildByName('Label')?.getComponent(Label);
         if (label) label.string = text;
     }
 }

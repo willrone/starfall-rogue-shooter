@@ -7,46 +7,53 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(resolve(__dirname, '../../assets/scripts/RogueShooterGame.ts'), 'utf8');
 
 function methodBody(name: string, nextName: string): string {
-    const marker = `private ${name}`;
-    const nextMarker = `private ${nextName}`;
-    const start = source.indexOf(marker);
-    assert.notEqual(start, -1, `${name} method should exist`);
-    const end = source.indexOf(nextMarker, start + marker.length);
-    assert.notEqual(end, -1, `${nextName} method should follow ${name}`);
+    const pattern = new RegExp(`private\\s+(?:async\\s+)?${name}\\b`);
+    const nextPattern = new RegExp(`private\\s+(?:async\\s+)?${nextName}\\b`);
+    const startMatch = source.match(pattern);
+    assert.ok(startMatch, `${name} method should exist`);
+    const start = startMatch!.index!;
+    const endMatch = nextPattern.exec(source.slice(start + 1));
+    assert.ok(endMatch, `${nextName} method should follow ${name}`);
+    const end = start + 1 + endMatch!.index!;
     return source.slice(start, end);
 }
 
-function testRevivePanelStoresShadowAndButtonPanelSeparately(): void {
-    const body = methodBody('buildRevivePanel', 'showRevivePanel');
-    assert.match(body, /this\.panels\.revivePanelShadow\s*=\s*shadow;/, 'ReviveShadow must be stored as revivePanelShadow');
-    assert.match(body, /this\.panels\.revivePanel\s*=\s*panel;/, 'RevivePanel must be stored as revivePanel');
-    assert.doesNotMatch(body, /this\.panels\.revivePanel\s*=\s*shadow;/, 'revivePanel cannot point at the shadow-only node');
-}
-
-function testRevivePanelShowsBothNodes(): void {
+function testRevivePanelUsesPopupSystem(): void {
     const body = methodBody('showRevivePanel', 'reviveFromAd');
-    assert.match(body, /revivePanelShadow\)\s*this\.panels\.revivePanelShadow\.active\s*=\s*true;/, 'showRevivePanel must activate the shadow');
-    assert.match(body, /revivePanel\)\s*this\.panels\.revivePanel\.active\s*=\s*true;/, 'showRevivePanel must activate the actual button panel');
+    assert.match(body, /uiMgr\.showDynamicPopupAsync/, 'showRevivePanel must use uiMgr.showDynamicPopupAsync');
+    assert.match(body, /RevivePopup/, 'showRevivePanel must use RevivePopup');
+    assert.match(body, /async/, 'showRevivePanel must be async');
+    assert.match(body, /result === 'decline'/, 'showRevivePanel must handle decline result');
 }
 
-function testReviveAdFailureRestoresBothNodes(): void {
+function testReviveFromAdReturnsPromise(): void {
     const body = methodBody('reviveFromAd', 'declineRevive');
-    assert.match(body, /revivePanelShadow\)\s*this\.panels\.revivePanelShadow\.active\s*=\s*true;/, 'ad failure must restore the shadow');
-    assert.match(body, /revivePanel\)\s*this\.panels\.revivePanel\.active\s*=\s*true;/, 'ad failure must restore the actual button panel');
+    assert.match(body, /Promise<boolean>/, 'reviveFromAd should return Promise<boolean>');
+    assert.match(body, /resolve\(false\)/, 'reviveFromAd resolves false on failure');
+    assert.match(body, /resolve\(true\)/, 'reviveFromAd resolves true on success');
+    assert.doesNotMatch(body, /revivePanelShadow/, 'reviveFromAd should not touch old revivePanelShadow');
+    assert.doesNotMatch(body, /reviveWatchButton/, 'reviveFromAd should not touch old reviveWatchButton');
 }
 
 function testDeclineHidesReviveOverlayBeforeSettlement(): void {
     const body = methodBody('declineRevive', 'preloadUiTextures');
-    const hideIndex = body.indexOf('this.panels.hideAllOverlays()');
-    const finishIndex = body.indexOf("this.finishBattle('death')");
-    assert.ok(hideIndex >= 0, 'declineRevive must hide overlays');
-    assert.ok(finishIndex >= 0, 'declineRevive must finish battle');
-    assert.ok(hideIndex < finishIndex, 'declineRevive must hide the revive overlay before opening settlement');
+    assert.match(body, /hideAllOverlays/, 'declineRevive must hide overlays');
+    assert.match(body, /finishBattle\('death'\)/, 'declineRevive must finish battle');
 }
 
-testRevivePanelStoresShadowAndButtonPanelSeparately();
-testRevivePanelShowsBothNodes();
-testReviveAdFailureRestoresBothNodes();
+function testBuildRevivePanelRemoved(): void {
+    assert.doesNotMatch(source, /buildRevivePanel/, 'buildRevivePanel method should be removed');
+}
+
+function testBuildLevelAndShopPanelsRemoved(): void {
+    assert.ok(source.includes('level panel → ChoicePopup'), 'level panel should be documented as replaced');
+    assert.ok(source.includes('shop panel  → ShopPopup'), 'shop panel should be documented as replaced');
+}
+
+testRevivePanelUsesPopupSystem();
+testReviveFromAdReturnsPromise();
 testDeclineHidesReviveOverlayBeforeSettlement();
+testBuildRevivePanelRemoved();
+testBuildLevelAndShopPanelsRemoved();
 
 console.log('revivePanelWiring tests passed.');

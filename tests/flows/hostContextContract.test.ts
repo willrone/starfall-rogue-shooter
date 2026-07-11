@@ -6,6 +6,7 @@ const root = process.cwd();
 const rogueShooterGame = readFileSync(join(root, 'assets/scripts/RogueShooterGame.ts'), 'utf8');
 const pickupManager = readFileSync(join(root, 'assets/scripts/pickup/pickupManager.ts'), 'utf8');
 const enemyManager = readFileSync(join(root, 'assets/scripts/enemy/enemyManager.ts'), 'utf8');
+const equipmentManager = readFileSync(join(root, 'assets/scripts/shop/equipmentManager.ts'), 'utf8');
 
 function assertHostWrapper(interfaceSource: string, interfaceName: string, member: string, wrapperPattern: string | RegExp): void {
     assert(
@@ -32,7 +33,21 @@ function testEnemyHostContextWrappers() {
     assertHostWrapper(enemyManager, 'EnemyHostContext', 'getDroneZapOrigin(): { x: number; y: number };', /private getDroneZapOrigin\(\)/);
 }
 
+function testShopHostContextWrappers() {
+    assertHostWrapper(equipmentManager, 'ShopHostContext', 'clamp(value: number, min: number, max: number): number;', 'private clamp(value: number, min: number, max: number): number');
+    assertHostWrapper(equipmentManager, 'ShopHostContext', 'drawButton(button: ButtonView, disabled: boolean): void;', 'private drawButton(button: ButtonView, disabled: boolean): void');
+    assertHostWrapper(equipmentManager, 'ShopHostContext', 'hex(hex: string, alpha?: number): Color;', /private hex\(color: string, alpha\?: number\): Color/);
+}
+
+function testSharedVisualHostContextWrappers() {
+    assertHostWrapper(enemyManager, 'EnemyHostContext', 'hex(color: string, alpha?: number): Color;', /private hex\(color: string, alpha\?: number\): Color/);
+    assertHostWrapper(pickupManager, 'PickupHostContext', 'drawButton(button: ButtonView, disabled: boolean): void;', 'private drawButton(button: ButtonView, disabled: boolean): void');
+    assertHostWrapper(pickupManager, 'PickupHostContext', 'hex(color: string, alpha?: number): Color;', /private hex\(color: string, alpha\?: number\): Color/);
+}
+
 testPickupHostContextWrappers();
 testEnemyHostContextWrappers();
+testShopHostContextWrappers();
+testSharedVisualHostContextWrappers();
 
 console.log('hostContextContract tests passed.');

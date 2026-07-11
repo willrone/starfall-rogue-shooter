@@ -204,7 +204,6 @@ def select_weapon_runtime(cdp: CDPClient, weapon_id: str) -> None:
 (function(){{
   var g = window.__starfallGame;
   if (!g || !g.shop) return 'missing game/shop';
-  window.__starfallBotMode = true;
   var s = g.shop;
   if (s.ownedEquipment && s.ownedEquipment.add) s.ownedEquipment.add({json.dumps(weapon_id)});
   s.equippedEquipment = [{json.dumps(weapon_id)}, 'tactical-visor', 'phase-armor', 'kinetic-boots', 'magnet-coil'];
@@ -262,6 +261,10 @@ def start_real_run(cdp: CDPClient, weapon_id: str, seed: int) -> None:
       if (g.enemyMgr.enemySet) g.enemyMgr.enemySet.clear();
     }
     if (g.pickupMgr && g.pickupMgr.pickups) g.pickupMgr.pickups.length = 0;
+    // Enable bot AI only for this CDP run. We use a per-game flag instead of
+    // polluting globalThis, so the Cocos Creator preview and other tabs are
+    // never affected by CDP test state.
+    g.__cdpBotMode = true;
     g.cs.phase = 'hangar';
     g.beginBattle(false);
     return 'ok';

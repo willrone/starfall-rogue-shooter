@@ -1,0 +1,16 @@
+{
+  "style": "Neon crash-site survivor, dark readable silhouettes, teal/orange/magenta accents, clean top-down 2D game art, thick outline, compact Douyin vertical mobile readability.",
+  "sprite_sheet_base": "Game-ready 2D top-down sprite sheet for Starfall Survivor, a vertical mobile sci-fi survivor roguelike. Style: neon crash-site survivor, dark body mass, thick clean outline, flat-to-soft cel shading, high readability at 64-96px, teal/orange/magenta mechanic highlights, no gritty realism. Exactly {frames} frames in one horizontal row, same character size and camera angle in every cell, transparent background if supported; otherwise perfectly flat #00ff00 chroma-key background with no shadows. No text, labels, borders, watermark, or UI.",
+  "recommended_assets": {
+    "player": "Regenerate player idle/run strips first; current player is too monochrome and low-presence compared with enemies.",
+    "boss": "Unify bosses with darker silhouettes and clearer readable attack-color cores.",
+    "weapons": "Replace warm toy-like weapon icons with this darker neon salvage set for a less casual tone.",
+    "ui": "Move UI toward compact dark glass panels with cyan/orange semantic highlights."
+  },
+  "example_prompts": {
+    "player_idle": "Human survivor in compact dark graphite tactical armor, cyan visor, amber alloy shoulder plates, teal backpack reactor, holding one fixed sci-fi rifle, heroic but small-screen readable.",
+    "enemy_mite": "Small beetle-machine mite, dark bronze chitin, six sharp legs, amber eye slit, low crawling silhouette.",
+    "enemy_runner": "Fast quadruped bio-mechanical runner, navy streamlined body, cyan spine stripe, red tracking eye, long aggressive legs.",
+    "storm_rifle_icon": "Compact salvaged storm rifle icon, cream worn metal body, teal rail, orange grip, strong black outline, transparent background."
+  }
+}

@@ -21,8 +21,8 @@ export const MAX_CHESTS_PER_WAVE = 2;
 export const ENEMY_HIT_FLASH_DURATION = 0.14;
 
 // ── Difficulty scaling ────────────────────────────────────────────
-export const ENEMY_HP_PROGRESS_SCALE = 2.5;
-export const ENEMY_DAMAGE_PROGRESS_SCALE = 1.3;
+export const ENEMY_HP_PROGRESS_SCALE = 1.8;
+export const ENEMY_DAMAGE_PROGRESS_SCALE = 1.0;
 /** 11 波后的无尽模式：每波指数增长 5% */
 export const ENDLESS_SCALE_RATE = 0.05;
 export const ENDLESS_START_WAVE = 11;

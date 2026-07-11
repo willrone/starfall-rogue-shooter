@@ -40,19 +40,19 @@ export const WEAPON_FAMILIES: WeaponFamily[] = [
     { id: 'quantum-loom', name: '量子织机', color: '#0EA5E9', damage: 30, fireRate: 1.09, pierce: 0.6, drone: 0.4, bulletSpeed: 1.0, attackRange: 740, mechanic: 'split', desc: '子弹飞行 0.5 秒后分裂成 2 颗, 范围自动扩散。' },
 
     // ── Boss Gate (4 把) ─── 目标 DPS 65-94 ─────
-    { id: 'ion-lance', name: '离子长枪', color: '#34D399', damage: 85, fireRate: 0.77, pierce: 1.5, drone: 0.0, bulletSpeed: 1.8, attackRange: 960, mechanic: 'straight', desc: '笔直弹道, 远距离命中不衰减。' },
+    { id: 'ion-lance', name: '离子长枪', color: '#34D399', damage: 100, fireRate: 0.77, pierce: 1.5, drone: 0.0, bulletSpeed: 2.5, attackRange: 960, mechanic: 'straight', desc: '笔直弹道, 远距离命中不衰减。' },
     { id: 'thorn-crossbow', name: '荆棘连弩', color: '#D97706', damage: 60, fireRate: 1.5, pierce: 0.6, drone: 0.0, bulletSpeed: 1.6, attackRange: 800, mechanic: 'ricochet', desc: '子弹撞墙反弹 2 次, 死角反杀。' },
-    { id: 'rail-cannon', name: '磁轨炮', color: '#818CF8', damage: 95, fireRate: 0.7, pierce: 3.5, drone: 0.0, bulletSpeed: 2.5, attackRange: 940, mechanic: 'pierce_bonus', desc: '高速穿透, 每次穿透下次伤害 +8% (可叠加)。' },
-    { id: 'void-needle', name: '虚空针', color: '#9333EA', damage: 60, fireRate: 1.05, pierce: 1.2, drone: 0.0, bulletSpeed: 2.0, attackRange: 880, mechanic: 'crit_master', desc: '高暴击率+暴击伤害, 适合打 Boss。' },
+    { id: 'rail-cannon', name: '磁轨炮', color: '#818CF8', damage: 95, fireRate: 0.85, pierce: 3.5, drone: 0.0, bulletSpeed: 5.0, attackRange: 940, mechanic: 'pierce_bonus', desc: '超高速磁轨贯穿, 每次穿透下次伤害 +8% (可叠加)。最高弹速, 极远射程。' },
+    { id: 'void-needle', name: '虚空针', color: '#9333EA', damage: 58, fireRate: 1.05, pierce: 1.2, drone: 0.0, bulletSpeed: 2.0, attackRange: 880, mechanic: 'crit_master', desc: '高暴击率+暴击伤害, 适合打 Boss。' },
 
     // ── Boss Clear (3 把) ─── 目标 DPS 60-95 ─────
-    { id: 'meteor-launcher', name: '流星发射器', color: '#EF4444', damage: 170, fireRate: 0.55, pierce: 1.0, drone: 0.0, bulletSpeed: 1.3, attackRange: 680, mechanic: 'aoe_burn', desc: '命中留下 3 秒燃烧区 (每秒 12% 攻击力的持续伤害)。' },
-    { id: 'orbital-drone', name: '轨道无人机', color: '#A3E635', damage: 92, fireRate: 0.65, pierce: 0.0, drone: 3.2, bulletSpeed: 0.0, attackRange: 560, mechanic: 'drone_charge', desc: '击杀充能, 满 100% 召唤 1 个爆炸无人机。' },
+    { id: 'meteor-launcher', name: '流星发射器', color: '#EF4444', damage: 200, fireRate: 0.70, pierce: 1.0, drone: 0.0, bulletSpeed: 1.3, attackRange: 680, mechanic: 'aoe_burn', desc: '重型火炮。命中留下 3 秒燃烧区 (每秒 12% 攻击力的持续伤害)。' },
+    { id: 'orbital-drone', name: '轨道无人机', color: '#A3E635', damage: 160, fireRate: 0.85, pierce: 0.0, drone: 3.2, bulletSpeed: 0.0, attackRange: 560, mechanic: 'drone_charge', desc: '击杀充能, 满 100% 召唤 1 个爆炸无人机。' },
     { id: 'gravity-hammer', name: '重力锤', color: '#64748B', damage: 280, fireRate: 0.30, pierce: 1.0, drone: 0.5, bulletSpeed: 0.7, attackRange: 600, mechanic: 'knockback', desc: '极慢射重击, 命中强力击退, 暴击 2 倍击退。' },
 
     // ── Legendary (3 把) ─── 目标 DPS 83-95 ────────
-    { id: 'void-tearer', name: '虚空撕裂者', color: '#06B6D4', damage: 44, fireRate: 1.8, pierce: 3.2, drone: 0.0, bulletSpeed: 1.8, attackRange: 720, mechanic: 'void_tearer', desc: '高速穿透型。子弹附带虚空撕裂，每穿透一层减目标防御，高射速清群。' },
-    { id: 'icefire-judge', name: '冰狱审判', color: '#8B5CF6', damage: 95, fireRate: 0.95, pierce: 1.2, drone: 0.0, bulletSpeed: 1.5, attackRange: 760, mechanic: 'icefire_judge', desc: '冰火交替爆发。冰弹减速 1 秒，火弹触发小范围爆炸，冰冻后燃烧伤害翻倍。' },
+    { id: 'void-tearer', name: '虚空撕裂者', color: '#06B6D4', damage: 72, fireRate: 1.8, pierce: 3.2, drone: 0.0, bulletSpeed: 1.8, attackRange: 720, mechanic: 'void_tearer', desc: '高速穿透型。子弹附带虚空撕裂，每穿透一层减目标防御，高射速清群。' },
+    { id: 'icefire-judge', name: '冰狱审判', color: '#8B5CF6', damage: 100, fireRate: 1.15, pierce: 1.2, drone: 0.0, bulletSpeed: 1.5, attackRange: 760, mechanic: 'icefire_judge', desc: '冰火交替爆发。冰弹减速 1 秒，火弹触发小范围爆炸，冰冻后燃烧伤害翻倍。' },
     { id: 'webmaster', name: '织网支配者', color: '#FACC15', damage: 56, fireRate: 1.6, pierce: 0.5, drone: 1.2, bulletSpeed: 1.2, attackRange: 640, mechanic: 'webmaster_lifesteal', desc: '召唤续航型。子弹缓速，击杀小怪/蜘蛛时回复生命值，召唤无人机助战。' },
 ];
 

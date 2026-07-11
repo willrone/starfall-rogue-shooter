@@ -1319,11 +1319,10 @@ export class EnemyManager {
         // Early waves are where new players learn the loop.  Keep pressure lower
         // so starter weapons can actually kill, collect XP, and reach upgrades
         // before the real squeeze begins around waves 5-6.
-        // 爽感模式: 减少 earlyRelief 让前期怪潮更密，玩家有更多东西可杀
         const earlyRelief = this.cs.endlessCycle === 1
-            ? this.cs.waveIndex <= 1 ? 0.6
-                : this.cs.waveIndex === 2 ? 0.5
-                    : this.cs.waveIndex === 3 ? 0.4
+            ? this.cs.waveIndex <= 1 ? 0.15
+                : this.cs.waveIndex === 2 ? 0.15
+                    : this.cs.waveIndex === 3 ? 0.25
                         : this.cs.waveIndex === 4 ? 0.3
                             : this.cs.waveIndex === 5 ? 0.2
                                 : this.cs.waveIndex === 6 ? 0.15
@@ -1332,7 +1331,7 @@ export class EnemyManager {
                                             : this.cs.waveIndex === 9 ? 0.10
                                                 : 0
             : 0;
-        return Math.max(this.cs.waveIndex <= 1 ? 1.5 : this.cs.waveIndex === 2 ? 1.4 : this.cs.waveIndex === 3 ? 1.3 : this.cs.waveIndex === 4 ? 1.2 : this.cs.waveIndex === 5 ? 1.1 : this.cs.waveIndex === 6 ? 1.0 : this.cs.waveIndex <= 8 ? 0.95 : 0.95, base + earlyRelief);
+        return Math.max(this.cs.waveIndex <= 1 ? 1.0 : this.cs.waveIndex === 2 ? 0.95 : this.cs.waveIndex === 3 ? 1.1 : this.cs.waveIndex === 4 ? 1.1 : this.cs.waveIndex === 5 ? 1.1 : this.cs.waveIndex === 6 ? 1.0 : this.cs.waveIndex <= 8 ? 0.95 : 0.95, base + earlyRelief);
     }
     public getWaveSpawnBatchCount() {
         const slot = this.getWaveSlot();
@@ -1345,7 +1344,7 @@ export class EnemyManager {
         }
         if (this.cs.endlessCycle === 1 && this.cs.waveIndex <= 8) {
             const earlyBase = this.cs.waveIndex <= 2
-                ? 2
+                ? 3
                 : this.cs.waveIndex <= 4
                     ? 3
                     : this.cs.waveIndex <= 6

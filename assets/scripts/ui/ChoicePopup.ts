@@ -1,19 +1,19 @@
 /**
- * ChoicePopup — 通用选择弹窗 (Sprite 九宫格版)
+ * ChoicePopup — 通用选择弹窗
  * 
  * 用于：升级 3 选 1、宝箱道具选择、丢弃选择。
  * 支持：图标显示、刷新按钮（合金/广告）。
- * 背景/按钮使用九宫格 Sprite，替代旧版 Graphics 绘制。
  */
 import {
-    _decorator, Node, Label, Color, Sprite, SpriteFrame, UITransform, resources, v3, Size,
+    _decorator, Node, Label, Color, Graphics, Sprite, SpriteFrame, UITransform,
 } from 'cc';
 import { PopupBase } from './PopupBase';
+import { applySlicedSprite, ensureUITransform } from './UIHelpers';
 const { ccclass } = _decorator;
 
 const W = 648;
-const H = 520;
-const PAD = 36;
+const H = 640;
+const PAD = 32;
 
 export interface ChoiceDisplayItem {
     id: string;
@@ -36,15 +36,6 @@ export interface ChoiceResult {
     index?: number;
 }
 
-/** UI 主题色：按钮和面板按武器 tier 映射 */
-const BTN_SKINS: Record<string, string> = {
-    'novice': 'ui/buttons/btn_cyan',
-    'standard': 'ui/buttons/btn_blue',
-    'boss_gate': 'ui/buttons/btn_purple',
-    'boss_clear': 'ui/buttons/btn_gold',
-    'legendary': 'ui/buttons/btn_red',
-};
-
 @ccclass('ChoicePopup')
 export class ChoicePopup extends PopupBase {
     private opts: ChoiceOptions | null = null;
@@ -56,6 +47,8 @@ export class ChoicePopup extends PopupBase {
 
     setup(opts: ChoiceOptions): void {
         this.opts = opts;
+        ensureUITransform(this.node, W, H);
+        this.node.setPosition(0, 0, 0);
         this._buildUI(opts);
     }
 
@@ -80,42 +73,26 @@ export class ChoicePopup extends PopupBase {
         if (this.refreshLabel) this.refreshLabel.string = text;
     }
 
-    private _loadSprite(path: string): SpriteFrame | null {
-        const sf = resources.get(path, SpriteFrame);
-        return sf || null;
-    }
-
     private _buildUI(opts: ChoiceOptions): void {
         const centerX = 0;
 
-        // ── Panel background (九宫格 Sprite) ──
-        const panelSkin = this._loadSprite('ui/panels/panel_bg_dark/spriteFrame');
-        if (panelSkin) {
-            const bgNode = new Node('PanelBg');
-            const sp = bgNode.addComponent(Sprite);
-            sp.spriteFrame = panelSkin;
-            sp.sizeMode = Sprite.SizeMode.CUSTOM;
-            const ut = bgNode.addComponent(UITransform);
-            ut.setContentSize(W + 20, H + 20);
-            bgNode.setPosition(centerX, 0, -1);
-            this.node.addChild(bgNode);
-        }
+        this._createPanelBg();
 
-        let cy = H / 2 - 30;
+        let cy = H / 2 - 48;
 
         // ── Title ──
         this._label(opts.title, 24, '#F1F5F9', W, 40, Label.HorizontalAlign.CENTER)
             .setPosition(0, cy, 0);
-        cy -= 48;
+        cy -= 50;
 
         // ── Hint ──
         const hintNode = this._label(opts.hint, 16, '#94A3B8', W - PAD * 2, 36, Label.HorizontalAlign.CENTER);
         this.hintLabel = hintNode.getComponent(Label)!;
         hintNode.setPosition(centerX, cy, 0);
-        cy -= 48;
+        cy -= 68;
 
-        // ── 3 Choice buttons (Sprite 九宫格按钮) ──
-        const btnH = 90;
+        // ── 3 Choice buttons ──
+        const btnH = 108;
         const btnGap = 14;
         for (let i = 0; i < 3; i++) {
             const btnNode = this._createChoiceBtn(i, opts.choices[i], btnH);
@@ -123,7 +100,7 @@ export class ChoicePopup extends PopupBase {
             this.choiceNodes.push(btnNode);
             cy -= (btnH + btnGap);
         }
-        cy -= 16;
+        cy -= 12;
 
         // ── Refresh button ──
         if (opts.refreshCost > 0) {
@@ -134,49 +111,80 @@ export class ChoicePopup extends PopupBase {
         }
     }
 
+    private _createPanelBg(): void {
+        const bgNode = new Node('PanelBg');
+        ensureUITransform(bgNode, W, H);
+        const gfx = bgNode.addComponent(Graphics);
+        gfx.fillColor = new Color(0, 0, 0, 140);
+        gfx.roundRect(-W / 2 + 8, -H / 2 + 10, W - 16, H - 16, 20);
+        gfx.fill();
+        gfx.fillColor = new Color().fromHEX('#020617');
+        gfx.roundRect(-W / 2, -H / 2, W, H, 18);
+        gfx.fill();
+        gfx.fillColor = new Color(15, 23, 42, 246);
+        gfx.roundRect(-W / 2 + 4, -H / 2 + 4, W - 8, H - 8, 16);
+        gfx.fill();
+        gfx.strokeColor = new Color().fromHEX('#38BDF8');
+        gfx.lineWidth = 2;
+        gfx.roundRect(-W / 2 + 7, -H / 2 + 7, W - 14, H - 14, 14);
+        gfx.stroke();
+        applySlicedSprite(bgNode, 'ui/panels/panel_bg_dark/spriteFrame');
+        bgNode.setPosition(0, 0, -1);
+        this.node.addChild(bgNode);
+    }
+
     private _createChoiceBtn(index: number, choice: ChoiceDisplayItem | undefined, h: number): Node {
         const node = new Node('Choice_' + index);
         const w = W - PAD * 2;
 
-        // Button skin
-        const btnPath = choice ? (BTN_SKINS[choice.id] || 'ui/buttons/btn_blue') : 'ui/buttons/btn_disabled';
-        const sf = this._loadSprite(btnPath + '/spriteFrame');
-        if (sf) {
-            const sp = node.addComponent(Sprite);
-            sp.spriteFrame = sf;
-            sp.sizeMode = Sprite.SizeMode.CUSTOM;
-            const ut = node.addComponent(UITransform);
-            ut.setContentSize(w, h);
-            // Scale sprite to fit
-            const s = node.addComponent(UITransform);
-            s.setContentSize(w, h);
-        } else {
-            // Fallback: simple colored square
-            const g = node.addComponent(Sprite);
-            // empty fallback
-            const ut = node.addComponent(UITransform);
-            ut.setContentSize(w + 20, h + 20);
+        // Touch listener (Cocos 3.8.8 touch dispatch requires UITransform on the node
+        // to be sized BEFORE the click target; we add UT first, then optional sprite/label)
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(w, h);
+
+        const gfx = node.addComponent(Graphics);
+        this._drawChoiceButton(gfx, w, h, choice?.color || '#334155', !choice);
+        const skin = applySlicedSprite(node, 'ui/buttons/btn_neon/spriteFrame');
+        skin.color = new Color(255, 255, 255, 132);
+
+        const icon = choice ? this.opts?.getIcon?.(choice.id) || null : null;
+        const textCenter = icon ? 40 : 0;
+        const textWidth = icon ? w - 142 : w - 32;
+
+        if (icon) {
+            const iconNode = new Node('Icon');
+            ensureUITransform(iconNode, 58, 58);
+            const sprite = iconNode.addComponent(Sprite);
+            sprite.spriteFrame = icon;
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            iconNode.setPosition(-w / 2 + 56, 0, 1);
+            node.addChild(iconNode);
         }
 
         // Title label
-        const titleLbl = node.addComponent(Label);
+        const titleNode = new Node('Title');
+        ensureUITransform(titleNode, textWidth, 36);
+        const titleLbl = titleNode.addComponent(Label);
         titleLbl.fontSize = 20;
-        titleLbl.lineHeight = 26;
-        titleLbl.horizontalAlign = Label.HorizontalAlign.CENTER;
-        titleLbl.verticalAlign = Label.VerticalAlign.TOP;
+        titleLbl.lineHeight = 28;
+        titleLbl.horizontalAlign = icon ? Label.HorizontalAlign.LEFT : Label.HorizontalAlign.CENTER;
+        titleLbl.verticalAlign = Label.VerticalAlign.CENTER;
         titleLbl.overflow = Label.Overflow.SHRINK;
         titleLbl.color = new Color().fromHEX('#FFFFFF');
+        titleNode.setPosition(textCenter, 21, 1);
+        node.addChild(titleNode);
 
         // Desc label (child)
         const descNode = new Node('Desc');
+        ensureUITransform(descNode, textWidth, 38);
         const descLbl = descNode.addComponent(Label);
         descLbl.fontSize = 14;
         descLbl.lineHeight = 18;
-        descLbl.horizontalAlign = Label.HorizontalAlign.CENTER;
-        descLbl.verticalAlign = Label.VerticalAlign.BOTTOM;
+        descLbl.horizontalAlign = icon ? Label.HorizontalAlign.LEFT : Label.HorizontalAlign.CENTER;
+        descLbl.verticalAlign = Label.VerticalAlign.CENTER;
         descLbl.overflow = Label.Overflow.SHRINK;
         descLbl.color = new Color().fromHEX('#CBD5E1');
-        descNode.setPosition(0, -h / 2 + 20, 0);
+        descNode.setPosition(textCenter, -23, 1);
         node.addChild(descNode);
 
         if (choice) {
@@ -198,14 +206,18 @@ export class ChoicePopup extends PopupBase {
     }
 
     private _updateChoiceBtn(node: Node, choice: ChoiceDisplayItem, index: number): void {
-        const sp = node.getComponent(Sprite);
-        if (sp) {
-            const btnPath = BTN_SKINS[choice.id] || 'ui/buttons/btn_blue';
-            const sf = this._loadSprite(btnPath + '/spriteFrame');
-            if (sf) sp.spriteFrame = sf;
+        const gfx = node.getComponent(Graphics);
+        if (gfx) this._drawChoiceButton(gfx, W - PAD * 2, 108, choice.color, false);
+        const iconNode = node.getChildByName('Icon');
+        const icon = this.opts?.getIcon?.(choice.id) || null;
+        if (iconNode) {
+            const sprite = iconNode.getComponent(Sprite);
+            if (sprite) sprite.spriteFrame = icon;
+            iconNode.active = !!icon;
         }
-        const labels = node.getComponents(Label);
-        if (labels.length > 0) labels[0].string = choice.title;
+        const titleNode = node.getChildByName('Title');
+        const titleLbl = titleNode?.getComponent(Label);
+        if (titleLbl) titleLbl.string = choice.title;
         const descNode = node.getChildByName('Desc');
         if (descNode) {
             const dl = descNode.getComponent(Label);
@@ -218,22 +230,23 @@ export class ChoicePopup extends PopupBase {
         const btnH = 44;
         const node = new Node('RefreshBtn');
 
-        const sf = this._loadSprite('ui/buttons/btn_alloy/spriteFrame');
-        if (sf) {
-            const sp = node.addComponent(Sprite);
-            sp.spriteFrame = sf;
-            sp.sizeMode = Sprite.SizeMode.CUSTOM;
-            const ut = node.addComponent(UITransform);
-            ut.setContentSize(btnW, btnH);
-        }
+        node.addComponent(UITransform).setContentSize(btnW, btnH);
+        const gfx = node.addComponent(Graphics);
+        this._drawChoiceButton(gfx, btnW, btnH, '#F8961E', false, 10);
+        const skin = applySlicedSprite(node, 'ui/buttons/btn_alloy/spriteFrame');
+        skin.color = new Color(255, 255, 255, 156);
 
-        const label = node.addComponent(Label);
+        const labelNode = new Node('Label');
+        ensureUITransform(labelNode, btnW - 20, btnH);
+        const label = labelNode.addComponent(Label);
         label.string = `刷新 -${cost}合金`;
         label.fontSize = 18;
+        label.lineHeight = 24;
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
         label.verticalAlign = Label.VerticalAlign.CENTER;
         label.overflow = Label.Overflow.SHRINK;
         label.color = new Color().fromHEX('#FFFFFF');
+        node.addChild(labelNode);
         this.refreshLabel = label;
 
         node.on(Node.EventType.TOUCH_END, async () => {
@@ -256,17 +269,41 @@ export class ChoicePopup extends PopupBase {
         return node;
     }
 
+    private _drawChoiceButton(gfx: Graphics, w: number, h: number, color: string, disabled: boolean, radius = 14): void {
+        gfx.clear();
+        const main = new Color().fromHEX(disabled ? '#334155' : color);
+        const bg = new Color().fromHEX(disabled ? '#111827' : '#0F172A');
+        gfx.fillColor = new Color(0, 0, 0, disabled ? 70 : 120);
+        gfx.roundRect(-w / 2 + 4, -h / 2 + 5, w - 8, h - 8, radius + 2);
+        gfx.fill();
+        gfx.fillColor = bg;
+        gfx.roundRect(-w / 2, -h / 2, w, h, radius);
+        gfx.fill();
+        main.a = disabled ? 60 : 110;
+        gfx.fillColor = main;
+        gfx.roundRect(-w / 2 + 3, -h / 2 + 3, w - 6, h - 6, Math.max(6, radius - 2));
+        gfx.fill();
+        gfx.fillColor = new Color(255, 255, 255, disabled ? 10 : 20);
+        gfx.roundRect(-w / 2 + 8, -h / 2 + 6, w - 16, Math.max(6, h * 0.18), Math.max(4, radius - 6));
+        gfx.fill();
+        main.a = disabled ? 95 : 220;
+        gfx.strokeColor = main;
+        gfx.lineWidth = 1.6;
+        gfx.roundRect(-w / 2 + 2, -h / 2 + 2, w - 4, h - 4, Math.max(5, radius - 2));
+        gfx.stroke();
+    }
+
     private _label(text: string, fontSize: number, color: string, w: number, h: number, hAlign: number): Node {
         const node = new Node();
+        ensureUITransform(node, w, h);
         const label = node.addComponent(Label);
         label.string = text;
         label.fontSize = fontSize;
-        label.lineHeight = h;
+        label.lineHeight = Math.max(fontSize + 3, Math.min(h, Math.round(fontSize * 1.35)));
+        label.verticalAlign = Label.VerticalAlign.CENTER;
         label.horizontalAlign = hAlign;
         label.overflow = Label.Overflow.SHRINK;
         label.color = new Color().fromHEX(color);
-        const ut = node.addComponent(UITransform);
-        ut.setContentSize(w, h);
         this.node.addChild(node);
         return node;
     }

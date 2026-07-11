@@ -156,11 +156,13 @@ export class UIManager {
 
         // 半透明遮罩
         const darkBg = PopupBase.createDarkBg(180);
+        this._setUiLayerDeep(darkBg);
         container.addChild(darkBg);
 
         // 弹窗内容
         const popupNode = await this._genUIAsync(conf, POPUP_PATH, data);
         const scpt = popupNode.getComponent(conf.script || conf.name) as PopupBase;
+        this._setUiLayerDeep(popupNode);
         popupNode.parent = container;
 
         if (scpt && scpt.showAnim) {
@@ -170,7 +172,10 @@ export class UIManager {
         // 返回 Promise，关闭时 resolve
         return new Promise<any>((resolve) => {
             if (scpt) {
-                scpt.onDestroyCall = resolve;
+                scpt.onDestroyCall = (value?: any) => {
+                    this._destroyPopupContainer(container);
+                    resolve(value);
+                };
             }
         });
     }
@@ -247,6 +252,7 @@ export class UIManager {
 
         // 半透明遮罩
         const darkBg = PopupBase.createDarkBg(180);
+        this._setUiLayerDeep(darkBg);
         container.addChild(darkBg);
 
         // 弹窗内容
@@ -255,6 +261,7 @@ export class UIManager {
         if (scpt) {
             scpt.recvData = data;
         }
+        this._setUiLayerDeep(popupNode);
         popupNode.parent = container;
 
         if (scpt && scpt.showAnim) {
@@ -263,7 +270,10 @@ export class UIManager {
 
         return new Promise<any>((resolve) => {
             if (scpt) {
-                scpt.onDestroyCall = resolve;
+                scpt.onDestroyCall = (value?: any) => {
+                    this._destroyPopupContainer(container);
+                    resolve(value);
+                };
             } else {
                 // 没有脚本则容器销毁时 resolve
                 const checkDestroy = () => {
@@ -273,6 +283,19 @@ export class UIManager {
                 checkDestroy();
             }
         });
+    }
+
+    private _setUiLayerDeep(node: Node): void {
+        node.layer = Layers.Enum.UI_2D;
+        for (const child of node.children) {
+            this._setUiLayerDeep(child);
+        }
+    }
+
+    private _destroyPopupContainer(container: Node): void {
+        if (container.isValid) {
+            container.destroy();
+        }
     }
 
     // ── 通用 ──────────────────────────────────────────────────

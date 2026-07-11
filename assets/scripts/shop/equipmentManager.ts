@@ -39,6 +39,7 @@ import type {
 import { AdManager } from '../ad/AdManager';
 import { uiMgr } from '../ui/UIManager';
 import { ShopPopup } from '../ui/ShopPopup';
+import { replaceMainWeaponInLoadout } from './equipmentLoadout';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const SHOP_REFRESH_COST = 22;
@@ -46,8 +47,8 @@ const SHOP_ITEM_COUNT = 6;
 const CHEST_REFRESH_COST = 34;
 const SAVE_KEY = 'starfall-rogue-shooter-progress-v1';
 const HANGAR_EQUIPMENT_SLOTS = 9;
-const EQUIPPED_SLOT_COUNT = 6;
-const MAX_EQUIPPED_WEAPONS = 2;
+const EQUIPPED_SLOT_COUNT = 5;
+const MAX_EQUIPPED_WEAPONS = 1;
 const MAX_EQUIPPED_GEAR = 4;
 
 const GEAR_SLOT_ORDER: GearSlot[] = ['hat', 'armor', 'boots', 'accessory'];
@@ -745,39 +746,36 @@ export class EquipmentManager {
         const equipped = this.isEquipped(equipment.id);
         const level = this.getEquipmentLevel(equipment.id);
         const detailLevel = owned ? level : 1;
-        const activeWeapon = this.getActiveWeapon();
         const equippedState = equipment.kind === 'weapon'
-            ? activeWeapon?.id === equipment.id ? '  当前武器' : equipped ? '  出战中-可切换' : ''
-            : equipped ? '  出战中-被动生效' : '';
+            ? equipped ? ' · 已装备' : ''
+            : equipped ? ' · 被动生效' : '';
         const state = `${owned ? `Lv.${level}/${equipment.maxLevel}` : '未获得'}${equippedState}`;
         const slotName = equipment.kind === 'weapon' ? '武器' : equipment.gearSlot ? GEAR_SLOT_LABELS[equipment.gearSlot] : '装备';
         const rarity = equipment.rarity || '普通';
-        const lines = [`${equipment.name}  [${rarity}] ${slotName}  ${state}`, equipment.desc];
+        const lines = [`${equipment.name} · ${rarity} ${slotName} · ${state}`, equipment.desc];
         if (equipment.weaponStats) {
-            if (equipment.attackStyle) {
-                lines.push(`攻击风格：${getWeaponStyleName(equipment.attackStyle)}${equipment.kind === 'weapon' && equipped ? '；战斗中只有当前武器属性生效' : ''}`);
-            }
-            // 正确计算伤害: weaponStat × 每级成长
             const dmg = equipment.weaponStats.damage * (1 + (detailLevel - 1) * 0.12);
-            // 正确计算 RPS: fireRate × 每级成长 + attackSpeed × 0.45 → 再对 1/间隔 取倒数
             const fireRate = equipment.weaponStats.fireRate * (1 + (detailLevel - 1) * 0.10);
             const rps = Math.min(Math.max(0.15, fireRate), 14.28);
-            // 正确计算穿透: pierce × 每级成长
             const pier = equipment.weaponStats.pierce * (1 + (detailLevel - 1) * 0.10);
-            lines.push(`伤害 ${this.formatStat(dmg)}  |  射速 ${this.formatStat(rps)}次/秒  |  穿透 ${this.formatStat(pier)}`);
-            lines.push(`弹速倍率 ${this.formatStat(equipment.weaponStats.bulletSpeed * (1 + (detailLevel - 1) * 0.08))}`);
+            const bulletSpeed = equipment.weaponStats.bulletSpeed * (1 + (detailLevel - 1) * 0.08);
+            lines.push(`伤害 ${this.formatStat(dmg)} · 射速 ${this.formatStat(rps)}/秒 · 穿透 ${this.formatStat(pier)} · 弹速 ${this.formatStat(bulletSpeed)}`);
         } else {
             lines.push(this.formatGearStats(equipment, detailLevel));
         }
+
+        let actionText = '';
         if (!owned) {
             const blueprint = this.formatBlueprintProgress(equipment);
-            if (blueprint) lines.push(blueprint);
             const reason = this.getEquipmentUnlockReason(equipment);
-            if (reason) lines.push(`解锁条件：${reason}`);
-            lines.push(`合成消耗：${this.formatCost(this.getCraftCost(equipment))}`);
+            actionText = `${blueprint ? `${blueprint} · ` : ''}${reason ? `${reason} · ` : ''}合成 ${this.formatCost(this.getCraftCost(equipment))}`;
         } else if (level < equipment.maxLevel) {
-            lines.push(`升级消耗：${this.formatCost(this.getUpgradeCost(equipment))}`);
+            actionText = `升级 ${this.formatCost(this.getUpgradeCost(equipment))}`;
+        } else {
+            actionText = '已达到最高等级';
         }
+        const styleText = equipment.attackStyle ? `${getWeaponStyleName(equipment.attackStyle)} · ` : '';
+        lines.push(`${styleText}${actionText}`);
         return lines.join('\n');
     }
 
@@ -1012,6 +1010,14 @@ export class EquipmentManager {
                 cost: item ? this.getShopItemCost(item) : 0,
                 canAfford: item ? this.getSpendableAlloy() >= this.getShopItemCost(item) : false,
             })),
+            getState: () => ({
+                spendableAlloy: this.getSpendableAlloy(),
+                slots: this.shopOffers.map((item: LevelUpgrade | null) => ({
+                    item,
+                    cost: item ? this.getShopItemCost(item) : 0,
+                    canAfford: item ? this.getSpendableAlloy() >= this.getShopItemCost(item) : false,
+                })),
+            }),
             onBuy: async (index: number) => {
                 if (this.ctx.cs.phase !== 'shop') return { success: false, message: '商店已关闭' };
                 const item = this.shopOffers[index];
@@ -1220,13 +1226,20 @@ export class EquipmentManager {
             this.equippedEquipment = this.equippedEquipment.filter((id) => id !== equipment.id);
             this.ctx.showToast(`${equipment.name} 已卸下。`);
         } else {
+            let equipMessage = `${equipment.name} 已加入出战。`;
+            let replacedMainWeapon = false;
             if (equipment.kind === 'weapon') {
-                if (this.equippedEquipment.length >= EQUIPPED_SLOT_COUNT) {
+                const equippedWeapons = this.getEquippedWeapons();
+                if (equippedWeapons.length >= MAX_EQUIPPED_WEAPONS) {
+                    this.equippedEquipment = replaceMainWeaponInLoadout(
+                        this.equippedEquipment,
+                        equippedWeapons.map((weapon) => weapon.id),
+                        equipment.id,
+                    );
+                    replacedMainWeapon = true;
+                    equipMessage = `${equippedWeapons[0]?.name || '当前武器'} 已替换为 ${equipment.name}。`;
+                } else if (this.equippedEquipment.length >= EQUIPPED_SLOT_COUNT) {
                     this.ctx.showToast(`出战槽已满，最多携带 ${EQUIPPED_SLOT_COUNT} 件装备。`);
-                    return;
-                }
-                if (this.getEquippedWeapons().length >= MAX_EQUIPPED_WEAPONS) {
-                    this.ctx.showToast(`武器最多携带 ${MAX_EQUIPPED_WEAPONS} 把。`);
                     return;
                 }
             } else {
@@ -1245,8 +1258,8 @@ export class EquipmentManager {
                     }
                 }
             }
-            this.equippedEquipment.push(equipment.id);
-            this.ctx.showToast(`${equipment.name} 已加入出战。`);
+            if (!replacedMainWeapon) this.equippedEquipment.push(equipment.id);
+            this.ctx.showToast(equipMessage);
         }
 
         this.normalizeEquippedEquipment();
@@ -1358,18 +1371,17 @@ export class EquipmentManager {
         const weapons = this.getEquippedWeapons();
         this.ctx.panels.loadoutWeaponButtons.forEach((button: ButtonView, index: number) => {
             const weapon = weapons[index];
-            const slotName = index === 0 ? '主武器A' : '主武器B';
+            const slotName = '主武器';
             button.node.active = this.ctx.cs.phase === 'hangar';
             if (!weapon) {
                 button.color = '#1E293B';
-                button.label.string = `${slotName}\n空槽\n点击武器库装备`;
+                button.label.string = `${slotName}\n未装备\n从武器库选择`;
                 this.ctx.drawButton(button, false);
                 this.setButtonIcon(button, 'wpn_storm_rifle');
                 return;
             }
-            const active = this.getActiveWeapon()?.id === weapon.id;
-            button.color = active ? '#22D3EE' : weapon.color;
-            button.label.string = `${slotName}${active ? ' 当前' : ''}\n${weapon.name}\nLv.${this.getEquipmentLevel(weapon.id)}`;
+            button.color = weapon.color;
+            button.label.string = `${slotName}\n${weapon.name}\nLv.${this.getEquipmentLevel(weapon.id)}`;
             this.ctx.drawButton(button, false);
             this.setButtonIcon(button, this.equipIconKey(weapon));
         });
@@ -1386,7 +1398,7 @@ export class EquipmentManager {
             } else {
                 const level = this.getOffhandLevel(def.id);
                 button.color = def.color;
-                button.label.string = `副武器 已装备\n${def.name}\nT${level} · ${this.getOffhandCategoryName(def.category)}`;
+                button.label.string = `副武器\n${def.name}\nT${level} · ${this.getOffhandCategoryName(def.category)}`;
                 this.ctx.drawButton(button, false);
                 this.setButtonIcon(button, def.iconKey);
             }
@@ -1454,14 +1466,9 @@ export class EquipmentManager {
         });
         this.refreshHangarActions();
         if (this.ctx.panels.hangarStatsLabel && this.ctx.cs.phase === 'hangar') {
-            const gearSummary = GEAR_SLOT_ORDER
-                .map((slot) => `${GEAR_SLOT_LABELS[slot]}${this.getEquippedGearForSlot(slot) ? '1' : '0'}/1`)
-                .join('  ');
             this.ctx.panels.hangarStatsLabel.string = [
-                `已完成出击 ${this.ctx.cs.battlesWon} 次  下一次 ${this.ctx.cs.battlesWon + 1}`,
+                `完成出击 ${this.ctx.cs.battlesWon} 次  ·  主武器 ${this.getEquippedWeapons().length}/1  ·  副武器 ${this.equippedOffhandId ? '已装备' : '未装备'}`,
                 `库存：${this.ctx.formatWallet(this.getInventoryWallet())}`,
-                `出战：武器 ${this.getEquippedWeapons().length}/${MAX_EQUIPPED_WEAPONS}（战斗中切换）  ${gearSummary}`,
-                `仓库：武器 ${this.getOwnedWeaponCount()}/${WEAPON_COUNT}  装备 ${GEAR_COUNT}  道具 ${RUN_ITEM_COUNT}  成长 ${8}  图鉴 ${12}`,
             ].join('\n');
         }
     }
@@ -1517,12 +1524,25 @@ export class EquipmentManager {
                 this.ctx.panels.equipActionButton.label.string = craftable ? '合成' : '未解锁';
                 this.ctx.drawButton(this.ctx.panels.equipActionButton, !craftable || !this.hasResources(this.getCraftCost(selected)));
             } else {
+                const equipped = this.isEquipped(selected.id);
+                const lockedMainWeapon = selected.kind === 'weapon'
+                    && equipped
+                    && this.getEquippedWeapons().length <= 1;
+                const replacingWeapon = selected.kind === 'weapon'
+                    && !equipped
+                    && this.getEquippedWeapons().length >= MAX_EQUIPPED_WEAPONS;
                 const replacingGear = selected.kind === 'gear'
                     && !!selected.gearSlot
                     && !!this.getEquippedGearForSlot(selected.gearSlot)
-                    && !this.isEquipped(selected.id);
-                this.ctx.panels.equipActionButton.label.string = this.isEquipped(selected.id) ? '卸下' : replacingGear ? '替换' : '加入出战';
-                this.ctx.drawButton(this.ctx.panels.equipActionButton, false);
+                    && !equipped;
+                this.ctx.panels.equipActionButton.label.string = lockedMainWeapon
+                    ? '出战中'
+                    : equipped
+                        ? '卸下'
+                        : replacingWeapon || replacingGear
+                            ? '替换'
+                            : '加入出战';
+                this.ctx.drawButton(this.ctx.panels.equipActionButton, lockedMainWeapon);
             }
         }
 
@@ -1553,16 +1573,8 @@ export class EquipmentManager {
     }
 
     switchActiveWeapon() {
-        if (this.ctx.cs.phase !== 'combat') return;
-        const weapons = this.getEquippedWeapons();
-        if (weapons.length <= 1) {
-            this.ctx.showToast('只携带 1 把武器，无法切换。');
-            return;
-        }
-        const current = this.getActiveWeapon();
-        if (current) {
-            const idx = weapons.indexOf(current);
-            this.ctx.cs.activeWeaponIndex = (idx + 1) % weapons.length;
+        if (this.ctx.cs.phase === 'combat') {
+            this.ctx.showToast('主武器与副武器同时生效，无需切换。');
         }
     }
 }

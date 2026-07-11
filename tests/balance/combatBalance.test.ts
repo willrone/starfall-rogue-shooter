@@ -176,13 +176,13 @@ function testPoisonSprayerStackingModel() {
     const perStack = calcPoisonDpsPerStack(damage);
     const sustained = calcPoisonSustainedDps(damage, stackRate);
 
-    assert.equal(POISON_MAX_STACKS, 12, 'Plague sprayer should have enough stack headroom for attack-speed growth');
-    assert(stackRate >= 4.5 && stackRate <= 6.0,
-        `Base plague stack rate ${stackRate.toFixed(2)}/s should be a few poison layers per second, not 8 direct hits/s`);
+    assert.equal(POISON_MAX_STACKS, 15, 'Plague sprayer should have enough stack headroom for attack-speed growth');
+    assert(stackRate >= 2.0 && stackRate <= 4.5,
+        `Base plague stack rate ${stackRate.toFixed(2)}/s should reflect fireRate=2.5`);
     assert(perStack >= 2.0 && perStack <= 3.0,
         `Poison per-stack DPS ${perStack.toFixed(2)} should be readable but not bursty`);
-    assert(sustained >= 28 && sustained <= 34,
-        `Poison max-stack sustained DPS ${sustained.toFixed(1)} should stay in novice DPS band`);
+    assert(sustained >= 30 && sustained <= 45,
+        `Poison max-stack sustained DPS ${sustained.toFixed(1)} should stay in standard DPS band`);
     assert(calcPoisonTimeToMaxStacks(stackRate) >= 2.0,
         'Base plague sprayer should ramp over time instead of instantly capping stacks');
 

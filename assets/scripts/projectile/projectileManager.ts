@@ -1795,15 +1795,15 @@ export class ProjectileManager {
                                 const isDead = !this.ctx.enemyMgr.enemySet.has(enemy);
                                 if (isDead) {
                                     if (!this.ctx.cs.droneCharge) this.ctx.cs.droneCharge = 0;
-                                    this.ctx.cs.droneCharge += 20;
+                                    this.ctx.cs.droneCharge += 30;
                                     if (this.ctx.cs.droneCharge >= 100) {
                                         this.ctx.cs.droneCharge = 0;
                                         this.spawnDroneExplosion(bullet.x, bullet.y, bullet.damage);
                                     }
                                     // 织网支配者: 击杀回血
                                     if (bullet.mechanic === 'webmaster_lifesteal' && this.ctx.healPlayer) {
-                                        this.ctx.healPlayer(bullet.damage * 0.15);
-                                        this.ctx.spawnFloatingText?.('吸血 ' + Math.ceil(bullet.damage * 0.15), bullet.x, bullet.y - 20, '#FACC15', 18);
+                                        this.ctx.healPlayer(bullet.damage * 0.05);
+                                        this.ctx.spawnFloatingText?.('吸血 ' + Math.ceil(bullet.damage * 0.05), bullet.x, bullet.y - 20, '#FACC15', 18);
                                     }
                                 }
                             }

@@ -544,10 +544,18 @@ export class PickupManager {
         }));
 
         const iconMap: Record<string, string> = {
-            'fire-control': 'stat_attack_power', 'neural-rapid': 'stat_attack_speed',
-            'pierce-drill': 'stat_defense', 'multi-control': 'dmg_physical',
-            'drone-command': 'wpn_drone_spirit', 'crit-instinct': 'stat_crit_chance',
-            'weakpoint-study': 'stat_crit_damage', 'lethal-judgement': 'stat_lethal_chance',
+            'power-attack': 'stat_attack_power',
+            'power-crit': 'stat_crit_chance',
+            'power-crit-damage': 'stat_crit_damage',
+            'agility-reflex': 'stat_attack_speed',
+            'agility-speed': 'slot_boots',
+            'agility-dodge': 'stat_lethal_chance',
+            'physique-hp': 'stat_hp',
+            'physique-shield': 'stat_shield',
+            'physique-toughness': 'stat_defense',
+            'technique-range': 'dmg_physical',
+            'technique-pierce': 'dmg_magic',
+            'technique-drone': 'wpn_orbital_drone',
         };
 
         const result = await uiMgr.showDynamicPopupAsync(() => {

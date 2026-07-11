@@ -17,9 +17,10 @@
  *   // ret === { confirmed: true, itemId: 5 }
  */
 import {
-    _decorator, Node, UIOpacity, EventTouch, UITransform, Widget, Sprite, BlockInputEvents,
+    _decorator, Node, UIOpacity, EventTouch, UITransform, Widget, Graphics, Color, BlockInputEvents,
 } from 'cc';
 import { UIBase } from './UIBase';
+import { ensureUITransform } from './UIHelpers';
 const { ccclass, property } = _decorator;
 
 @ccclass('PopupBase')
@@ -107,9 +108,8 @@ export class PopupBase extends UIBase {
      */
     static createOverlay(): Node {
         const overlay = new Node('_overlay');
+        ensureUITransform(overlay, 2000, 2000);
         overlay.addComponent(BlockInputEvents);
-        const uiTransform = overlay.addComponent(UITransform);
-        uiTransform.setContentSize(2000, 2000);
         return overlay;
     }
 
@@ -118,10 +118,11 @@ export class PopupBase extends UIBase {
      */
     static createDarkBg(opacity = 180): Node {
         const dark = new Node('_dark');
-        const sprite = dark.addComponent(Sprite);
-        // 使用纯色纹理 — 需要通过 CocosHelper 生成，这里仅留接口
-        const ut = dark.addComponent(UITransform);
-        ut.setContentSize(2000, 2000);
+        ensureUITransform(dark, 2000, 2000);
+        const gfx = dark.addComponent(Graphics);
+        gfx.fillColor = new Color(0, 0, 0, 255);
+        gfx.rect(-1000, -1000, 2000, 2000);
+        gfx.fill();
         dark.addComponent(UIOpacity).opacity = opacity;
         return dark;
     }

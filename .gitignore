@@ -1,29 +1,88 @@
-library/
+# Generated directories
 temp/
-local/
+library/
 build/
-profiles/
+library-debug/
 node_modules/
-.codegraph/
 
-# OS / editor noise
+# OS
 .DS_Store
-*.log
+Thumbs.db
 
-# Python tool caches
+# Editor
+*.sublime-*
+.idea/
+.vscode/
+
+# Hermes project files
+.hermes/
+.hermes-*/
+
+# Duplicate files (macOS " 2" copies from Finder conflicts)
+* 2.*
+
+# Old test data dirs
+data/ar1_baseline_with_bot_ai/
+data/b_echo/
+data/b_frost/
+data/b_p/
+data/b_split/
+data/balance_cdp_*/
+data/balance_e2e_*/
+data/balance_echo_*/
+data/balance_fixed*/
+data/balance_perf_test*/
+data/balance_plague_*/
+data/cdp_*/
+data/e2e_*/
+data/verify_*/
+data/visual_checks/
+
+# Temp scripts
+tools/bot/cdp_*.py
+tools/bot/build_web_mobile_for_bot *.py
+tools/bot/run_balance_cdp *.py
+tools/cleanup_ui_icon_alpha.py
+tools/refactor/
+tools/verify_tier_targets *.py
+tools/export_game_data *.py
+tools/generate_visual_upgrade_candidates *.py
+tools/player_sprite_pipeline *.py
+tools/batch_generate_sprites *.py
+tools/balance_simulator *.py
+tools/weapon_effects_ref *.png
+tools/weapon_effects_v*.png
+tools/weapons_batch*.png
+
+# Config copies
+config/mcporter *.json
+
+# Extensions copies
+extensions/cocos-mcp-server */
+
+# Package copies
+package-lock *.json
+
+# Project files
+projects/
+
+# Doc copies
+docs/upgrade_thresholds 2.md
+
+# Test copies
+tests/enemy/* 2.ts
+tests/flows/hostContextContract.test 2.ts
+tests/ui/uiLayoutIntegrity.test 2.ts
+tests/visual/* 2.ts
+
+# SettlementPopup 2
+assets/scripts/ui/SettlementPopup 2.ts.meta
+
+# AGENTS 3
+AGENTS 3.md
+
+# Cocos asset template
+.creator/asset-template/
+### Generated ###
 __pycache__/
-**/__pycache__/
 *.pyc
-*.pyo
-.pytest_cache/
-
-# Local runtime scratch
-*.pid
-
-# ── 美术原始源文件（不参与构建，只占 git 空间） ──
-assets/art_source/generated/
-assets/art_source/frames/
-assets/art_source/previews/
-assets/art_source/archive_*/
-assets/art_source/visual_upgrade_candidates/
-assets/art_source/yuz_generated_candidates/

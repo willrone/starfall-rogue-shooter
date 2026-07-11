@@ -14,18 +14,16 @@
  *   // result === { choice?: EquipmentLootChoiceSpec, action: 'continue' | 'loot-selected' }
  */
 import {
-    _decorator, Node, Label, Color, Graphics, UITransform, Sprite,
+    _decorator, Node, Label, Color, Graphics,
 } from 'cc';
 import { PopupBase } from './PopupBase';
-import { loadSprite } from './UIHelpers';
+import { ensureUITransform, applySlicedSprite } from './UIHelpers';
 import type { BattleEndReason, ResourceWallet } from '../core/types';
 import { formatWallet } from '../core/resources';
 const { ccclass, property } = _decorator;
 
 const W = 672;   // panel width
 const H = 960;   // panel height
-const X = -W / 2;
-const Y = -H / 2;
 const PAD = 36;  // horizontal padding
 
 interface LootChoiceDisplay {
@@ -59,15 +57,16 @@ export class SettlementPopup extends PopupBase {
 
     setup(data: SettlementData): void {
         this.data = data;
+        ensureUITransform(this.node, W, H);
+        this.node.setPosition(0, 0, 0);
         this.buildUI(data);
     }
 
     private buildUI(data: SettlementData): void {
         // ── 面板背景 (Graphics 底色 + Sprite.SLICED 九宫格) ──
-        const bg = this._makeRect(W, H, '#0F172A', 6);
-        const sf = loadSprite('ui/panels/panel_bg_dark/spriteFrame');
-        if (sf) { const sp = bg.addComponent(Sprite); sp.spriteFrame = sf; sp.type = Sprite.Type.SLICED; sp.sizeMode = Sprite.SizeMode.CUSTOM; }
-        bg.setPosition(X, Y, 0);
+        const bg = this._makeRect(W, H, '#0F172A', 18);
+        applySlicedSprite(bg, 'ui/panels/panel_bg_dark/spriteFrame');
+        bg.setPosition(0, 0, -1);
         this.node.addChild(bg);
 
         // ── 标题 ──
@@ -87,76 +86,74 @@ export class SettlementPopup extends PopupBase {
         const statLabels: Node[] = [];
         stats.forEach((text, i) => {
             const label = this._label(text, 18, '#94A3B8', W - PAD * 2, 28, Label.HorizontalAlign.LEFT);
-            label.setPosition(-(W / 2 - PAD), H / 2 - 130 - i * 32, 0);
+            label.setPosition(0, H / 2 - 130 - i * 32, 0);
             statLabels.push(label);
         });
 
         // ── 资源获得 ──
         const rewardText = `本次带回  ${formatWallet(data.reward)}`;
         this._label(rewardText, 18, '#F9C74F', W - PAD * 2, 28, Label.HorizontalAlign.LEFT)
-            .setPosition(-(W / 2 - PAD), H / 2 - 270, 0);
+            .setPosition(0, H / 2 - 270, 0);
 
         const inventoryText = `库存  ${formatWallet(data.inventoryWallet)}`;
         this._label(inventoryText, 16, '#6F879E', W - PAD * 2, 24, Label.HorizontalAlign.LEFT)
-            .setPosition(-(W / 2 - PAD), H / 2 - 298, 0);
+            .setPosition(0, H / 2 - 298, 0);
 
         // ── Boss 战利品区 ──
-        let currentY = H / 2 - 370;
-
         if (data.lootChoices.length > 0) {
+            const lootHeaderY = H / 2 - 370;
             this._label('— Boss 战利品 —', 22, '#F8961E', W, 36, Label.HorizontalAlign.CENTER)
-                .setPosition(0, currentY, 0);
-            currentY -= 52;
+                .setPosition(0, lootHeaderY, 0);
 
             data.lootChoices.forEach((choice, i) => {
                 const btnH = 110;
-                const btnY = currentY - i * (btnH + 14);
-                const btn = this._choiceBtn(i, choice, btnH, data.lootChoices.length);
+                const btnY = lootHeaderY - 58 - i * (btnH + 14);
+                const btn = this._choiceBtn(i, choice, btnH);
                 btn.setPosition(0, btnY, 0);
-                currentY = btnY - btnH - 14;
             });
-            currentY -= 20;
+            this._continueBtn(-H / 2 + 54);
+            return;
         }
 
-        // ── 底部按钮 ──
-        const continueY = Math.max(-H / 2 + 60, currentY);
-        this._continueBtn(continueY);
+        this._continueBtn(-H / 2 + 70);
     }
 
-    private _choiceBtn(index: number, choice: LootChoiceDisplay, h: number, total: number): Node {
+    private _choiceBtn(index: number, choice: LootChoiceDisplay, h: number): Node {
         const btnNode = new Node('LootChoice_' + index);
         const w = W - PAD * 2;
+        ensureUITransform(btnNode, w, h);
         const g = btnNode.addComponent(Graphics);
         const c = new Color().fromHEX(choice.color);
         g.fillColor = c;
         g.roundRect(-w / 2, -h / 2, w, h, 8);
         g.fill();
-        const sf = loadSprite('ui/buttons/btn_neon/spriteFrame');
-        if (sf) { const sp = btnNode.addComponent(Sprite); sp.spriteFrame = sf; sp.type = Sprite.Type.SLICED; sp.sizeMode = Sprite.SizeMode.CUSTOM; }
+        applySlicedSprite(btnNode, 'ui/buttons/btn_neon/spriteFrame');
 
         // Title
-        const titleLbl = btnNode.addComponent(Label);
+        const titleNode = new Node('Title');
+        ensureUITransform(titleNode, w - 32, 36);
+        const titleLbl = titleNode.addComponent(Label);
         titleLbl.string = choice.title;
         titleLbl.fontSize = 20;
         titleLbl.lineHeight = 26;
         titleLbl.horizontalAlign = Label.HorizontalAlign.CENTER;
-        titleLbl.verticalAlign = Label.VerticalAlign.TOP;
+        titleLbl.verticalAlign = Label.VerticalAlign.CENTER;
         titleLbl.overflow = Label.Overflow.SHRINK;
         titleLbl.color = new Color().fromHEX('#FFFFFF');
-        const ut = btnNode.addComponent(UITransform);
-        ut.setContentSize(w + 20, h + 20);
-
+        titleNode.setPosition(0, 24, 1);
+        btnNode.addChild(titleNode);
         // Desc
         const descNode = new Node('Desc');
+        ensureUITransform(descNode, w - 32, 44);
         const descLbl = descNode.addComponent(Label);
         descLbl.string = choice.desc;
         descLbl.fontSize = 14;
         descLbl.lineHeight = 18;
         descLbl.horizontalAlign = Label.HorizontalAlign.CENTER;
-        descLbl.verticalAlign = Label.VerticalAlign.BOTTOM;
+        descLbl.verticalAlign = Label.VerticalAlign.CENTER;
         descLbl.overflow = Label.Overflow.SHRINK;
         descLbl.color = new Color().fromHEX('#F8FAFC');
-        descNode.setPosition(0, -h / 2 + 22, 0);
+        descNode.setPosition(0, -22, 1);
         btnNode.addChild(descNode);
 
         btnNode.on(Node.EventType.TOUCH_END, () => {
@@ -174,25 +171,24 @@ export class SettlementPopup extends PopupBase {
     private _continueBtn(y: number): void {
         const btnW = 240;
         const btnH = 52;
-        const btnX = -btnW / 2;
         const node = new Node('ContinueBtn');
+        ensureUITransform(node, btnW, btnH);
         const g = node.addComponent(Graphics);
         g.fillColor = new Color().fromHEX('#10B981');
-        g.roundRect(0, 0, btnW, btnH, 8);
+        g.roundRect(-btnW / 2, -btnH / 2, btnW, btnH, 8);
         g.fill();
-        const sf = loadSprite('ui/buttons/btn_green/spriteFrame');
-        if (sf) { const sp = node.addComponent(Sprite); sp.spriteFrame = sf; sp.type = Sprite.Type.SLICED; sp.sizeMode = Sprite.SizeMode.CUSTOM; }
+        applySlicedSprite(node, 'ui/buttons/btn_green/spriteFrame');
 
-        const label = node.addComponent(Label);
+        const labelNode = new Node('Label');
+        ensureUITransform(labelNode, btnW - 24, btnH);
+        const label = labelNode.addComponent(Label);
         label.string = '返回机库';
         label.fontSize = 20;
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
         label.verticalAlign = Label.VerticalAlign.CENTER;
         label.overflow = Label.Overflow.SHRINK;
         label.color = new Color().fromHEX('#FFFFFF');
-
-        const ut = node.addComponent(UITransform);
-        ut.setContentSize(btnW + 20, btnH + 20);
+        node.addChild(labelNode);
 
         node.setPosition(0, y, 0);
         node.on(Node.EventType.TOUCH_END, () => {
@@ -207,32 +203,33 @@ export class SettlementPopup extends PopupBase {
 
     private _label(text: string, fontSize: number, color: string, w: number, h: number, hAlign: number, vAlign?: number): Node {
         const node = new Node();
+        ensureUITransform(node, w, h);
         const label = node.addComponent(Label);
         label.string = text;
         label.fontSize = fontSize;
-        label.lineHeight = h;
+        label.lineHeight = Math.max(fontSize + 3, Math.min(h, Math.round(fontSize * 1.35)));
         label.horizontalAlign = hAlign;
-        if (vAlign !== undefined) label.verticalAlign = vAlign;
+        label.verticalAlign = vAlign ?? Label.VerticalAlign.CENTER;
         label.overflow = Label.Overflow.SHRINK;
         label.color = new Color().fromHEX(color);
-        const ut = node.addComponent(UITransform);
-        ut.setContentSize(w, h);
         this.node.addChild(node);
         return node;
     }
 
     private _makeRect(w: number, h: number, color: string, r = 0): Node {
         const node = new Node();
+        ensureUITransform(node, w, h);
         const g = node.addComponent(Graphics);
         g.fillColor = new Color().fromHEX(color);
-        if (r > 0) g.roundRect(0, 0, w, h, r);
-        else g.rect(0, 0, w, h);
+        if (r > 0) g.roundRect(-w / 2, -h / 2, w, h, r);
+        else g.rect(-w / 2, -h / 2, w, h);
         g.fill();
         return node;
     }
 
     private _hline(y: number, w: number): void {
         const line = new Node();
+        ensureUITransform(line, w, 2);
         const g = line.addComponent(Graphics);
         g.strokeColor = new Color().fromHEX('#334155');
         g.lineWidth = 1;

@@ -39,8 +39,8 @@ function testPoisonMechanicCallsConeVfx() {
     const poisonBranch = gameSource.slice(poisonBranchStart, gameSource.indexOf('} else {', poisonBranchStart));
     assert(poisonBranch.includes('this.proj.spawnSprayCone(baseAngle, range, weaponColor)'),
         'Poison mechanic must spawn a visible cone every shot because it does not create bullets');
-    assert(poisonBranch.includes('this.proj.applyPoisonStack(enemy, damage, 1)'),
-        'Poison mechanic should apply poison stacks, not direct bullet-style hit damage');
+    assert(poisonBranch.includes('this.proj.applyPoisonStack(enemy, damage, 3)'),
+        'Poison mechanic should apply current chain-poison stack batches, not direct bullet-style hit damage');
     assert(!poisonBranch.includes('damageEnemy(enemy, roll.amount'),
         'Poison spray must not deal direct hit damage every spray tick; damage comes from DoT stacks');
     assert(poisonBranch.includes('spawnBulletHitSpark'), 'Poison hits should emit visible hit feedback on affected enemies');

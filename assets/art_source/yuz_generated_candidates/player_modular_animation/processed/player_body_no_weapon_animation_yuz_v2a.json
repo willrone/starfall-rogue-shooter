@@ -1,0 +1,39 @@
+{
+  "variant": "yuz_v2a",
+  "raw_path": "assets/art_source/yuz_generated_candidates/player_modular_animation/player_body_no_weapon_animation_yuz_v2a_raw.png",
+  "runtime_outputs": {
+    "idle": "assets/resources/art/characters/player_body_no_weapon_idle.png",
+    "run_south": "assets/resources/art/characters/player_body_no_weapon_run_south.png"
+  },
+  "source_outputs": {
+    "idle": "assets/art_source/yuz_generated_candidates/player_modular_animation/processed/player_body_no_weapon_idle_yuz_v2a.png",
+    "run_south": "assets/art_source/yuz_generated_candidates/player_modular_animation/processed/player_body_no_weapon_run_south_yuz_v2a.png"
+  },
+  "review_path": "assets/art_source/yuz_generated_candidates/player_modular_animation/processed/player_body_no_weapon_animation_yuz_v2a_review.png",
+  "scores": {
+    "idle": [
+      8.8959375,
+      7.27875,
+      6.3109375,
+      8.31359375,
+      7.19671875
+    ],
+    "run_south": [
+      11.91640625,
+      7.27796875,
+      6.15078125,
+      10.90296875,
+      8.7371875
+    ]
+  },
+  "raw_size": [
+    1717,
+    916
+  ],
+  "processed_sheet_size": [
+    1657,
+    803
+  ],
+  "generated_at": 1782916153,
+  "model_prompt": "Use case: stylized-concept\nAsset type: Cocos Creator 2D mobile game sprite sheet, modular player body only\nPrimary request: Generate one polished sci-fi survivor character animation sheet for Starfall Survivor.\nCanvas/layout: exactly 2 rows by 6 columns, same character identity and same scale in every cell. Row 1 is idle breathing. Row 2 is run south/front-facing. No grid lines, no labels, no numbers, no text.\nSubject: compact heroic human survivor in dark navy tactical sci-fi armor, rounded helmet with bright cyan visor, cyan chest light, one orange shoulder pad and one amber shoulder pad. Body only, no weapon held.\nView/framing: orthographic 2.5D top-down/front hybrid for a vertical survivor shooter, character facing mostly downward toward camera, full body visible, generous padding in every cell.\nAnimation choreography:\nRow 1 idle: frame 1 neutral combat ready stance; frame 2 shoulders lift and torso inhales; frame 3 visor and chest light glow slightly, head bobs up; frame 4 shoulders lower and torso exhales; frame 5 subtle sway left; frame 6 subtle sway right.\nRow 2 run south: frame 1 left foot forward right foot back, left shoulder lower; frame 2 passing pose with body rising; frame 3 right foot forward left foot back, right shoulder lower; frame 4 passing pose with body rising; frame 5 left foot push-off with torso dipping; frame 6 right foot push-off with torso dipping. The legs, boots, shoulders, and hands must visibly change pose across frames.\nHands/weapon constraint: hands stay near the lower chest/centerline as if ready to hold a compact SMG overlay, but do not draw any weapon, gun, rifle, muzzle, blade, shield, or prop.\nStyle/quality: high-quality hand-painted game sprite, clean readable silhouette at 80px, crisp antialiased edges, painterly details but not noisy, professional mobile game asset.\nBackground: perfectly flat solid #00ff00 chroma-key background only. No cast shadow, no contact shadow, no floor, no gradient, no texture.\nAvoid: repeated identical frames, static pose copy-paste, weapon baked into body, extra characters, frame borders, text, watermark, UI, large empty margins, cropped body parts, photorealism."
+}
