@@ -21,6 +21,94 @@ export interface OffhandEntity {
     state: Record<string, number>;
 }
 
+interface BurnTrailPoint {
+    x: number;
+    y: number;
+    t: number;
+}
+
+type ContinuousEffectKey = 'orbit_blade' | 'orbit_burn' | 'control_field';
+
+export const OFFHAND_CONTINUOUS_TICK_INTERVAL = 0.1;
+export const OFFHAND_CONTINUOUS_BASELINE_FPS = 60;
+const CONTINUOUS_TICK_EPSILON = 1e-8;
+
+export function getOffhandSweepHitProgress(
+    targetX = 0,
+    targetY = 0,
+    startAngle = 0,
+    sweepAngle = 0,
+    orbitRadius = 0,
+    hitRadius = 0,
+) {
+    const targetRadius = Math.sqrt(targetX * targetX + targetY * targetY);
+    if (Math.abs(targetRadius - orbitRadius) > hitRadius) return -1;
+
+    const fullTurn = Math.PI * 2;
+    const sweep = Math.abs(sweepAngle);
+    if (sweep >= fullTurn - CONTINUOUS_TICK_EPSILON) return 0;
+
+    const targetAngle = Math.atan2(targetY, targetX);
+    const angularPadding = targetRadius <= hitRadius
+        ? Math.PI
+        : Math.asin(Math.min(1, hitRadius / targetRadius));
+    const normalize = (angle = 0) => {
+        const value = angle % fullTurn;
+        return value < 0 ? value + fullTurn : value;
+    };
+    let directedDelta = sweepAngle >= 0
+        ? normalize(targetAngle - startAngle)
+        : normalize(startAngle - targetAngle);
+    if (fullTurn - directedDelta <= angularPadding) directedDelta = 0;
+    if (directedDelta > sweep + angularPadding) return -1;
+    if (sweep <= CONTINUOUS_TICK_EPSILON) return 0;
+    return Math.min(1, Math.max(0, (directedDelta - angularPadding) / sweep));
+}
+
+export function getOffhandSweepContactFraction(
+    targetX = 0,
+    targetY = 0,
+    startAngle = 0,
+    sweepAngle = 0,
+    orbitRadius = 0,
+    hitRadius = 0,
+) {
+    const targetRadius = Math.sqrt(targetX * targetX + targetY * targetY);
+    if (Math.abs(targetRadius - orbitRadius) > hitRadius) return 0;
+
+    const sweep = Math.abs(sweepAngle);
+    if (sweep <= CONTINUOUS_TICK_EPSILON) return 1;
+    if (targetRadius <= hitRadius) return 1;
+
+    const fullTurn = Math.PI * 2;
+    const angularPadding = Math.asin(Math.min(1, hitRadius / targetRadius));
+    if (sweep >= fullTurn - CONTINUOUS_TICK_EPSILON) {
+        return Math.min(1, (angularPadding * 2) / fullTurn);
+    }
+
+    const targetAngle = Math.atan2(targetY, targetX);
+    const normalize = (angle = 0) => {
+        const value = angle % fullTurn;
+        return value < 0 ? value + fullTurn : value;
+    };
+    const directedDelta = sweepAngle >= 0
+        ? normalize(targetAngle - startAngle)
+        : normalize(startAngle - targetAngle);
+    let overlap = 0;
+    for (const center of [directedDelta - fullTurn, directedDelta, directedDelta + fullTurn]) {
+        const overlapStart = Math.max(0, center - angularPadding);
+        const overlapEnd = Math.min(sweep, center + angularPadding);
+        overlap = Math.max(overlap, overlapEnd - overlapStart);
+    }
+    return Math.min(1, Math.max(0, overlap / sweep));
+}
+
+export function interpolateOffhandTickPosition(start = 0, end = 0, tickOffset = 0, dt = 0) {
+    if (dt <= 0) return end;
+    const alpha = Math.min(1, Math.max(0, tickOffset / dt));
+    return start + (end - start) * alpha;
+}
+
 // ── Host Context ───────────────────────────────────────────────
 export interface OffhandHostContext {
     cs: {
@@ -65,8 +153,22 @@ export class OffhandManager {
     private shieldHitCount = 0;
 
     // 烈焰漩涡 trail nodes
-    private burnTrail: { x: number; y: number; t: number }[] = [];
+    private burnTrail: BurnTrailPoint[] = [];
     private static readonly MAX_TRAIL = 20;
+    private burnFrameX = 0;
+    private burnFrameY = 0;
+    private burnFrameInitialized = false;
+    private burnTickX = 0;
+    private burnTickY = 0;
+    private burnTickInitialized = false;
+    private burnTrailTargetCounts: Map<Enemy, number> = new Map();
+    private controlFieldTargets: Set<Enemy> = new Set();
+
+    private continuousEffectTime: Record<ContinuousEffectKey, number> = {
+        orbit_blade: 0,
+        orbit_burn: 0,
+        control_field: 0,
+    };
 
     constructor(public context: OffhandHostContext) {
         this.ctx = context;
@@ -86,7 +188,18 @@ export class OffhandManager {
         }
         this.entities = [];
         this.burnTrail = [];
+        this.burnFrameX = 0;
+        this.burnFrameY = 0;
+        this.burnFrameInitialized = false;
+        this.burnTickX = 0;
+        this.burnTickY = 0;
+        this.burnTickInitialized = false;
+        this.burnTrailTargetCounts.clear();
+        this.controlFieldTargets.clear();
         this._cooldowns = {};
+        this.continuousEffectTime.orbit_blade = 0;
+        this.continuousEffectTime.orbit_burn = 0;
+        this.continuousEffectTime.control_field = 0;
         this.shieldHitCount = 0;
     }
 
@@ -145,6 +258,14 @@ export class OffhandManager {
     // 🔵 环绕型
     // ════════════════════════════════════════════════════════════
 
+    private consumeContinuousEffectTicks(key: ContinuousEffectKey, dt: number): number {
+        const accumulated = this.continuousEffectTime[key] + Math.max(0, dt);
+        const ticks = Math.floor((accumulated + CONTINUOUS_TICK_EPSILON) / OFFHAND_CONTINUOUS_TICK_INTERVAL);
+        const remainder = accumulated - ticks * OFFHAND_CONTINUOUS_TICK_INTERVAL;
+        this.continuousEffectTime[key] = remainder > CONTINUOUS_TICK_EPSILON ? remainder : 0;
+        return ticks;
+    }
+
     private tickOrbitBlade(dt: number, stats: OffhandStats): void {
         const px = this.ctx.cs.playerX;
         const py = this.ctx.cs.playerY;
@@ -153,24 +274,65 @@ export class OffhandManager {
         const baseAngle = this.ctx.cs.combatTime * speed * Math.PI * 2;
         const radius = stats.radius;
 
-        for (let i = 0; i < count; i++) {
-            const angle = baseAngle + (Math.PI * 2 * i) / count;
-            const bx = px + Math.cos(angle) * radius;
-            const by = py + Math.sin(angle) * radius;
-            // 碰触伤害
-            for (const enemy of this.ctx.enemyMgr.enemies) {
-                if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
-                const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
-                const dx = bx - pos.x;
-                const dy = by - pos.y;
-                if (dx * dx + dy * dy < (enemy.radius + 20) * (enemy.radius + 20)) {
-                    this.ctx.enemyMgr.damageEnemy(enemy, stats.damage, '#F97316', '回旋');
-                    break; // 每帧只伤一个
-                }
+        const damageTicks = this.consumeContinuousEffectTicks('orbit_blade', dt);
+        if (damageTicks > 0) {
+            const remainder = this.continuousEffectTime.orbit_blade;
+            const damagePerTick = stats.damage
+                * OFFHAND_CONTINUOUS_TICK_INTERVAL
+                * OFFHAND_CONTINUOUS_BASELINE_FPS;
+            for (let tick = 0; tick < damageTicks; tick++) {
+                const ticksAfter = damageTicks - tick - 1;
+                const tickTime = this.ctx.cs.combatTime
+                    - remainder
+                    - ticksAfter * OFFHAND_CONTINUOUS_TICK_INTERVAL;
+                const endAngle = tickTime * speed * Math.PI * 2;
+                const sweepAngle = speed * Math.PI * 2 * OFFHAND_CONTINUOUS_TICK_INTERVAL;
+                this.applyOrbitBladeDamage(
+                    px,
+                    py,
+                    count,
+                    radius,
+                    endAngle - sweepAngle,
+                    sweepAngle,
+                    damagePerTick,
+                );
             }
         }
         // 画 blades — 用 entities 缓存
         this.syncOrbitEntities(count, 'orbit', baseAngle, radius, '#F97316');
+    }
+
+    private applyOrbitBladeDamage(
+        px: number,
+        py: number,
+        count: number,
+        radius: number,
+        startAngle: number,
+        sweepAngle: number,
+        damage: number,
+    ): void {
+        for (let i = 0; i < count; i++) {
+            const bladeStartAngle = startAngle + (Math.PI * 2 * i) / count;
+            for (const enemy of this.ctx.enemyMgr.enemies) {
+                if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
+                const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
+                const contactFraction = getOffhandSweepContactFraction(
+                    pos.x - px,
+                    pos.y - py,
+                    bladeStartAngle,
+                    sweepAngle,
+                    radius,
+                    enemy.radius + 20,
+                );
+                if (contactFraction <= 0) continue;
+                this.ctx.enemyMgr.damageEnemy(
+                    enemy,
+                    damage * contactFraction,
+                    '#F97316',
+                    '回旋',
+                );
+            }
+        }
     }
 
     private tickOrbitBlock(dt: number, stats: OffhandStats): void {
@@ -186,37 +348,92 @@ export class OffhandManager {
     private tickOrbitBurn(dt: number, stats: OffhandStats): void {
         const px = this.ctx.cs.playerX;
         const py = this.ctx.cs.playerY;
-        // 记录路径
-        this.burnTrail.push({ x: px, y: py, t: stats.duration });
-        if (this.burnTrail.length > OffhandManager.MAX_TRAIL) {
-            this.burnTrail.shift();
+        const frameStartX = this.burnFrameInitialized ? this.burnFrameX : px;
+        const frameStartY = this.burnFrameInitialized ? this.burnFrameY : py;
+        if (!this.burnTickInitialized) {
+            this.burnTickX = frameStartX;
+            this.burnTickY = frameStartY;
+            this.burnTickInitialized = true;
         }
-        // 更新 trail 计时器 + 伤害
-        for (let i = this.burnTrail.length - 1; i >= 0; i--) {
-            this.burnTrail[i].t -= dt;
-            if (this.burnTrail[i].t <= 0) {
-                this.burnTrail.splice(i, 1);
-                continue;
-            }
-            // 每 0.5 秒造成一次范围伤害
-            const trail = this.burnTrail[i];
-            for (const enemy of this.ctx.enemyMgr.enemies) {
-                if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
-                const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
-                const dx = trail.x - pos.x;
-                const dy = trail.y - pos.y;
-                const range = stats.radius;
-                if (dx * dx + dy * dy < range * range) {
-                    this.ctx.enemyMgr.damageEnemy(enemy, stats.damage * dt * 2, '#EF4444', '灼烧');
-                }
+        const accumulatedBefore = this.continuousEffectTime.orbit_burn;
+        const damageTicks = this.consumeContinuousEffectTicks('orbit_burn', dt);
+        for (let tick = 0; tick < damageTicks; tick++) {
+            const tickOffset = OFFHAND_CONTINUOUS_TICK_INTERVAL - accumulatedBefore
+                + tick * OFFHAND_CONTINUOUS_TICK_INTERVAL;
+            const tickX = interpolateOffhandTickPosition(frameStartX, px, tickOffset, dt);
+            const tickY = interpolateOffhandTickPosition(frameStartY, py, tickOffset, dt);
+            this.advanceBurnTrailGeometry(stats, this.burnTickX, this.burnTickY, tickX, tickY);
+            this.burnTickX = tickX;
+            this.burnTickY = tickY;
+            if (tick < damageTicks - 1) {
+                this.applyStoredBurnTrailTick(stats);
+            } else {
+                this.applyCurrentBurnTrailTick(stats);
             }
         }
+        this.burnFrameX = px;
+        this.burnFrameY = py;
+        this.burnFrameInitialized = true;
         // 画火环 — 简单画在玩家脚下
         this.ensureEntity(0, 'burn').gfx.clear();
         const gfx = this.entities[0].gfx;
         gfx.fillColor = this.ctx.hex('#EF4444', 80);
         gfx.circle(0, 0, stats.radius);
         gfx.fill();
+    }
+
+    private advanceBurnTrailGeometry(
+        stats: OffhandStats,
+        startX: number,
+        startY: number,
+        endX: number,
+        endY: number,
+    ): void {
+        for (let i = this.burnTrail.length - 1; i >= 0; i--) {
+            this.burnTrail[i].t -= OFFHAND_CONTINUOUS_TICK_INTERVAL;
+            if (this.burnTrail[i].t <= 0) this.burnTrail.splice(i, 1);
+        }
+        const samples = Math.round(OFFHAND_CONTINUOUS_BASELINE_FPS * OFFHAND_CONTINUOUS_TICK_INTERVAL);
+        for (let sample = 1; sample <= samples; sample++) {
+            const alpha = sample / samples;
+            this.burnTrail.push({
+                x: startX + (endX - startX) * alpha,
+                y: startY + (endY - startY) * alpha,
+                t: stats.duration,
+            });
+            if (this.burnTrail.length > OffhandManager.MAX_TRAIL) this.burnTrail.shift();
+        }
+    }
+
+    private applyCurrentBurnTrailTick(stats: OffhandStats): void {
+        const damage = stats.damage * OFFHAND_CONTINUOUS_TICK_INTERVAL * 2;
+        const rangeSq = stats.radius * stats.radius;
+        this.burnTrailTargetCounts.clear();
+        for (const trail of this.burnTrail) {
+            for (const enemy of this.ctx.enemyMgr.enemies) {
+                if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
+                const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
+                const dx = trail.x - pos.x;
+                const dy = trail.y - pos.y;
+                if (dx * dx + dy * dy < rangeSq) {
+                    this.burnTrailTargetCounts.set(enemy, (this.burnTrailTargetCounts.get(enemy) || 0) + 1);
+                }
+            }
+        }
+        this.applyBurnTrailTargetCounts(damage);
+    }
+
+    private applyStoredBurnTrailTick(stats: OffhandStats): void {
+        const damage = stats.damage * OFFHAND_CONTINUOUS_TICK_INTERVAL * 2;
+        this.applyBurnTrailTargetCounts(damage);
+    }
+
+    private applyBurnTrailTargetCounts(damage: number): void {
+        for (const [enemy, count] of this.burnTrailTargetCounts) {
+            if (this.ctx.enemyMgr.enemySet.has(enemy)) {
+                this.ctx.enemyMgr.damageEnemy(enemy, damage * count, '#EF4444', '灼烧');
+            }
+        }
     }
 
     // ════════════════════════════════════════════════════════════
@@ -325,16 +542,12 @@ export class OffhandManager {
         const px = this.ctx.cs.playerX;
         const py = this.ctx.cs.playerY;
         const radius = stats.radius;
-        // 场内敌人减速+伤害
-        for (const enemy of this.ctx.enemyMgr.enemies) {
-            if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
-            const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
-            const dx = px - pos.x;
-            const dy = py - pos.y;
-            if (dx * dx + dy * dy < radius * radius) {
-                enemy.slowTimer = 0.3;
-                enemy.slowFactor = 1 - stats.slowFactor;
-                this.ctx.enemyMgr.damageEnemy(enemy, stats.damage * dt, '#60A5FA', '电场');
+        const damageTicks = this.consumeContinuousEffectTicks('control_field', dt);
+        for (let tick = 0; tick < damageTicks; tick++) {
+            if (tick < damageTicks - 1) {
+                this.applyStoredControlFieldTick(stats);
+            } else {
+                this.applyCurrentControlFieldTick(px, py, radius, stats);
             }
         }
         // 画电场
@@ -343,6 +556,39 @@ export class OffhandManager {
         gfx.fillColor = this.ctx.hex('#60A5FA', 40);
         gfx.circle(0, 0, radius);
         gfx.fill();
+    }
+
+    private applyCurrentControlFieldTick(
+        px: number,
+        py: number,
+        radius: number,
+        stats: OffhandStats,
+    ): void {
+        const radiusSq = radius * radius;
+        this.controlFieldTargets.clear();
+        for (const enemy of this.ctx.enemyMgr.enemies) {
+            if (!this.ctx.enemyMgr.enemySet.has(enemy)) continue;
+            const pos = this.ctx.enemyMgr.getEnemyPosition(enemy);
+            const dx = px - pos.x;
+            const dy = py - pos.y;
+            if (dx * dx + dy * dy < radiusSq) {
+                this.controlFieldTargets.add(enemy);
+                this.applyControlFieldTargetTick(enemy, stats);
+            }
+        }
+    }
+
+    private applyStoredControlFieldTick(stats: OffhandStats): void {
+        for (const enemy of this.controlFieldTargets) {
+            if (this.ctx.enemyMgr.enemySet.has(enemy)) this.applyControlFieldTargetTick(enemy, stats);
+        }
+    }
+
+    private applyControlFieldTargetTick(enemy: Enemy, stats: OffhandStats): void {
+        enemy.slowTimer = 0.3;
+        enemy.slowFactor = 1 - stats.slowFactor;
+        const damage = stats.damage * OFFHAND_CONTINUOUS_TICK_INTERVAL;
+        this.ctx.enemyMgr.damageEnemy(enemy, damage, '#60A5FA', '电场');
     }
 
     private tickControlSeal(dt: number, stats: OffhandStats): void {

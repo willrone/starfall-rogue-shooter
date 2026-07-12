@@ -31,6 +31,8 @@ export interface Enemy {
     dashVx: number;
     dashVy: number;
     armorTimer: number;
+    auraBuffTimer: number;   // 灵能体: 友军标记逻辑的低频 tick 计时器
+    auraPulseTimer: number;  // 灵能体: 光环视觉的独立低频 tick 计时器
     // ── 移动策略 (Phase 2) ─────────────────────────────────────────
     movementType: MovementType;       // 'follow' | 'periodic-follow'
     periodicFollowTimer: number;      // accumulated time within current follow/pause cycle
@@ -57,7 +59,7 @@ export interface Enemy {
     // ── 视觉/动画 ─────────────────────────────────────────────────
     animSeed: number;
     hitFlash: number;
-    visualStateKey: string;
+    visualStateKey: number;
     animation: SpriteStripAnimation | null;
     animationFrameIndex: number;
     _lastScaleX?: number;

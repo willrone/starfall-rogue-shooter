@@ -7,7 +7,7 @@ import {
     ENEMY_PLAYER_PADDING, ENEMY_SEPARATION_PADDING, ENEMY_SEPARATION_CELL,
     ENEMY_SEPARATION_BUCKET_SCAN, ENEMY_SEPARATION_MAX_CHECKS,
     ENEMY_PROJECTILE_LIMIT, MAX_CHESTS_PER_WAVE,
-    ENEMY_HIT_FLASH_DURATION, ENEMY_STATUS_KEY_ARMOR, ENEMY_STATUS_KEY_DASH,
+    ENEMY_HIT_FLASH_DURATION,
     ENEMY_HP_PROGRESS_SCALE, ENEMY_DAMAGE_PROGRESS_SCALE,
     ENDLESS_SCALE_RATE, ENDLESS_START_WAVE,
     ENEMY_SEP_INTERVAL, ENEMY_SEP_PLAYER_DIST,
@@ -45,6 +45,26 @@ function shuffleArray<T>(arr: T[]): T[] {
 function resetBossPool(): void {
     _poolBossThisBattle = shuffleArray(BOSS_SPECS);
 }
+
+// Aura gameplay and presentation use separate clocks. The marker still uses the
+// existing dashVx sentinel; only the frequency of the full enemy scan changes.
+const AURA_BUFF_INTERVAL = 0.125; // 8 Hz
+const AURA_PULSE_INTERVAL = 0.25; // 4 Hz
+const AURA_RANGE_SQ = 80 * 80;
+
+const ENEMY_TINT_PALETTE = [
+    '',
+    '#9BE564',
+    '#43AA8B',
+    '#4CC9F0',
+    '#577590',
+    '#F9C74F',
+    '#F3722C',
+    '#B5179E',
+    '#A7F3D0',
+    '#90BE6D',
+    '#F94144',
+];
 
 export interface EnemyHostContext {
     cs: CombatState;
@@ -144,6 +164,7 @@ export class EnemyManager {
     private deathPartRadius: number[] = [];
     private deathPartNode: Node | null = null;
     private static readonly DEATH_PART_POOL = 40;
+    private readonly crowdSteerResult = { x: 0, y: 0 };
 
     constructor(public ctx: EnemyHostContext) {}
 
@@ -316,7 +337,9 @@ export class EnemyManager {
         if (Number.isFinite(px) && Number.isFinite(py)) {
             enemy._botX = px;
             enemy._botY = py;
-            return { x: px, y: py };
+            // Node.position is a stable Vec3 owned by Cocos. Returning its x/y view
+            // avoids allocating a short-lived object at every collision query.
+            return pos;
         }
         return { x: enemy._botX ?? 0, y: enemy._botY ?? 0 };
     }
@@ -440,6 +463,8 @@ export class EnemyManager {
                 continue;
             }
 
+            this.updateEnemyAura(enemy, dt, ex, ey);
+
             // ── 远怪降频优化：距离>600的怪不每帧跑完整AI/碰撞 ─────
             const frame = this._updateFrameCounter;
             const shouldSkipFullUpdate = !enemy.boss && !enemy.elite && (
@@ -520,7 +545,16 @@ export class EnemyManager {
                     if (Math.abs(enemy.knockbackVy) < 5) enemy.knockbackVy = 0;
                     else enemy.knockbackVy *= knockDecay;
                 }
-                const steer = this.getEnemyCrowdSteer(enemy, crowdGrid, ex, ey, dirX, dirY, dist);
+                const steer = this.getEnemyCrowdSteer(
+                    enemy,
+                    crowdGrid,
+                    ex,
+                    ey,
+                    dirX,
+                    dirY,
+                    dist,
+                    this.crowdSteerResult,
+                );
                 vx += steer.x;
                 vy += steer.y;
                 const vLen = Math.max(0.001, Math.sqrt(vx * vx + vy * vy));
@@ -563,7 +597,16 @@ export class EnemyManager {
             this.ctx.perfSeparationMs = this.ctx.perfNow() - sepStart;
         }
     }
-    public getEnemyCrowdSteer(enemy: Enemy, grid: Map<string, Enemy[]>, ex: number, ey: number, toPlayerX: number, toPlayerY: number, playerDist: number) {
+    public getEnemyCrowdSteer(
+        enemy: Enemy,
+        grid: Map<string, Enemy[]>,
+        ex: number,
+        ey: number,
+        toPlayerX: number,
+        toPlayerY: number,
+        playerDist: number,
+        result: { x: number; y: number } = { x: 0, y: 0 },
+    ) {
         let sx = 0;
         let sy = 0;
         let checks = 0;
@@ -607,17 +650,17 @@ export class EnemyManager {
 
         this.ctx.perfCrowdSteerCalls += 1;
         this.ctx.perfCrowdChecks += checks;
-        return { x: sx, y: sy };
+        result.x = sx;
+        result.y = sy;
+        return result;
     }
     public updateEnemyVisual(enemy: Enemy, dt: number, vx: number, vy: number, moveSpeed: number) {
         const wasFlashing = enemy.hitFlash > 0;
         enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
 
-        const statusKey = [
-            enemy.armorTimer > 0 ? ENEMY_STATUS_KEY_ARMOR : '',
-            enemy.dashTimer > 0 ? ENEMY_STATUS_KEY_DASH : '',
-            enemy.hp < enemy.maxHp ? 'wounded' : '',
-        ].filter(Boolean).join('|');
+        const statusKey = (enemy.armorTimer > 0 ? 1 : 0)
+            | (enemy.dashTimer > 0 ? 2 : 0)
+            | (enemy.hp < enemy.maxHp ? 4 : 0);
         const flashEnded = wasFlashing && enemy.hitFlash <= 0;
         if (statusKey !== enemy.visualStateKey || flashEnded) {
             enemy.visualStateKey = statusKey;
@@ -708,28 +751,40 @@ export class EnemyManager {
         }
     }
 
+    private updateEnemyAura(enemy: Enemy, dt: number, x: number, y: number): void {
+        if (enemy.spec.family !== 'aura' || enemy.hp <= 0) return;
+
+        enemy.auraBuffTimer -= dt;
+        if (enemy.auraBuffTimer <= 0) {
+            enemy.auraBuffTimer += AURA_BUFF_INTERVAL;
+            if (enemy.auraBuffTimer <= 0) enemy.auraBuffTimer = AURA_BUFF_INTERVAL;
+
+            for (const other of this.enemies) {
+                if (other === enemy || !this.enemySet.has(other)) continue;
+                const otherPos = other.node.position;
+                const dx = x - otherPos.x;
+                const dy = y - otherPos.y;
+                if (dx * dx + dy * dy <= AURA_RANGE_SQ) {
+                    // Preserve the existing marker contract used by the aura behavior.
+                    other.dashVx = 1;
+                }
+            }
+        }
+
+        enemy.auraPulseTimer -= dt;
+        if (enemy.auraPulseTimer <= 0) {
+            enemy.auraPulseTimer += AURA_PULSE_INTERVAL;
+            if (enemy.auraPulseTimer <= 0) enemy.auraPulseTimer = AURA_PULSE_INTERVAL;
+            this.ctx.drawAreaPulse(x, y, 80, '#38BDF8');
+        }
+    }
+
     public updateEnemySkill(enemy: Enemy, dt: number, dist: number, dirX: number, dirY: number) {
         enemy.skillTimer -= dt;
         enemy.armorTimer = Math.max(0, enemy.armorTimer - dt);
         if (enemy.spec.variantId === 'regen' && enemy.hp > 0 && enemy.hp < enemy.maxHp) {
             enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.maxHp * (enemy.elite ? 0.007 : 0.0035) * dt);
             if (Math.random() < dt * 0.8) this.drawEnemy(enemy);
-        }
-        // 灵能体 (aura): 光环 buff 附近友军
-        if (enemy.spec.family === 'aura' && enemy.hp > 0) {
-            const pos = this.getEnemyPosition(enemy);
-            this.ctx.drawAreaPulse(pos.x, pos.y, 80, '#38BDF8');
-            for (const other of this.enemies) {
-                if (other === enemy || !this.enemySet.has(other)) continue;
-                const oPos = this.getEnemyPosition(other);
-                const dx = pos.x - oPos.x;
-                const dy = pos.y - oPos.y;
-                if (dx * dx + dy * dy <= 80 * 80) {
-                    // 施加标记: 伤害+30%, 速度+20% (通过变体标记实现)
-                    // 实际用 enemy.dashTimer 作为"受buff"标记
-                    other.dashVx = 1; // 标记已受buff (非0 = buffed)
-                }
-            }
         }
         // 蜂群 (swarm): 组群移动, 接近玩家时分散环绕
         if (enemy.spec.family === 'swarm') {
@@ -1664,6 +1719,8 @@ export class EnemyManager {
             dashVx: 0,
             dashVy: 0,
             armorTimer: 0,
+            auraBuffTimer: 0,
+            auraPulseTimer: 0,
             // ── 移动策略 ─────────────────────────────────────────────
             movementType: (spec.family === 'seeker' || spec.family === 'aura') ? 'periodic-follow' : 'follow',
             periodicFollowTimer: 0,
@@ -1687,7 +1744,7 @@ export class EnemyManager {
             explodeTimer: 0,
             animSeed: Math.random() * Math.PI * 2,
             hitFlash: 0,
-            visualStateKey: '',
+            visualStateKey: 0,
             animation,
             animationFrameIndex: animation ? 0 : -1,
             wobbleSin: Math.sin(this.nextEnemyId * 0.73),
@@ -2107,20 +2164,8 @@ export class EnemyManager {
     }
     public getEnemyTint(enemy: Enemy, alpha = 255) {
         if (enemy.boss) return this.ctx.hex(enemy.spec.color, alpha);
-        const palette = [
-            enemy.spec.color,
-            '#9BE564',
-            '#43AA8B',
-            '#4CC9F0',
-            '#577590',
-            '#F9C74F',
-            '#F3722C',
-            '#B5179E',
-            '#A7F3D0',
-            '#90BE6D',
-            '#F94144',
-        ];
-        const color = palette[(enemy.spec.variantIndex || 0) % palette.length] || enemy.spec.color;
+        const variantIndex = (enemy.spec.variantIndex || 0) % ENEMY_TINT_PALETTE.length;
+        const color = variantIndex === 0 ? enemy.spec.color : ENEMY_TINT_PALETTE[variantIndex];
         return this.ctx.hex(color, alpha);
     }
     public drawEnemyVariantMark(enemy: Enemy) {

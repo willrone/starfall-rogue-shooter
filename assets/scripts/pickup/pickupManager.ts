@@ -6,6 +6,7 @@ import {
     Node,
     Sprite,
     SpriteFrame,
+    UIOpacity,
     UITransform,
 } from 'cc';
 import type { PanelManager, ButtonView } from '../ui/panels';
@@ -58,7 +59,8 @@ export const PICKUP_MERGE_RADIUS = 78;
 export const PICKUP_COMPACT_RADIUS = 240;
 export const PICKUP_SOFT_CAP = 190;
 export const PICKUP_HARD_CAP = 260;
-export const FLOATING_TEXT_LIMIT = 90;
+export const FLOATING_TEXT_LIMIT = 30;
+const FLOATING_TEXT_ALPHA_STEP = 17;
 const LEVEL_REFRESH_COST = 28;
 const CHEST_REFRESH_COST = 34;
 
@@ -84,6 +86,7 @@ export interface Pickup {
 export interface FloatingText {
     node: Node;
     label: Label;
+    opacity: UIOpacity;
     x: number;
     y: number;
     vy: number;
@@ -449,8 +452,9 @@ export class PickupManager {
             floatingText.life -= dt;
             floatingText.y += floatingText.vy * dt;
             floatingText.node.setPosition(floatingText.x, floatingText.y, 24);
-            const alpha = Math.round(255 * this.ctx.clamp(floatingText.life / floatingText.maxLife, 0, 1));
-            floatingText.label.color = this.ctx.hex(floatingText.color, alpha);
+            const rawAlpha = 255 * this.ctx.clamp(floatingText.life / floatingText.maxLife, 0, 1);
+            const alpha = Math.round(rawAlpha / FLOATING_TEXT_ALPHA_STEP) * FLOATING_TEXT_ALPHA_STEP;
+            if (floatingText.opacity.opacity !== alpha) floatingText.opacity.opacity = alpha;
             if (floatingText.life <= 0) {
                 removing.push(floatingText);
             }
@@ -479,12 +483,14 @@ export class PickupManager {
         this.ctx.worldNode!.addChild(node);
         node.addComponent(UITransform).setContentSize(120, 34);
         const label = node.addComponent(Label);
+        const opacity = node.addComponent(UIOpacity);
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
         label.verticalAlign = Label.VerticalAlign.CENTER;
         label.enableWrapText = false;
         return {
             node,
             label,
+            opacity,
             x: 0,
             y: 0,
             vy: 0,
@@ -509,6 +515,7 @@ export class PickupManager {
         floatingText.maxLife = 0.72;
         floatingText.color = color;
         floatingText.node.active = true;
+        floatingText.opacity.opacity = 255;
         floatingText.node.setPosition(x, y, 24);
         floatingText.label.string = text;
         floatingText.label.fontSize = fontSize || 20;

@@ -303,7 +303,7 @@ player_survivor_run_<8 directions>  6×160×160
 - `ui/buttons/*.png`
 - `ui/panels/panel_bg_dark.png`
 
-子弹节点会按飞行角度旋转，所以 primitive 的前进方向应朝图片右侧。主体居中、透明边缘充足，不要画满 128px。程序化 `Graphics` 枪口、轨迹和命中反馈仍会叠加；替换 PNG 只替换其中的 Sprite 层。
+子弹节点会按飞行角度旋转，所以 primitive 的前进方向应朝图片右侧。主体居中、透明边缘充足，不要画满 128px。对应 SpriteFrame 成功加载后，弹丸节点会清空并关闭自身的 `Graphics` fallback，只渲染 Sprite；资源尚未加载或缺失时才恢复程序化弹丸。枪口和命中反馈仍由独立 VFX 池绘制，因此替换 PNG 后必须同时检查弹体可读性、枪口和命中效果。
 
 ### 10.2 当前休眠或未接线资源
 

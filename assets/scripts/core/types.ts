@@ -92,6 +92,7 @@ export interface WeaponStats {
     pierce: number;
     drone: number;
     bulletSpeed: number;
+    attackRange: number;
 }
 
 export interface EquipmentDef {

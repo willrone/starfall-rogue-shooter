@@ -1,403 +1,312 @@
-# ⚠️ AI AGENT 在读这个文件前，不要改任何代码
+# 星坠幸存者开发约束入口
 
-这个文件是本项目的权威约束。每次修改代码前，必须确认改动不违反以下规则。
+> 基线编号：`SF-2026-07-11`
+>
+> 项目：Cocos Creator 3.8.8 + TypeScript / 抖音小游戏 / 竖屏 720×1280
+>
+> 所有 AI Agent 和开发者在修改代码、资源、配置或文档前，必须完整阅读本文件。
 
----
+本文件只保存不可违反的产品与工程约束，以及开发前必须知道的当前事实。完整机制、架构、UI、美术、测试和存档说明由专题基线维护，不在这里复制第二份。
 
-## 1. 这是什么游戏
+## 1. 文档入口与权威顺序
 
-**星坠幸存者**（Starfall Survivor）= Cocos Creator 3.8.8 + TypeScript，抖音小游戏（竖屏 720×1280）。
+开发前依次阅读：
 
-**核心循环**：
-```
-进入战斗 → 自动射击 → 杀怪 → 合金/宝箱掉落（XP 直接获得，不需捡）
-→ 升级（3 选 1 属性成长，数值随机范围）→ 商店买道具（6 格，用合金）→ 更强
-→ 波次推进，怪物越密越强
-→ 死亡/撤离 → 永久进度（机库装备升级 + 副武器合成/升级）
-```
+1. 本文件：不可修改项、产品边界和验证门禁。
+2. [文档中心](docs/README.md)：专题文档总入口与更新合同。
+3. [项目基线](docs/BASELINE.md)：`SF-2026-07-11` 的范围、内容规模和基线升级规则。
+4. [机制实现基线](docs/GAMEPLAY_MECHANICS.md)：当前运行机制、公式、内容规模及权威源码索引。
+5. [基线差异清单](docs/BASELINE_GAPS.md)：设计、约束、文档与当前实现之间尚未闭合的差异。
 
-**关键约束**：战斗内装备 1 主武器 + 1 副武器（同时生效，不切换）。
-主武器升级/强化在机库完成；副武器有独立的合成+升级面板。副武器不占用道具槽。
+事实判断顺序：
 
----
+1. 本文件中的受保护约束。
+2. 实际运行源码与 catalog。
+3. 可重复执行的测试和本次源码生成的构建产物。
+4. `docs/BASELINE.md` 与专题基线。
+5. GDD、专项设计稿和历史报告。
 
-## 2. 战斗内系统真实机制（最重要，AI 经常搞错）
+如果本文件、专题文档与源码冲突，不得静默选择其中一个，也不得把计划写成现状。先在 [`docs/BASELINE_GAPS.md`](docs/BASELINE_GAPS.md) 登记，明确是修实现还是更新基线，再同步代码、测试和文档。
 
-### 2.1 伤害公式（源码位置）
+## 2. 核心产品约束
 
-**子弹伤害** `projectileManager.ts getBulletDamage()` (加法不复利)：
-```typescript
-bulletDamage = max(2,
-  weaponDamage × (1 + (level - 1) × 0.12 + weaponDamagePct)
-  + baseAttackPower × 0.15 + (attackPower - baseAttackPower))
-```
+**星坠幸存者**是单人竖屏自动射击生存肉鸽。玩家控制移动，武器自动索敌攻击。
 
-**开火间隔** `projectileManager.ts getFireInterval()` (加法不复利)：
-```typescript
-fireInterval = max(0.07, 1 / max(0.15,
-  weaponFireRate × (1 + (level - 1) × 0.10 + weaponFireRatePct + critBoost)
-  + attackSpeed × 0.45))
-```
+核心循环：
 
-**穿透个数** `projectileManager.ts getBulletPierce()`：
-```typescript
-pierce = floor(weaponPierce × (1 + (level - 1) × 0.10) + characterPierce + pierceStacks)
-       + (random < fractional_part ? 1 : 0)   // 随机额外穿透
+```text
+进入战斗 → 自动射击 → 击杀直接获得 XP
+→ 拾取合金、材料和宝箱 → 升级三选一 / 6 格商店购买本局道具
+→ 波次与 Boss 推进 → 死亡、复活或主动撤离
+→ 结算 → 机库装备、蓝图、主武器和副武器养成
 ```
 
-**弹速** `projectileManager.ts getBulletSpeed()`：
-```typescript
-bulletSpeed = max(260, 300 + weaponBulletSpeed × (1 + (level - 1) × 0.08) × 140 + bonus × 0.4)
+当前出战结构固定为：
+
+```text
+1 把主武器 + 4 件固定部位 gear + 1 个独立 offhand 槽
 ```
 
-**每级成长率**（统一在 `combatFormulas.ts`）：
+- 主武器至少保留 1 把，不能卸到 0 把。
+- 装备另一把主武器必须原子替换当前主武器，不能先因总槽位已满而拒绝。
+- gear 部位为帽子、护甲、鞋子、首饰，每个部位最多 1 件。
+- offhand 与主武器同时生效，不切换，不占主武器、gear 或本局道具槽；该槽允许暂时未装备。
+- 主武器和 gear 的升级在机库完成；offhand 使用独立合成与升级入口。
+- XP 由击杀直接获得，不生成需要拾取的经验球；合金、材料和宝箱走拾取系统。
+- 商店只出售 `RUN_ITEM`，不出售主武器或永久 gear。
+
+## 3. 当前实现事实快照
+
+以下数值是 `SF-2026-07-11` 的开发基线。详细公式、边界和权威函数见 [`docs/GAMEPLAY_MECHANICS.md`](docs/GAMEPLAY_MECHANICS.md)。发现源码偏离时先登记 gap，不得顺手改写本表来掩盖差异。
+
+### 3.1 内容规模
+
+| 内容 | 当前基线 |
+|---|---:|
+| 主武器 | 17 个家族 × 10 个变体 = 170 |
+| gear | 44 个 blueprint × 5 个品质 = 220 |
+| offhand | 15 把，T1-T5 |
+| 本局道具 | 65 个单属性 blueprint × 5 个 tier = 325 |
+| 升级选项 | 4 类 × 3 种 = 12 |
+| 普通怪 | 10 个 archetype × 11 个变体 = 110 |
+| 小 Boss / 大 Boss | 5 / 5 |
+
+不要把“17 个主武器家族”写成只有 17 个装备实例，也不要把 offhand 或未闭合机制描述为全部完成。主武器与 offhand 的接线状态以 [差异清单](docs/BASELINE_GAPS.md) 为准。
+
+### 3.2 角色与主武器公式
+
+基础攻击力为 `16`。主武器等级成长按基础值线性叠加，不复利：
+
 | 属性 | 每级 |
-|---|---|
+|---|---:|
 | 伤害 | +12% |
 | 射速 | +10% |
 | 穿透 | +10% |
 | 弹速 | +8% |
 | 无人机 | +8% |
 
-**baseAttackPower = 16**（`createBaseCharacterStats()` 的值）
+运行时子弹伤害：
 
-### 2.2 无人机伤害（`combatFormulas.ts`）
-
-```typescript
-droneCount = min(8, 1 + floor(dronePower / 4))
-droneInterval = max(0.28, 1.18 - min(0.78, dronePower × 0.035))
-每轮电击伤害 ≈ dronePower × 8
+```text
+levelScale = 1 + (weaponLevel - 1) × 0.12
+base = max(0.1, weaponDamage × (levelScale + weaponDamagePct))
+bulletDamage = max(2, base + 16 × 0.15 + (attackPower - 16))
 ```
 
-### 2.3 角色属性来源（`RogueShooterGame.ts`）
+运行时基础开火间隔：
 
-```
-stats = createBaseCharacterStats()        // 基础属性
-     + runStats                           // 升级选项 + 商店道具
-     + weaponStat('fireRate')×0.18       // 武器属性贡献（战斗内不升级）
-     + weaponStat('pierce')×0.18
-     + 装备 gearStats×gearLevel          // 战斗内装备 level 固定为 1
+```text
+levelScale = 1 + (weaponLevel - 1) × 0.10
+baseRate = weaponFireRate × (levelScale + weaponFireRatePct + runtimeMechanicBoost)
+fireInterval = max(0.07, 1 / max(0.15, baseRate + attackSpeed × 0.45))
 ```
 
-### 2.4 升级系统（`runItemCatalog.ts LEVEL_UP_BLUEPRINTS`）
+`runtimeMechanicBoost` 只能包含实际已接线的运行状态；不能仅依据 catalog 描述假定机制存在。
 
-每次升级 → 3 选 1 → 直接加到 runStats（永久本局），**纯加不减**。
+运行时穿透和弹速：
 
-XP 直接获得（杀怪时自动加，不需要捡经验球）。只有合金、宝箱需要捡。
+```text
+totalPierce = weaponPierce × (1 + (weaponLevel - 1) × 0.10)
+              + characterPierce + pierceStacks
+pierce = floor(totalPierce) + 按小数部分概率额外 +1
 
-每个升级选项的数值是**随机范围**，每次 roll 不同。
-
-**4 大类 × 3 种 = 12 种属性（2026-07-02 加强版，每级3选1）：**
-
-| 💪 力量 | 范围 | ⚡ 敏捷 | 范围 | ❤️ 体魄 | 范围 | 🎯 技巧 | 范围 |
-|---|---|---|---|---|---|---|---|
-| 攻击强化 `attackPower` | +8~16 | 神经反射 `attackSpeed` | +0.05~0.12 | 生命扩展 `maxHp` | +30~60 | 精准瞄准 `attackRange` | +55~120 |
-| 暴击训练 `critChance` | +4%~10% | 移速强化 `moveSpeed` | +18~42 | 护盾扩容 `shieldMax` | +24~48 | 穿透强化 `pierceDamagePct` | +12%~28% |
-| 弱点打击 `critDamage` | +15%~36% | 身法训练 `dodgeChance` | +4%~7% | 坚韧体质 `damageReduction` | +3%~6% | 无人机指挥 `dronePower` | +1.0~4.5 |
-
-> `attackPower` 和 `attackSpeed` 是升级**专属**属性（道具不加）。
-
-### 2.5 商店系统（`equipmentManager.ts`）
-
-**卖的是 RUN_ITEM（本局道具），不是武器。**
-
-```
-价格 = max(50, round((44 + tier×22 + waveFee + cycleFee) × endlessMultiplier × cumulativeMultiplier))
-waveFee = floor(waveIndex/4) × 5
-cycleFee = (endlessCycle-1) × 10
+bulletSpeed = max(260,
+  300 + weaponBulletSpeed × (1 + (weaponLevel - 1) × 0.08) × 140
+  + characterBulletSpeed × 0.4)
 ```
 
-**定价公式不变**，但 **取消硬上限**（`MAX_RUN_ITEM_SLOTS = 999`），可以无限买。累计涨价 35%/件 保持不变，后期越来越贵但不会硬卡你。
+角色属性由基础属性、本局 `runStats`、主武器贡献和已装备 gear 共同汇总。gear 效果乘持久装备等级，不是战斗内固定为 Lv.1。主武器当前还贡献射速、弹速、穿透和无人机属性；完整汇总与上下限以运行时 `getCharacterStats()` 为准。
 
-**道具全是纯正面效果**，无负面。22 件 blueprint × 5 个 tier = 110 个道具实例。
-按 category 分布：攻击(12) / 防御/生存/机动(10) / 资源/成长/其他(5) / 混合(5)。
+`assets/scripts/core/combatFormulas.ts` 当前存在运行时/测试镜像差异，不能只凭纯函数测试断言真实游戏行为，详见 `GAP-ARCH-001`。
 
-### 2.6 XP 曲线（`pickupManager.ts gainXp`）
+### 3.3 XP 与升级三选一
 
-```
+```text
+初始等级 = 1
 初始 xpToNext = 65
-每升一级: xpToNext = Math.round(xpToNext × 1.24 + 22 + level × 5)
-  Lv.1→2: round(65×1.24 + 22 + 2×5) = 113
-  Lv.2→3: round(113×1.24 + 22 + 3×5) = 177
-  非指数增长，递归叠乘
-XP 掉率 = 56%，掉落量 = monsterXP × 2.6
+普通 / 精英 / Boss XP 倍率 = 2.6 / 2.4 / 3.0
+升级后 xpToNext = round(oldXpToNext × 1.24 + 22 + newLevel × 5)
 ```
 
-### 2.7 怪物公式（`enemyManager.ts` + `enemyCatalog.ts`）
+每次升级随机生成 3 个选项，效果直接累加到本局 `runStats`。当前 12 个随机范围：
 
-**10 种基础怪**（`BASE_ENEMY_ARCHETYPES`）：
+| 类别 | 选项 | 当前范围 |
+|---|---|---:|
+| 力量 | 攻击强化 `attackPower` | +8~16 |
+| 力量 | 暴击训练 `critChance` | +4%~10% |
+| 力量 | 弱点打击 `critDamage` | +15%~36% |
+| 敏捷 | 神经反射 `attackSpeed` | +0.05~0.12 |
+| 敏捷 | 移速强化 `moveSpeed` | +8~18 |
+| 敏捷 | 身法训练 `dodgeChance` | +4%~7% |
+| 体魄 | 生命扩展 `maxHp` | +30~60 |
+| 体魄 | 护盾扩容 `shieldMax` | +24~48 |
+| 体魄 | 坚韧体质 `damageReduction` | +3%~6% |
+| 技巧 | 精准瞄准 `attackRange` | +20~50 |
+| 技巧 | 穿透强化 `pierceDamagePct` | +12%~28% |
+| 技巧 | 无人机指挥 `dronePower` | +1.0~4.5 |
 
-| 怪 | HP | 伤害 | 速度 | 权重 | 首次出 |
-|---|---:|---:|---:|---:|---:|
-| 碎壳虫 mite | 18 | 4 | 126 | 7.0 | 波 1+ |
-| 疾行体 runner | 24 | 6 | 196 | 4.0 | **波 3+ (slot 3-4 解锁)** |
-| 重甲块 brute | 88 | 10 | 78 | 3.0 | 波 18+ |
-| 裂变囊 splitter | 54 | 7 | 112 | 3.0 | 波 28+ |
-| 磁暴卫士 warden | 160 | 15 | 92 | 2.0 | 波 46+ |
-| 自爆虫 bomber | 14 | 8 | 140 | 3.0 | 波 2+ |
-| 蜂群 swarm | 8 | 2 | 140 | 3.0 | 波 5+ |
-| 灵能体 aura | 40 | 5 | 80 | 1.5 | 波 12+ |
-| 追踪眼 seeker | 30 | 8 | 100 | 2.0 | 波 10+ |
-| 信标 beacon | 60 | 0 | 0 | 1.0 | 波 20+ |
+不要恢复旧文档中的移速 `+18~42`、射程 `+55~120` 或“XP 56% 概率掉落”等描述，除非先完成正式数值变更和验证。
 
-**生成间隔**（波 1-10）：
-```
-interval = max(hardFloor, 1.62 - slot×0.035 - earlyRelief)
-  波1: 1.5s / 波2: 1.4s / 波3: 1.3s / 波4: 1.2s / 波5: 1.1s / 波6: 1.0s / 波7+: 0.95s
-  波11: ~1.29s（略慢于波10，给喘口气）
-  波12+: 指数递减，每波 ×1.05 缩放
-```
+### 3.4 本局道具与商店
 
-**每批数量**：波 1-2: 2 / 波 3-4: 3 / 波 5-6: 4 / 波 7+: 5 / 波 11+: min(60, 5×1.05^(wave-10))
+- 本局道具基线为 65 个单属性 blueprint × 5 tier。
+- tier 正面缩放为 `1 + (tier - 1) × 0.52`。
+- `MAX_RUN_ITEM_SLOTS = 999`，正常游玩中等同没有硬槽位上限。
+- 商店固定 6 格，购买后原格补货。
+- 累计购买涨价为每件 +35%，并叠加波次、无尽和效果强度倍率。
 
-**场上限**（正式Cocos环境）：波 1: 40 / 波 2: 55 / 波 3: 75 / 波 4: 95 / 波 5: 130 / 波 6: 170 / 波 7: 200 / 波 8+: 240 / Boss波: 60 / 波 11+: max(240, 200×1.05^(wave-10)), min(600)
-各波上限额外 + battleIndex×2。
-
-**HP 缩放**（enemyManager.ts createEnemy 完整公式）：
-```
-scale = (1 + battleIndex×0.06 + (endlessCycle-1)×0.28
-         + (waveIndex×0.028 + combatTime×0.0018) × ENEMY_HP_PROGRESS_SCALE × earlyProgressFactor)
-         × endlessScale
-ENEMY_HP_PROGRESS_SCALE = 2.5 (enemyConstants.ts)
-earlyProgressFactor: 波 1-2=0.3 / 波 3-4=0.4 / 波 5-6=0.55 / 波 7-8=0.7 / 波 9-10=0.85 / 波 11+=1
-endlessScale: 波<11 =1, 波≥11 = 1.05^(wave-10)
-最终HP = Math.round(spec.hp × scale × eliteScale)
-```
-**伤害缩放**（完整公式）：
-```
-enemyDamage = spec.damage × (boss?1.85 : elite?1.42 : 1.05)
-             × (1 + (endlessCycle-1)×0.16
-                + (waveIndex×0.012 + combatTime×0.0009) × ENEMY_DAMAGE_PROGRESS_SCALE × earlyProgressFactor)
-             × earlyDamageFactor × endlessScale
-ENEMY_DAMAGE_PROGRESS_SCALE = 1.3
-earlyDamageFactor: 波 1-2=0.82 / 波 3-4=0.75 / 波 5-6=0.85 / 波 7-8=0.95 / 波 9+=1
+```text
+waveFee = floor(waveIndex / 4) × 5
+cycleFee = (endlessCycle - 1) × 10
+baseCost = 44 + tier × 22 + waveFee + cycleFee
+price = max(50, round(baseCost × effectMultiplier
+                      × endlessMultiplier × cumulativeMultiplier))
 ```
 
-**无尽缩放**：波 ≥ 11 时，scale = 1.05^(wave-10)，作用于 HP/伤害/间隔/上限。
+商店刷新显示与实际扣款等差异不得在这里任选一个值，统一以 [`docs/BASELINE_GAPS.md`](docs/BASELINE_GAPS.md) 的状态处理。
 
-**5 种小 Boss**（无尽穿插，30% 概率，不掉材料，不挡进度）：
-狂暴重甲块 / 电弧灵能体 / 自爆母体 / 迅捷分裂体 / 再生巨兽
+### 3.5 波次与敌人
 
-**5 种大 Boss**（波 10/13/16... 每 Cycle 随机选一个，独占护盾+技能）：虚空巨像 / 噬能蠕虫 / 冰霜女皇 / 狱炎领主 / 虚空织网者
+- 每波持续约 50~60 秒。
+- Boss 波为第 10 波，之后每 3 波一次。
+- 第 11 波开始使用 `endlessScale = 1.05^(wave - 10)`。
+- 第 13 波起的非 Boss 波可穿插小 Boss。
+- catalog 规模为 10 个基础 archetype × 11 个变体；另有 5 小 Boss 和 5 大 Boss。
 
-### 2.8 武器系统（`weaponCatalog.ts`）
+当前进度常量：
 
-**17 把主武器**（3 把传说 + 14 把基础），详见 `weaponCatalog.ts`：
+```text
+ENEMY_HP_PROGRESS_SCALE = 1.8
+ENEMY_DAMAGE_PROGRESS_SCALE = 1.0
+```
 
-**15 把副武器**（设计基线见 `docs/offhand_weapon_design.md`），分类：
-- 环绕型 3 把（回旋利刃 / 守护星环 / 烈焰漩涡）
-- 召唤型 4 把（影刃猎手 / 静电蜂群 / 幽影分身 / 治愈蜂鸟）
-- 控场型 3 把（冰霜地雷 / 静电力场 / 黑曜石封印）
-- 爆发型 3 把（虚空裂隙 / 暴风之眼 / 时间扭曲）
-- 防御/辅助 2 把（纳米修复器 / 铜墙护盾）
+运行时缩放：
 
-副武器独立升级（T1-T5），使用独立材料系统。
+```text
+hpScale = (1 + battleIndex×0.06 + (endlessCycle-1)×0.28
+           + (waveIndex×0.028 + combatTime×0.0018)
+             × 1.8 × earlyProgressFactor)
+          × endlessScale
 
-| 分组 | 武器 |
+damageScale = (1 + (endlessCycle-1)×0.16
+               + (waveIndex×0.012 + combatTime×0.0009)
+                 × 1.0 × earlyProgressFactor)
+              × earlyDamageFactor × endlessScale
+```
+
+不得继续引用旧常量 `2.5 / 1.3`。刷怪间隔、批量、场上限和 `spawnAfter` 的当前行为以 `enemyManager.ts` 为准；已知解锁模型差异见 `GAP-WAVE-002`。
+
+### 3.6 永久进度与未闭合机制
+
+- 主武器、gear、蓝图、资源、offhand 装备和等级写入本地存档。
+- 死亡和撤离都计入当前字段 `battlesWon`；文档语义统一称“已完成出击次数”。
+- offhand 有 15 把和 T1-T5 数据，但材料消费、逐级数值与若干行为不能写成完整闭环。
+- 主武器机制也不能使用“17 个已全部接入”的总括结论。
+- Boss 材料、永久合金、结算保存、广告日切等能力必须按 gap 实际状态描述。
+
+唯一差异清单：[docs/BASELINE_GAPS.md](docs/BASELINE_GAPS.md)。
+
+## 4. 受保护项
+
+下列内容未经用户明确确认不得修改、删除、重命名或绕过：
+
+| 受保护项 | 约束 |
 |---|---|
-| Novice | 风暴步枪 / 瘟疫喷射器 / 霜束发射器 |
-| Standard | 回声弓 / 裂变枪管 / 镜像棱镜 / 量子织机 |
-| Boss Gate | 荆棘连弩 / 虚空针 / 离子长枪 / 磁轨炮 |
-| Boss Clear | 流星发射器 / 轨道无人机 / 重力锤 |
-| Legendary | 虚空撕裂者 / 冰狱审判 / 织网支配者 |
+| `assets/scripts/core/stats.ts` 的 `createBaseCharacterStats()` | 所有战斗公式依赖基础属性 |
+| `assets/scripts/core/types.ts` 的 `CharacterStats` / `StatKey` | 全项目共享类型合同 |
+| `assets/scripts/core/combatFormulas.ts` | 受保护的公式与测试合同；存在双源 gap 不等于可以直接重写 |
+| `assets/scripts/state/combatState.ts` 的字段名 | 多模块共享；变更需要迁移和全链路验证 |
+| `xpToNext` 初始值及 `65 / 1.24 / 22 + level×5` 曲线 | 已平衡的升级合同 |
+| `assets/resources/audio/` 下现有音效文件名 | 代码存在硬编码引用 |
+| `STARTER_EQUIPMENT_IDS` 数组内容 | 新手初始装备固定 |
+| 抖音小游戏 20 MB 包体上限与项目 19 MiB 守门线 | 不得放宽或绕过构建检查 |
+| `docs/offhand_weapon_design.md` 的 15 把副武器数量和类型 | 产品设计基准；变更前必须重新确认 |
+| `assets/scripts/catalogs/offhandCatalog.ts` 的 15 把副武器数据 | 修改必须同步设计、实现、测试和基线 |
+| `assets/scripts/offhand/offhandManager.ts` 的机制类型对应关系 | 不得随意替换机制身份 |
+| `assets/scene/Main.scene` 及其他 Cocos 场景 JSON / UUID | 禁止文本方式编辑 |
 
-**变体系统**：10 种变体（T1~T10），同一武器换变体改变定位。
-T3 脉冲：伤害系数 ×4.44（设计意图：均衡提升，大幅增加单发伤害）
+受保护项确需调整时，先说明原因、影响、存档或兼容风险、测试方案，并取得明确确认。不能通过复制一套新字段或新公式来规避约束。
 
-### 2.9 机制词条（17 个，已全接入）
+## 5. 开发规则
 
-| ID | 武器 | 机制 | 状态 |
-|---|---|---|---|
-| `crit_stacks` | 风暴步枪 | 暴击叠加攻速，5 层封顶，6 秒不暴击衰减 1 层 | ✅ |
-| `slow` | 霜束发射器 | 命中减速 0.4 秒 | ✅ |
-| `poison` | 瘟疫喷射器 | 叠 5 层毒，每层 1%/秒，1 秒 tick | ✅ |
-| `knockback` | 重力锤 | 命中击退，暴击 2 倍 | ✅ |
-| `multishot_3` | 裂变枪管 | 同时 3 颗扇形分布 | ✅ |
-| `radial_5` | 镜像棱镜 | 5 颗 360° 全方向散射 | ✅ |
-| `split` | 量子织机 | 飞行 0.5 秒后分裂 2 颗 | ✅ |
-| `pierce_stacks` | 回声弓 | 暴击叠加穿透，6 秒衰减 | ✅ |
-| `pierce_bonus` | 磁轨炮 | 每次穿透 +8% 伤害 | ✅ |
-| `straight` | 离子长枪 | 弹道笔直不衰减 | ✅ |
-| `ricochet` | 荆棘连弩 | 撞墙反弹 2 次，每次 +15% 伤害 | ✅ |
-| `aoe_burn` | 流星发射器 | 命中留 3 秒燃烧区，每秒 12% 攻击力 | ✅ |
-| `drone_charge` | 轨道无人机 | 击杀充能，满 100% 召唤爆炸无人机 | ✅ |
-| `crit_master` | 虚空针 | 高暴击率+暴击伤害加成 | ✅ |
-| `void_tearer` | 虚空撕裂者（传说） | 穿透叠加虚空撕裂，每穿透 +18% 伤害（比磁轨炮更暴力） | ✅ |
-| `icefire_judge` | 冰狱审判（传说） | 冰弹减速 + 火弹爆炸，击杀触发 90 范围 AOE | ✅ |
-| `webmaster_lifesteal` | 织网支配者（传说） | 击杀回血 15% + 无人机充能爆炸 + 缓速 | ✅ |
+1. 修改前先运行 `git status --short --branch`，保留所有不属于当前任务的工作区改动。
+2. 先定位实际运行时调用链，再修改 catalog、Manager 或 UI；不得只改说明文字让界面看似正确。
+3. 静态内容放在 `catalogs/`，运行行为由对应 Manager 负责，共享类型和纯函数放在 `core/`。
+4. 不手工编辑 Cocos 场景 JSON。新增节点、层级和组件使用代码创建。
+5. 不手改资源 `.meta` 中的 UUID；同名换图保留原 `.meta`，新增资源使用唯一 UUID。
+6. UI 图标、角色、怪物、武器、VFX 和音频替换必须遵守 [美术替换指南](docs/ART_REPLACEMENT_GUIDE.md) 与 [UI 系统说明](docs/UI_SYSTEM.md)。
+7. 存档字段变更必须提供旧存档兼容、默认值和重载测试，遵守 [存档与平台说明](docs/SAVE_AND_PLATFORM.md)。
+8. 机制、数值或内容数量变更必须同步 catalog 测试、机制基线和差异状态。
+9. 不新增第二份公式、价格、资源 key 或内容数量常量；需要共享时导出单一权威值。
+10. 不把 TODO、设计稿、catalog 描述或未调用纯函数当作已经运行的能力。
 
-### 2.10 装备系统（`equipmentCatalog.ts`）
+当前模块边界见 [项目架构说明](docs/PROJECT_ARCHITECTURE.md)，日常环境和工作流见 [开发说明](docs/DEVELOPMENT_GUIDE.md)。
 
-**Starter 装备**（开局自带）：
-tactical-visor（攻击范围+36，暴击率+1.2%）/
-phase-armor（生命+22，物防+2.2，魔防+1，火防+1，冰防+1）/
-kinetic-boots（移速+17，闪避率+0.8%）/
-magnet-coil（拾取范围+22，幸运+1.2）
+## 6. 验证门禁
 
-**装备品质**：普通 / 稀有 / 史诗 / 传奇 / 神话
-
-**武器解锁进度**（`equipmentProgression.ts`）：
-- 家族解锁：按完成战斗次数逐步解锁
-- 变体 T2-T10：按完成战斗次数 + 蓝图数量解锁
-- T9+ 需要蓝图，蓝图由 Boss 低概率掉落
-
----
-
-## 3. 绝对不能改的东西
-
-| 项 | 原因 |
-|---|---|
-| `core/stats.ts` 的 `createBaseCharacterStats()` | 所有公式依赖这些基础值 |
-| `core/types.ts` 的 `CharacterStats` / `StatKey` | 全项目用这套类型 |
-| `combatFormulas.ts` | 伤害/射速/穿透/弹速的纯函数，测试和游戏共享 |
-| `combatState.ts` 的 `xpToNext` 初始值和升级公式 | 已经过平衡调整（65/1.24/22+lv×5） |
-| `state/combatState.ts` 的状态字段名 | 多模块共享 |
-| `assets/resources/audio/` 下的音效文件名 | 代码里硬编码引用 |
-| `STARTER_EQUIPMENT_IDS` 数组内容 | 新手装备已固定 |
-| 抖音小游戏包体 < 20MB 限制 | 构建配置不能动 |
-| `docs/offhand_weapon_design.md` 的 15 把副武器基准 | 基线设计，副武器数量/类型修改需重新确认 |
-| `catalogs/offhandCatalog.ts` 的 15 把副武器数据 | 与 design.md 同步，修改需同时更新两端 |
-| `offhand/offhandManager.ts` 的 15 种机制实现 | 每种机制对应一把副武器，不能随意改机制类型 |
-
----
-
-## 4. 改代码时的规则
-
-### 4.1 数值修改必须跑验证
+普通代码改动至少执行：
 
 ```bash
-# TypeScript 编译
-npx --yes -p typescript@5.9.3 tsc -p tsconfig.json
+npm run typecheck
+npm test
+```
 
-# 数值平衡：跑真实 Cocos 游戏 + CDP bot
-npm run balance:cdp
-# 或 pipeline（多把武器）
+`npm run typecheck` 等价于：
+
+```bash
+npx --yes -p typescript@5.9.3 tsc -p tsconfig.json
+```
+
+任何数值、公式、主武器、offhand、敌人、掉落、波次或成长改动，必须同时完成 TypeScript 检查、相关测试和真实 Cocos/CDP 跑局：
+
+```bash
+npm run typecheck
+npm test
+npm run balance:e2e:smoke
+```
+
+涉及多把武器或整体平衡时：
+
+```bash
+npm run balance:build-web
 npm run balance:pipeline
 ```
 
-### 4.7 CDP 自动化测试工作流（正确流程）
+`balance:pipeline` 默认带 `--skip-build`，必须先确认 `build/web-mobile/assets/main/index.js` 是本次源码生成、大小至少 100 KB，并包含 `__starfallGame` 与 `__starfallBulkTick`。不得用 `combatFormulas.ts` 的纯函数测试替代真实 Cocos 跑局。
 
-**核心入口**（带自动构建/清理/报告，一次搞定）：
+UI、角色、怪物、武器或 VFX 改动必须在 720×1280 真实 Web/Cocos 画面中检查；抖音交付还必须运行：
 
-| 用途 | 命令 | 说明 |
-|---|---|---|
-| 快速烟测 | `npm run balance:e2e:smoke` | 1 把武器(风暴步枪) × 1 局 × 240s |
-| 全武器平衡 | `npm run balance:pipeline` | 17 把武器 × 3 局 × 720s/局 |
-| 手动单测 | `python3 tools/bot/run_balance_e2e.py --runs 1 --weapon X --seed 42 --skip-build` | 指定武器、seed |
-
-**关键规则（踩过的坑）：**
-
-1. **`--skip-build` 优先** — 只要 `build/web-mobile/assets/main/index.js` ≥ 100KB 且含 `__starfallGame`，就 `--skip-build`。省掉 2-3 分钟的构建时间。
-2. **验证 build 是否有效**：
-   ```bash
-   python3 -c "text=open('build/web-mobile/assets/main/index.js','r',encoding='utf-8').read(); print(f'size: {len(text)//1024}KB, __starfallGame: {\"__starfallGame\" in text}')"
-   ```
-3. **必须重新构建时**：`python3 tools/bot/build_web_mobile_for_bot.py` 会自动处理种子恢复和重试。**不要手动开 Cocos GUI 等导入**（没用，GUI 360s 也导不完）。不要 `rm -rf library/`（删了更慢）。
-4. **构建失败 `scenes=0/scripts=0`**：自动重试机制已经修复（去掉了 `clean_editor_cache=True` 的白给轮次）。如果还是失败，检查 `library/` 下有无 macOS 冲突副本（`* 2*` 文件），有就删了重跑。
-5. **CDP bot 找不到钩子**：跑不起来时检查 `build_web_mobile_for_bot.py` 的输出——`__starfallGame` 和 `__starfallBulkTick` 必须都在 index.js 里。不在的话说明 Cocos 缓存了旧代码，删一次 `temp/` 再构建。
-6. **Cocos CLI 构建缓存过强**：如果改代码后构建时间 < 10s 且产物没变，说明缓存命中跳过了重编译。删 `rm -rf temp/` 再构建。
-
-### 4.2 新增武器格式（`weaponCatalog.ts`）
-
-```typescript
-// WEAPON_FAMILIES
-{ id, name, color, damage, fireRate, pierce, drone, bulletSpeed, mechanic, desc }
-// WEAPON_VARIANTS
-{ id, prefix, suffix, tier, damage, fireRate, pierce, drone, speed, cost }
+```bash
+npm run build:bytedance
+npm run size:bytedance
 ```
 
-变体 `damage`/`fireRate` 等是**倍率系数**（如 0.86 表示 ×0.86，4.44 表示 ×4.44），不是绝对值。
-装备价格 = `baseDamage × 5 + tier.cost × 30 × rarityMultiplier`。
+完整命令、缓存处理和验收矩阵见 [测试与构建基线](docs/TESTING_AND_BUILD.md)。不要把删除整个 `library/` 或反复打开 Cocos GUI 当作常规修复手段。
 
-### 4.3 新增怪物格式（`enemyCatalog.ts`）
+## 7. 文档更新合同
 
-```typescript
-{ id, name, family, artId, hp, speed, damage, radius, xp,
-  alloyChance, color, accent, spawnAfter, weight,
-  bossMaterial? }  // bossMaterial: 大 Boss 掉落材料
-```
+同一次改动必须更新对应基线：
 
-基础值会被 HP/伤害缩放公式直接乘。`spawnAfter` = 最早出现的波次（0-based index）。
+| 改动 | 必须同步 |
+|---|---|
+| 机制、公式、数值、内容规模 | `docs/GAMEPLAY_MECHANICS.md`、相关测试 |
+| 发现、决定或关闭差异 | `docs/BASELINE_GAPS.md` |
+| 架构、模块所有权、帧循环 | `docs/PROJECT_ARCHITECTURE.md`、`docs/DEVELOPMENT_GUIDE.md` |
+| UI、图标、布局或皮肤 key | `docs/UI_SYSTEM.md` |
+| 角色、怪物、武器、VFX、音频或资源目录 | `docs/ART_REPLACEMENT_GUIDE.md` |
+| 存档、广告、抖音 SDK 或平台配置 | `docs/SAVE_AND_PLATFORM.md`、`docs/SUBMISSION_CHECKLIST.md` |
+| 受保护约束或全项目事实 | 本文件、`docs/BASELINE.md` |
 
-### 4.4 新增道具格式（`runItemCatalog.ts`）
+历史审查、平衡计划和带日期报告只保存当时结论，不得反向覆盖当前基线。
 
-```typescript
-{ id, name, category, color, effects: [{ stat, amount }] }
-```
+## 8. 交付前检查
 
-blueprint 基础值 × tier 缩放后生效。正面无负面道具不加 1.24 倍率。
+- 改动范围只包含本任务需要的文件。
+- 没有手工编辑场景 JSON、UUID 或受保护项。
+- 当前行为能追溯到运行时源码，不是仅存在于描述或测试镜像。
+- 必需验证已运行，并明确记录通过、失败或未运行原因。
+- 真实 Cocos/CDP 产物来自本次源码。
+- 受影响的基线文档与 gap 状态已同步。
+- 新资源和抖音产物满足 19 MiB 守门线。
 
-### 4.5 新增装备格式（`equipmentCatalog.ts`）
-
-```typescript
-{ id, name, slot, color, baseCost, desc, effects: [{ stat, amount }] }
-```
-
-`gearStats` 乘 `gearLevel`（机库升级，战斗内固定 level=1）。
-
-### 4.6 不能动 Cocos 节点结构
-
-场景 JSON 里有 UUID 引用，手动编辑会破坏。所有节点用代码创建。
-
----
-
-## 5. 文件结构
-
-```
-assets/scripts/
-├── RogueShooterGame.ts              # 主入口，所有系统协调
-├── core/
-│   ├── types.ts                     # CharacterStats / StatKey / WeaponStats / EquipmentDef / EnemySpec
-│   ├── stats.ts                     # createBaseCharacterStats / addCharacterStats / STAT_META
-│   ├── resources.ts                 # 资源定义和钱包
-│   ├── gameContext.ts               # GameEventBus
-│   └── combatFormulas.ts            # 伤害/射速/穿透/弹速纯函数（测试和游戏共享）
-├── catalogs/
-│   ├── weaponCatalog.ts             # 17 把武器（14 基础 + 3 传说）+ 10 种变体
-│   ├── equipmentCatalog.ts           # 装备蓝图 + 品质 + Starter 装备
-│   ├── equipmentProgression.ts       # 武器/装备解锁进度
-│   ├── runItemCatalog.ts            # 22 blueprint × 5 tiers 道具 + 12 种升级选项
-│   └── enemyCatalog.ts              # 10 种基础怪 + 5 小 Boss + 5 大 Boss + 10 变体
-├── enemy/
-│   ├── enemyManager.ts              # 怪物生成/更新/死亡/分裂
-│   └── enemyConstants.ts            # 怪物常量
-├── projectile/
-│   └── projectileManager.ts          # 子弹伤害/穿透/速度/14 个机制词条
-├── pickup/
-│   └── pickupManager.ts             # XP/合金掉落、升级选择、宝箱
-├── shop/
-│   └── equipmentManager.ts           # 商店系统、装备管理、机库
-├── state/
-│   └── combatState.ts               # 战斗状态（xpToNext 等在这里）
-├── flow/
-│   └── battleFlow.ts                # 战斗流程纯函数（撤离/结算/提示）
-└── ui/
-    └── panels.ts                    # UI 面板管理
-tools/bot/
-├── run_balance_cdp.py               # 单把武器 CDP 测试
-└── run_balance_pipeline.py          # 多把武器 CDP 批量测试
-tests/                               # 纯 TS 测试
-├── catalogs/                        # catalog 正确性测试
-├── core/                            # 公式正确性测试
-├── balance/                         # DPS / 波次需求 / P50 估算测试
-└── flows/                          # 战斗流程测试
-```
-
----
-
-## 6. 已知问题 / 已知待调
-
-| 问题 | 状态 | 位置 |
-|---|---|---|
-| echo_chain 弹射搜索范围 400→600, 链数 8→12 | ✅ 已改（待验证波次） | projectileManager.ts |
-| 回声弓 damage 38→48 | ✅ 已改（待试玩验证） | weaponCatalog.ts |
-| `findNearestEnemy` 签名不匹配（波 10+ 怪找玩家坐标非击杀点） | ✅ 已修复 | enemyManager.ts |
-| 弹射/反弹后缺 `node.angle` 更新 | ✅ 已修复 | projectileManager.ts |
-| 裂变囊分裂旧残留代码（spawn mite） | ✅ 已修复（删重复） | enemyManager.ts L1827 |
-| 波 10 Boss 需要走位风筝，Bot 打不过但真人可过 | 已确认 | enemyManager.ts spawnBoss() |
-| boss_gate/boss_clear 武器偏弱 | 待调 | 需 CDP 重新跑 1200s 验证 |
-| 瘟疫 DoT 每层 1%/秒（代码），文档写 0.4%/层 | 需确认是否过强 | projectileManager.ts onPoisonHit / enemyManager.ts dot |
-| T3 脉冲 damage 系数 ×4.44（代码），文档写 ×1.04 | 文档已更正，代码值正确 | weaponCatalog.ts T3 pulse |
-
-*最后更新：2026-07-07*
-*本文件是 AI 修改代码前的必读文件。违反以上规则的修改不会被接受。*
+最后更新：2026-07-11（`SF-2026-07-11`）。

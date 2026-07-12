@@ -96,9 +96,10 @@ import {
     getSettlementTip,
     shouldShowExtractDouble,
 } from './flow/battleFlow';
-import { ENEMY_SPECS, TOTAL_ENEMY_TYPES, ENEMY_VARIANTS, buildEnemyCatalog } from './catalogs/enemyCatalog';
+import { ENEMY_SPECS, ENEMY_VARIANTS, buildEnemyCatalog } from './catalogs/enemyCatalog';
 import { EnemyManager, ENEMY_PLAYER_PADDING, ENEMY_STRIP_META, MAX_CHESTS_PER_WAVE, type Enemy, type EnemyHostContext, type SpriteStripAnimation } from './enemy/enemyManager';
 import { GameEventBus } from './core/gameContext';
+import { MIRROR_PRISM_FOCUSED_DAMAGE_MULTIPLIER } from './core/weaponMechanics';
 import { CombatState, createCombatState, resetCombatSession } from './state/combatState';
 import { ProjectileManager, BULLET_HIT_CELL, type Bullet, type EnemyProjectile, type ProjectileHostContext } from './projectile/projectileManager';
 import { PickupManager, type Pickup, type PickupHostContext } from './pickup/pickupManager';
@@ -137,6 +138,9 @@ const SHOP_ITEM_COUNT = 6;
 const UI_SAFE_TOP = 56;
 const UI_SAFE_BOTTOM = 32;
 const MIN_TOUCH_BUTTON_HEIGHT = 48;
+const HUD_TEXT_REFRESH_INTERVAL = 0.1;
+const AREA_PULSE_POOL_SIZE = 48;
+const DRONE_ZAP_POOL_SIZE = 16;
 
 
 interface ButtonView {
@@ -148,12 +152,22 @@ interface ButtonView {
     color: string;
     disabledColor: string;
     disabled: boolean;
+    renderKey?: string;
 }
 
 function drawButtonView(button: ButtonView, disabled: boolean): void {
+    const renderKey = `${disabled ? 1 : 0}:${button.color}:${button.disabledColor}`;
+    if (button.renderKey === renderKey) return;
+    button.renderKey = renderKey;
     button.disabled = disabled;
     drawButtonGfx(button.gfx, button.width, button.height, disabled ? button.disabledColor : button.color, disabled);
     updateButtonSkin(button, disabled);
+}
+
+interface TimedGraphicsEffect {
+    node: Node;
+    gfx: Graphics;
+    remaining: number;
 }
 
 interface DroneVisual {
@@ -289,6 +303,11 @@ export class RogueShooterGame extends Component {
     private vfxWaveClearPulse = 0;
     private vfxRarePickupPulse = 0;
     private vfxPlayerHitOverlay = 0;
+    private worldVfxLayer: Node | null = null;
+    private areaPulsePool: TimedGraphicsEffect[] = [];
+    private droneZapPool: TimedGraphicsEffect[] = [];
+    private areaPulsePoolCursor = 0;
+    private droneZapPoolCursor = 0;
 
     // ── Bot test data ─────────────────────────────────────────────
     private botData: any[] = [];
@@ -312,6 +331,8 @@ export class RogueShooterGame extends Component {
     private _hpBarFill: Node | null = null;
     private _xpBarFill: Node | null = null;
     private _shieldBarFill: Node | null = null;
+    private hudTextRefreshTimer = 0;
+    private lastHudPhase: GamePhase | null = null;
 
     private shop = new EquipmentManager(this as unknown as ShopHostContext);
     private weaponCooldowns: Record<string, number> = {};
@@ -437,6 +458,7 @@ export class RogueShooterGame extends Component {
         input.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
         input.off(Input.EventType.TOUCH_END, this.onTouchEnd, this);
         input.off(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
+        this.destroyTransientGraphicsPools();
     }
 
     update(dt: number) {
@@ -448,6 +470,7 @@ export class RogueShooterGame extends Component {
         this.audio.updateSfxCooldowns(dt);
         this.audio.updateBgmFade(dt);
         this.pickupMgr.updateFloatingTexts(dt);
+        this.updateTransientGraphics(dt);
         this.perfPreMs = this.perfNow() - t;
 
          if (this.cs.phase === 'combat') {
@@ -489,7 +512,6 @@ export class RogueShooterGame extends Component {
             this.enemyMgr.updateEnemies(combatDt);
             this.offhandMgr.tick(combatDt);
             this.resolvePlayerAfterEnemyMovement();
-            this.updateDroneVisuals(0);
             this.perfEnemyMs = this.perfNow() - t;
 
             t = this.perfNow();
@@ -526,8 +548,9 @@ export class RogueShooterGame extends Component {
             }
         }
 
+        this.keepWorldVfxLayerOnTop();
         t = this.perfNow();
-        this.refreshHud();
+        this.updateHud(dt);
         this.perfHudMs = this.perfNow() - t;
         this.perfFrameMs = this.perfNow() - frameStart;
     }
@@ -591,6 +614,7 @@ export class RogueShooterGame extends Component {
         this.enemyMgr.initDeathParticlePool(this.worldNode);
         this.worldNode.setPosition(0, 0, 0);
         this.drawWorldArena(this.worldNode);
+        this.initTransientGraphicsPools();
 
         this.buildHud(root);
         this.buildVfxOverlay(root);
@@ -2263,13 +2287,17 @@ export class RogueShooterGame extends Component {
         const weaponColor = activeWeapon?.color || '#4CC9F0';
         this.cs.shotCounter += 1;
         const shootMechanic = this.getActiveWeaponMechanic();
+        if (shootMechanic === 'overheat') {
+            this.cs.overheatStacks = Math.min(5, this.cs.overheatStacks + 1);
+            this.cs.overheatTimer = 0;
+        }
         let muzzleShotCount = 1;
 
         // 根据机械机制决定射击
         if (shootMechanic === 'multishot_3') {
-            // 裂变枪管: 同时 3 颗扇形 0.18 rad 间距
+            // 裂变枪管: 同时 3 颗窄扇形 0.16 rad 间距
             muzzleShotCount = 3;
-            const spread = [-0.18, 0, 0.18];
+            const spread = [-0.16, 0, 0.16];
             for (const offset of spread) {
                 const angle = baseAngle + offset;
                 this.proj.createBullet(angle, damage, this.proj.getBulletPierce(), weaponStyle, weaponColor, shootMechanic);
@@ -2279,12 +2307,13 @@ export class RogueShooterGame extends Component {
             muzzleShotCount = 5;
             for (let i = 0; i < 5; i++) {
                 const angle = baseAngle + (Math.PI * 2 * i) / 5;
-                this.proj.createBullet(angle, damage, this.proj.getBulletPierce(), weaponStyle, weaponColor, shootMechanic);
+                const rayDamage = i === 0 ? damage * MIRROR_PRISM_FOCUSED_DAMAGE_MULTIPLIER : damage;
+                this.proj.createBullet(angle, rayDamage, this.proj.getBulletPierce(), weaponStyle, weaponColor, shootMechanic);
             }
         } else if (shootMechanic === 'poison') {
             // 瘟疫喷射器：扇形持续喷雾。喷到敌人只叠中毒层数，不做每秒多次直伤；
             // 提升攻速 = 更快叠层，DoT 每层每秒结算。
-            const range = Math.min(this.getAttackRange(), 420);
+            const range = Math.min(this.getAttackRange(), 450);
             this.proj.spawnSprayCone(baseAngle, range, weaponColor);
             for (const enemy of this.enemyMgr.enemies) {
                 if (!this.enemyMgr.enemySet.has(enemy)) continue;
@@ -2306,17 +2335,17 @@ export class RogueShooterGame extends Component {
                 }
             }
         } else {
-            this.proj.createBullet(baseAngle, damage, this.proj.getBulletPierce(), weaponStyle, weaponColor, shootMechanic);
+            const projectileMechanic = shootMechanic === 'icefire_judge'
+                ? (this.cs.shotCounter % 2 === 0 ? 'icefire_fire' : 'icefire_ice')
+                : shootMechanic;
+            this.proj.createBullet(baseAngle, damage, this.proj.getBulletPierce(), weaponStyle, weaponColor, projectileMechanic);
         }
         this.audio.playShootSfx(weaponStyle);
         this.proj.spawnMuzzleFlash(baseAngle, weaponStyle, weaponColor, muzzleShotCount);
     }
 
     private updateRegen(dt: number) {
-        const regen = this.getCharacterStats().hpRegen;
-        if (regen <= 0 || this.cs.playerHp <= 0 || this.cs.playerHp >= this.cs.playerMaxHp) return;
-        this.cs.regenTimer += dt;
-        // 机制词条: crit_stacks (风暴步枪) 暴击叠加 1% 射速/层, 上限 5 层, 3 秒不暴击衰减 1 层
+        // 机制词条衰减独立于回血，不能被 hpRegen early-return 跳过。
         if (this.cs.critStacks > 0) {
             this.cs.attackSpeedBoostTimer -= dt;
             if (this.cs.attackSpeedBoostTimer <= 0) {
@@ -2324,7 +2353,6 @@ export class RogueShooterGame extends Component {
                 this.cs.attackSpeedBoostTimer = 6.0;
             }
         }
-        // 机制词条: pierce_stacks (回声弓) 暴击叠加穿透, 6 秒不暴击衰减 1 层
         if (this.cs.pierceStacks > 0) {
             this.cs.pierceStackTimer -= dt;
             if (this.cs.pierceStackTimer <= 0) {
@@ -2332,6 +2360,17 @@ export class RogueShooterGame extends Component {
                 this.cs.pierceStackTimer = 6.0;
             }
         }
+        if (this.cs.overheatStacks > 0) {
+            this.cs.overheatTimer += dt;
+            if (this.cs.overheatTimer >= 0.8) {
+                this.cs.overheatStacks = Math.max(0, this.cs.overheatStacks - 1);
+                this.cs.overheatTimer = 0;
+            }
+        }
+
+        const regen = this.getCharacterStats().hpRegen;
+        if (regen <= 0 || this.cs.playerHp <= 0 || this.cs.playerHp >= this.cs.playerMaxHp) return;
+        this.cs.regenTimer += dt;
         if (this.cs.regenTimer >= 1) {
             this.cs.regenTimer = 0;
             this.healPlayer(regen);
@@ -2350,15 +2389,96 @@ export class RogueShooterGame extends Component {
         this.cs.playerShield = Math.min(this.cs.playerShieldMax, this.cs.playerShield + stats.shieldRegen * dt);
     }
 
+    private initTransientGraphicsPools(): void {
+        if (!this.worldNode) return;
+        const layer = new Node('WorldVfxLayer');
+        layer.layer = Layers.Enum.UI_2D;
+        this.worldNode.addChild(layer);
+        this.worldVfxLayer = layer;
+        this.areaPulsePool = this.createTransientGraphicsPool(layer, 'EnemyAreaPulse', AREA_PULSE_POOL_SIZE);
+        this.droneZapPool = this.createTransientGraphicsPool(layer, 'DroneZap', DRONE_ZAP_POOL_SIZE);
+        this.areaPulsePoolCursor = 0;
+        this.droneZapPoolCursor = 0;
+    }
+
+    private createTransientGraphicsPool(parent: Node, name: string, size: number): TimedGraphicsEffect[] {
+        const pool: TimedGraphicsEffect[] = [];
+        for (let i = 0; i < size; i++) {
+            const node = new Node(`${name}_${i}`);
+            node.layer = Layers.Enum.UI_2D;
+            node.active = false;
+            parent.addChild(node);
+            pool.push({ node, gfx: node.addComponent(Graphics), remaining: 0 });
+        }
+        return pool;
+    }
+
+    private keepWorldVfxLayerOnTop(): void {
+        const layer = this.worldVfxLayer;
+        const parent = layer?.parent;
+        if (!layer || !layer.isValid || !parent) return;
+        const children = parent.children;
+        if (children[children.length - 1] !== layer) {
+            layer.setSiblingIndex(children.length - 1);
+        }
+    }
+
+    private acquireTransientGraphicsEffect(pool: TimedGraphicsEffect[], cursor: number): number {
+        if (pool.length <= 0) return -1;
+        for (let offset = 0; offset < pool.length; offset++) {
+            const index = (cursor + offset) % pool.length;
+            if (!pool[index].node.active) return index;
+        }
+        return cursor % pool.length;
+    }
+
+    private updateTransientGraphics(dt: number): void {
+        const elapsed = Math.max(0, dt);
+        this.updateTransientGraphicsPool(this.areaPulsePool, elapsed);
+        this.updateTransientGraphicsPool(this.droneZapPool, elapsed);
+    }
+
+    private updateTransientGraphicsPool(pool: TimedGraphicsEffect[], elapsed: number): void {
+        for (const effect of pool) {
+            if (!effect.node.active) continue;
+            effect.remaining -= elapsed;
+            if (effect.remaining > 0) continue;
+            effect.remaining = 0;
+            effect.gfx.clear();
+            effect.node.active = false;
+        }
+    }
+
+    private destroyTransientGraphicsPools(): void {
+        if (this.worldVfxLayer?.isValid) {
+            this.worldVfxLayer.destroy();
+        } else {
+            for (const effect of this.areaPulsePool) {
+                if (effect.node.isValid) effect.node.destroy();
+            }
+            for (const effect of this.droneZapPool) {
+                if (effect.node.isValid) effect.node.destroy();
+            }
+        }
+        this.worldVfxLayer = null;
+        this.areaPulsePool = [];
+        this.droneZapPool = [];
+        this.areaPulsePoolCursor = 0;
+        this.droneZapPoolCursor = 0;
+    }
+
 
 
     private drawAreaPulse(x: number, y: number, radius: number, color: string) {
-        if (!this.worldNode) return;
-        const node = new Node('EnemyAreaPulse');
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode.addChild(node);
+        const index = this.acquireTransientGraphicsEffect(this.areaPulsePool, this.areaPulsePoolCursor);
+        if (index < 0) return;
+        this.areaPulsePoolCursor = (index + 1) % this.areaPulsePool.length;
+        const effect = this.areaPulsePool[index];
+        const { node, gfx } = effect;
+        gfx.clear();
+        node.active = true;
         node.setPosition(x, y, 8);
-        const gfx = node.addComponent(Graphics);
+        effect.remaining = 0.16;
         gfx.fillColor = hex(color, 35);
         gfx.circle(0, 0, radius);
         gfx.fill();
@@ -2366,7 +2486,6 @@ export class RogueShooterGame extends Component {
         gfx.lineWidth = 4;
         gfx.circle(0, 0, radius);
         gfx.stroke();
-        this.scheduleOnce(() => node.destroy(), 0.16);
     }
 
     private takeDamage(amount: number, type: DamageType = 'physical') {
@@ -2790,50 +2909,66 @@ export class RogueShooterGame extends Component {
         // Delegated to shop
     }
 
-    private refreshHud() {
-        if (this.panels.titleLabel) this.panels.titleLabel.string = `星坠幸存者  出击 ${this.cs.battlesWon + 1}`;
+    private updateHud(dt: number): void {
         const inRun = this.cs.phase === 'combat' || this.cs.phase === 'level-up' || this.cs.phase === 'item-choice' || this.cs.phase === 'shop';
-        if (this.combatHudRoot) this.combatHudRoot.active = inRun;
+        if (inRun) this.drawBars();
+        this.hudTextRefreshTimer -= Math.max(0, dt);
+        if (this.lastHudPhase === this.cs.phase && (!inRun || this.hudTextRefreshTimer > 0)) return;
+        this.refreshHud(false);
+    }
+
+    private setLabelText(label: Label | null, text: string): void {
+        if (label && label.string !== text) label.string = text;
+    }
+
+    private refreshHud(updateBars = true) {
+        this.setLabelText(this.panels.titleLabel, `星坠幸存者  出击 ${this.cs.battlesWon + 1}`);
+        const inRun = this.cs.phase === 'combat' || this.cs.phase === 'level-up' || this.cs.phase === 'item-choice' || this.cs.phase === 'shop';
+        if (this.combatHudRoot && this.combatHudRoot.active !== inRun) this.combatHudRoot.active = inRun;
         if (this.panels.timerLabel) {
             const waveRemain = Math.max(0, Math.ceil(this.cs.waveDuration - this.cs.waveElapsed));
             const waveText = this.enemyMgr.isBossWave()
                 ? `第${Math.max(1, this.cs.waveIndex)}波 Boss${this.cs.bossDefeatedThisWave ? ` ${waveRemain}s` : ''}`
                 : `第${Math.max(1, this.cs.waveIndex || 1)}波 ${waveRemain}s`;
-            this.panels.timerLabel.string = inRun
+            const timerText = inRun
                 ? this.cs.phase === 'shop'
                     ? '商店'
                     : waveText
                 : '机库';
+            this.setLabelText(this.panels.timerLabel, timerText);
         }
         if (this.panels.statLabel) {
             const stats = this.getCharacterStats();
-            const enemyPoolCount = inRun ? this.enemyMgr.getAvailableEnemySpecs().length + 5 : TOTAL_ENEMY_TYPES;
-            this.panels.statLabel.string = inRun
+            const statText = inRun
                 ? `合金 ${this.cs.battleAlloy} · Lv.${this.cs.level} · 暴${Math.round(stats.critChance * 100)}%${stats.dronePower > 0 ? ` 机${this.shop.formatStat(stats.dronePower)}` : ''}`
                 : `永久资源：${this.formatWallet(this.getInventoryWallet())}`;
+            this.setLabelText(this.panels.statLabel, statText);
         }
         if (this.panels.equipmentLabel) {
             const activeWeapon = this.shop.getActiveWeapon();
             const weaponText = activeWeapon ? `${activeWeapon.name} Lv.${this.shop.getEquipmentLevel(activeWeapon.id)}` : '无武器';
             const offhand = this.cs.equippedOffhandId ? findOffhand(this.cs.equippedOffhandId) : null;
             const offhandText = offhand ? `${offhand.name} T${this.cs.offhandLevel}` : '未装备';
-            this.panels.equipmentLabel.string = inRun
+            const equipmentText = inRun
                 ? `主 ${weaponText} · 副 ${offhandText}`
                 : '';
+            this.setLabelText(this.panels.equipmentLabel, equipmentText);
         }
         if (this.panels.shopButton) {
-            this.panels.shopButton.node.active = inRun;
-            this.panels.shopButton.label.string = '商店';
+            if (this.panels.shopButton.node.active !== inRun) this.panels.shopButton.node.active = inRun;
+            this.setLabelText(this.panels.shopButton.label, '商店');
             drawButtonView(this.panels.shopButton, this.cs.phase !== 'combat');
         }
         if (this.panels.extractButton) {
-            this.panels.extractButton.node.active = inRun;
-            this.panels.extractButton.label.string = '撤离';
+            if (this.panels.extractButton.node.active !== inRun) this.panels.extractButton.node.active = inRun;
+            this.setLabelText(this.panels.extractButton.label, '撤离');
             drawButtonView(this.panels.extractButton, this.cs.phase !== 'combat');
         }
         this.refreshDebugHud(inRun);
-        this.drawBars();
+        if (updateBars) this.drawBars();
         this.ensureMenuVisible();
+        this.lastHudPhase = this.cs.phase;
+        this.hudTextRefreshTimer = HUD_TEXT_REFRESH_INTERVAL;
     }
 
     private ensureMenuVisible(): void {
@@ -2858,35 +2993,38 @@ export class RogueShooterGame extends Component {
 
     private refreshDebugHud(inRun: boolean) {
         if (!this.panels.debugLabel) return;
-        this.panels.debugLabel.node.active = inRun && this.debugHudEnabled;
+        const visible = inRun && this.debugHudEnabled;
+        if (this.panels.debugLabel.node.active !== visible) this.panels.debugLabel.node.active = visible;
         if (!inRun || !this.debugHudEnabled) {
-            this.panels.debugLabel.string = '';
+            this.setLabelText(this.panels.debugLabel, '');
             return;
         }
         const boss = this.enemyMgr.enemies.find((enemy) => enemy.boss);
         const bossText = boss ? `Boss ${Math.ceil(boss.hp)}/${Math.ceil(boss.maxHp)}` : 'Boss -';
-        this.panels.debugLabel.string = [
+        this.setLabelText(this.panels.debugLabel, [
             `DBG ${this.cs.phase} W${this.cs.waveIndex} ${Math.round(this.cs.waveElapsed)}/${Math.round(this.cs.waveDuration)}s ${bossText}`,
             `E ${this.enemyMgr.enemies.length}/${this.enemyMgr.getEnemyCap()}  B ${this.proj.bullets.length}  EP ${this.proj.enemyProjectiles.length}/${ENEMY_PROJECTILE_LIMIT}  P ${this.pickupMgr.pickups.length}  FT ${this.pickupMgr.floatingTexts.length}`,
             `MS F${this.perfFrameMs.toFixed(1)} pre${this.perfPreMs.toFixed(1)} ply${this.perfPlayerMs.toFixed(1)} wep${this.perfWeaponMs.toFixed(1)} bul${this.perfBulletMs.toFixed(1)} ep${this.perfEnemyProjectileMs.toFixed(1)} ene${this.perfEnemyMs.toFixed(1)} sep${this.perfSeparationMs.toFixed(1)} pk${this.perfPickupMs.toFixed(1)} hud${this.perfHudMs.toFixed(1)}`,
             `DRAW enemy${this.perfDrawEnemy} bullet${this.proj.perfDrawBullet} drone${this.perfDrawDrone}  STEER ${this.perfCrowdSteerCalls}/${this.perfCrowdChecks}  SEPCHK ${this.perfSepChecks}`,
-        ].join('\n');
+        ].join('\n'));
     }
 
     private drawBars() {
-        // Fill nodes are left-anchored; changing width keeps the left edge fixed.
-        if (this._hpBarFill) {
-            const ratio = this.cs.playerMaxHp > 0 ? this.cs.playerHp / this.cs.playerMaxHp : 0;
-            this._hpBarFill.getComponent(UITransform)!.setContentSize(664 * clamp(ratio, 0, 1), 20);
-        }
-        if (this._xpBarFill) {
-            const ratio = this.cs.xpToNext > 0 ? this.cs.xp / this.cs.xpToNext : 0;
-            this._xpBarFill.getComponent(UITransform)!.setContentSize(322 * clamp(ratio, 0, 1), 14);
-        }
-        if (this._shieldBarFill) {
-            const ratio = this.cs.playerShieldMax > 0 ? this.cs.playerShield / this.cs.playerShieldMax : 0;
-            this._shieldBarFill.getComponent(UITransform)!.setContentSize(322 * clamp(ratio, 0, 1), 14);
-        }
+        // Fill nodes are checked every frame; unchanged widths do not dirty UI geometry.
+        const hpRatio = this.cs.playerMaxHp > 0 ? this.cs.playerHp / this.cs.playerMaxHp : 0;
+        const xpRatio = this.cs.xpToNext > 0 ? this.cs.xp / this.cs.xpToNext : 0;
+        const shieldRatio = this.cs.playerShieldMax > 0 ? this.cs.playerShield / this.cs.playerShieldMax : 0;
+        this.updateBarFill(this._hpBarFill, 664 * clamp(hpRatio, 0, 1), 20);
+        this.updateBarFill(this._xpBarFill, 322 * clamp(xpRatio, 0, 1), 14);
+        this.updateBarFill(this._shieldBarFill, 322 * clamp(shieldRatio, 0, 1), 14);
+    }
+
+    private updateBarFill(node: Node | null, width: number, height: number): void {
+        const transform = node?.getComponent(UITransform);
+        if (!transform) return;
+        const size = transform.contentSize;
+        if (Math.abs(size.width - width) < 0.05 && Math.abs(size.height - height) < 0.05) return;
+        transform.setContentSize(width, height);
     }
 
     private updateDroneVisuals(dt: number) {
@@ -3005,11 +3143,15 @@ export class RogueShooterGame extends Component {
     }
 
     private drawZap(fromX: number, fromY: number, toX: number, toY: number) {
-        const node = new Node('DroneZap');
-        node.layer = Layers.Enum.UI_2D;
-        this.worldNode!.addChild(node);
+        const index = this.acquireTransientGraphicsEffect(this.droneZapPool, this.droneZapPoolCursor);
+        if (index < 0) return;
+        this.droneZapPoolCursor = (index + 1) % this.droneZapPool.length;
+        const effect = this.droneZapPool[index];
+        const { node, gfx } = effect;
+        gfx.clear();
+        node.active = true;
         node.setPosition(0, 0, 8);
-        const gfx = node.addComponent(Graphics);
+        effect.remaining = 0.06;
         gfx.lineWidth = 3;
         gfx.strokeColor = hex('#90BE6D', 210);
         gfx.moveTo(fromX, fromY);
@@ -3018,7 +3160,6 @@ export class RogueShooterGame extends Component {
         gfx.lineTo(midX, midY);
         gfx.lineTo(toX, toY);
         gfx.stroke();
-        this.scheduleOnce(() => node.destroy(), 0.06);
     }
 
     private drawJoystick() {
@@ -3125,12 +3266,17 @@ export class RogueShooterGame extends Component {
 
     private getCharacterStats(): CharacterStats {
         const stats = createBaseCharacterStats();
+        const baseAttackRange = stats.attackRange;
         this.addCharacterStats(stats, this.pickupMgr.runStats);
 
         stats.attackSpeed += this.getWeaponStat('fireRate') * 0.18;
         stats.bulletSpeed += this.getWeaponStat('bulletSpeed') * 6;
         stats.pierce += this.getWeaponStat('pierce') * 0.18;
         stats.dronePower += this.getWeaponStat('drone');
+        const weaponAttackRange = this.shop.getActiveWeapon()?.weaponStats?.attackRange;
+        if (typeof weaponAttackRange === 'number') {
+            stats.attackRange += weaponAttackRange - baseAttackRange;
+        }
 
         for (const gear of this.shop.getEquippedGear()) {
             const level = this.shop.getEquipmentLevel(gear.id);

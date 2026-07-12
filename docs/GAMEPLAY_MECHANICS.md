@@ -81,7 +81,7 @@
 ```text
 基础属性 createBaseCharacterStats()
 + 本局 runStats（升级三选一和本局道具）
-+ 主武器贡献：fireRate×0.18、bulletSpeed×6、pierce×0.18、drone
++ 主武器贡献：家族 attackRange 替换基础420，再叠加 run/gear 范围；fireRate×0.18、bulletSpeed×6、pierce×0.18、drone
 + 已装备 gearStats×该装备持久等级
 + 幸运对暴击、致命、闪避、XP、资源收益的换算
 ```
@@ -123,7 +123,7 @@ baseRate = max(0.1,
 fireInterval = max(0.07, 1 / max(0.15, baseRate + attackSpeed × 0.45))
 ```
 
-`overheatStacks` 当前没有增长入口，实际差异见 `GAP-MECH-005`。
+`overheatStacks` 由冲锋枪每次开火增加1层，最多5层；每层提供10%武器射速。停火0.8秒后开始逐层冷却。
 
 ### 4.5 穿透、弹速与无人机
 
@@ -190,23 +190,23 @@ damage = max(1, incomingDamage × defenseRatio × (1 - damageReduction))
 
 | 家族 | mechanic | 当前运行状态 |
 |---|---|---|
-| 冲锋枪 | `overheat` | 未完整接线：公式读取层数，但层数不会增长 |
+| 冲锋枪 | `overheat` | 每次开火叠1层，每层+10%武器射速、5层封顶；停火0.8秒后逐层冷却 |
 | 瘟疫喷射器 | `poison` | 已有扇形检测、每次 3 层、15 层上限、DoT 与毒爆；Boss 不叠毒 |
-| 霜束发射器 | `slow` | 已接入；普通敌人减速，精英/Boss 免疫 |
+| 霜束发射器 | `slow` | 普通敌人减速 0.6 秒、速度×0.5；精英/Boss 免疫 |
 | 回声弓 | `echo_chain` | 击杀后 600 范围内最多连续弹射 12 次，弹射时穿透归零 |
-| 裂变枪管 | `multishot_3` | 每次三发扇形弹 |
-| 镜像棱镜 | `radial_5` | 每次五发 360° 环射 |
-| 量子织机 | `split` | 子弹飞行后分裂 |
+| 裂变枪管 | `multishot_3` | 每次三发 ±0.16rad 窄扇形弹 |
+| 镜像棱镜 | `radial_5` | 每次五发 360° 环射，主目标方向弹伤害×1.65 |
+| 量子织机 | `split` | 子弹飞行 0.42 秒后按 ±0.30rad 分裂 |
 | 离子长枪 | `straight` | 穿透伤害不衰减 |
-| 荆棘连弩 | `ricochet` | 撞墙最多反弹 2 次并更新方向 |
-| 磁轨炮 | `pierce_bonus` | 已接入穿透增伤；数值描述冲突见 `GAP-MECH-006` |
+| 荆棘连弩 | `ricochet` | 命中敌人或墙壁后最多反弹 2 次，每次增伤 15% |
+| 磁轨炮 | `pierce_bonus` | 每次穿透增伤 15%，弹道碰撞半径 7 |
 | 虚空针 | `crit_master` | 命中额外 +15% 暴击率、+0.30 暴击伤害 |
-| 流星发射器 | `aoe_burn` | 命中生成 3 秒燃烧区，受 AOE 属性加成 |
-| 轨道无人机 | `drone_charge` | 击杀 +30 充能，达到 100 触发范围爆炸 |
-| 重力锤 | `knockback` | 普通/精英可击退，暴击击退更强，Boss 免疫 |
+| 流星发射器 | `aoe_burn` | 命中先触发半径110/40%即时爆炸，再生成3秒/半径72燃烧区；固定6次tick（总48%子弹伤害）并轻减速 |
+| 轨道无人机 | `drone_charge` | 击杀 +34 充能，达到 100 触发范围爆炸 |
+| 重力锤 | `knockback` | 弹丸寿命1.5秒；命中产生半径120/40%伤害冲击并硬直0.45秒，主目标击退115/暴击230 |
 | 虚空撕裂者 | `void_tearer` | 运行时按穿透层数增伤；与 catalog 的“减防”描述不一致 |
-| 冰狱审判 | `icefire_judge` | 部分接入：命中缓速和击杀爆炸存在，冰火交替未实现 |
-| 织网支配者 | `webmaster_lifesteal` | 命中缓速、击杀充能、按子弹伤害 5% 回血；文档数值存在冲突 |
+| 冰狱审判 | `icefire_judge` | 弹丸寿命1.55秒；冰弹减速普通目标1秒（精英/Boss免疫）；火弹主伤害对已减速目标×2并产生80范围/25% AOE，该AOE对已减速的次级目标同样×2；击杀产生115范围/45% AOE |
+| 织网支配者 | `webmaster_lifesteal` | 命中缓速、击杀充能、按子弹伤害5%回血 |
 
 每个家族都有独立 `WeaponAttackStyle`、子弹贴图和射击音效映射。美术与音效替换规则不在本文展开。
 
@@ -232,6 +232,8 @@ damage = max(1, incomingDamage × defenseRatio × (1 - damageReduction))
 | 辅助 | 纳米修复器、铜墙护盾 |
 
 副武器声明为 T1-T5；数据模型为 `baseStats` 加四段 `levelUpgrades`。当前累计方式、材料消费和若干行为尚不符合设计文档，因此本文不宣称 15 种机制已经完整实现，详见 `GAP-OFFHAND-001` 至 `GAP-OFFHAND-003`。
+
+持续效果的当前运行节奏：回旋利刃、烈焰漩涡和静电力场的全怪伤害查询按固定 `0.1` 秒 tick（10 Hz）执行，视觉仍逐帧更新。回旋利刃使用相邻 tick 之间的扫掠弧碰撞，避免高速旋转时只检查瞬时圆点而漏过目标；烈焰轨迹按固定 tick 插值玩家路径并结算已存轨迹，静电力场按固定 tick 刷新范围伤害和减速。低帧 catch-up 逐个补齐固定 tick，不把任意大 `dt` 整段按末位置结算。
 
 权威源码：
 
@@ -279,7 +281,7 @@ damage = max(1, incomingDamage × defenseRatio × (1 - damageReduction))
 
 ### 8.1 本局道具
 
-- 32 个 blueprint × 5 个 tier，共 160 个道具实例。
+- 65 个单属性 blueprint × 5 个 tier，共 325 个道具实例。
 - 当前 blueprint 全为正面效果；tier 正面缩放为 `1 + (tier - 1)×0.52`。
 - 道具效果直接累加到 `runStats`，战斗结束时清空。
 - `MAX_RUN_ITEM_SLOTS = 999`，等同取消正常游玩中的硬槽位限制。
@@ -500,7 +502,7 @@ crystals += floor(bossKills/2)
 |---|---:|---|
 | 主武器 | 17 家族 × 10 变体 = 170 | `buildWeaponCatalog()` |
 | gear | 44 blueprint × 5 品质 = 220 | `buildGearCatalog()` |
-| 本局道具 | 32 blueprint × 5 tier = 160 | `buildRunItemCatalog()` |
+| 本局道具 | 65 个单属性 blueprint × 5 tier = 325 | `buildRunItemCatalog()` |
 | 升级属性 | 4 类 × 3 = 12 | `LEVEL_UP_BLUEPRINTS` |
 | 普通敌人 | 10 archetype × 11 变体 = 110 | `buildEnemyCatalog()` |
 | 小 Boss | 5 | 静态 catalog |

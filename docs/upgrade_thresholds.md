@@ -1,5 +1,9 @@
 # 升级台阶分析
 
+> [!WARNING]
+> **历史快照（已归档）**
+> 本文保留旧伤害、属性成长和怪物 HP 假设下的分析结果，不得作为当前实现、平衡结论或数值基线。当前开发入口请使用 [文档索引](./README.md)、[基线总览](./BASELINE.md)、[机制基线](./GAMEPLAY_MECHANICS.md) 和 [基线差异清单](./BASELINE_GAPS.md)。
+
 **分析维度**：子弹数 = ceil(敌人HP / 单发伤害)
 **公式**：`dmg = wd×(1+(lv-1)×0.12) + 16×0.15 + ap_upgrade`  
 **ap_upgrade** = +5/级（升级专属属性，attackPower）  

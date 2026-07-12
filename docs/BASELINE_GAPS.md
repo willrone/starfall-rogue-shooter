@@ -65,35 +65,33 @@
 
 权威证据：`assets/scripts/offhand/offhandManager.ts`。
 
-### GAP-MECH-005：冲锋枪过热层数永远为 0
+### GAP-MECH-005：冲锋枪过热层数运行逻辑（已关闭）
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P1 / OPEN |
+| 严重度 / 状态 | P1 / FIXED（2026-07-11） |
 | 设计期望 | 连续射击累计 5 层，每层 +10% 武器射速，停火后衰减 |
-| 当前实现 | `getFireInterval()` 会读取 `overheatStacks`，状态也会重置，但全项目没有增加或衰减 `overheatStacks/overheatTimer` 的运行逻辑 |
-| 证据 | `projectileManager.ts:529-539`；`combatState.ts:61-62,249-250` |
-| 下一步 | 在实际开火/停火更新路径维护层数和计时器，并增加机制行为测试 |
+| 当前实现 | 每次实际开火增加1层、5层封顶；停火0.8秒后逐层冷却；`getFireInterval()`按每层10%计入射速 |
+| 证据 | `RogueShooterGame.ts` 的开火与 `updateRegen()`路径；`projectileManager.ts` 的 `getFireInterval()` |
+| 验证 | `tests/flows/weaponMechanicsWiring.test.ts` 覆盖增长与衰减接线 |
 
 ### GAP-MECH-006：主武器描述与实际机制数值不一致
 
+2026-07-11 已统一霜束、磁轨炮、量子织机、流星发射器、冰狱审判与织网支配者描述。剩余缺口：
+
 | 武器 | 设计/文档期望 | 当前实现 | 下一步 |
 |---|---|---|---|
-| 霜束发射器 | 描述为减速 0.4 秒 | 代码为普通怪 0.6 秒、速度 ×0.5，精英/Boss 免疫 | 决定目标数值并统一 catalog、注释、测试 |
-| 磁轨炮 | catalog 写每穿透 +8% | 代码后续层按 +15% 计算 | 统一为一个常量 |
 | 虚空撕裂者 | catalog 写穿透减防 | 代码为每层穿透 +18% 伤害，没有减防状态 | 决定机制定位后修代码或文案 |
-| 冰狱审判 | 冰火交替、火弹爆炸 | 同一 switch 中重复 `icefire_judge` case，实际先走缓速；仅击杀爆炸存在 | 拆分冰/火弹状态并补交替测试 |
-| 织网支配者 | 历史文档出现 15% 或 8% 回血 | 当前为 `bullet.damage × 5%` | 确认当前平衡值并只保留一个权威说明 |
 
-### GAP-STAT-001：武器家族攻击距离字段没有进入战斗属性
+### GAP-STAT-001：武器家族攻击距离字段没有进入战斗属性（已关闭）
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P1 / OPEN |
-| 设计期望 | 17 个家族的 `attackRange` 决定各自索敌范围，再叠加装备/升级 |
-| 当前实现 | `WeaponFamily.attackRange` 没有复制到 `EquipmentDef.weaponStats`，`getCharacterStats()` 也没有读取；实际索敌主要使用角色基础 420 加 run/gear 属性 |
-| 证据 | `weaponCatalog.ts:3-15,182-209`；`RogueShooterGame.ts:3126-3154,3181-3182` |
-| 下一步 | 把攻击距离纳入 `WeaponStats` 或建立独立 family 查询；补不同家族索敌距离测试 |
+| 严重度 / 状态 | P1 / FIXED（2026-07-11） |
+| 设计期望 | 17 个家族的 `attackRange` 决定各自基础索敌范围，再叠加装备/升级 |
+| 当前实现 | `WeaponStats.attackRange` 由 family 写入生成武器；运行时用家族范围替换角色基础420，再叠加 run/gear 范围并供 `findNearestEnemy()` 使用 |
+| 证据 | `core/types.ts`；`weaponCatalog.ts:buildWeaponCatalog()`；`RogueShooterGame.ts:getCharacterStats()/getAttackRange()` |
+| 验证 | `weaponCatalog.test.ts` 与 `weaponMechanicsWiring.test.ts` 覆盖 catalog 和运行时接线 |
 
 ### GAP-GROWTH-001：每 3 级自动生命成长会被三选一重算覆盖
 
@@ -155,7 +153,57 @@
 | 证据 | `enemyCatalog.ts:371-397`；`enemyManager.ts:1745-1780` |
 | 下一步 | 选择一种解锁模型并删除另一套隐式规则；为每波候选 family/variant 建快照测试 |
 
+### GAP-ART-001：运行时玩家动画合同缺少对应 PNG
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P1 / OPEN |
+| 设计期望 | 角色能按 8 方向使用无武器身体条带，主武器作为独立挂载层显示 |
+| 当前实现 | 代码加载 `player_survivor_idle` 和 8 张 `player_survivor_run_*`，规格为 6 帧 × 160px；仓库只有这些文件的孤立 `.meta`，没有对应 960×160 PNG。现有 `player_*` 为 6×80 条带，`player_body_no_weapon_*` 也未接入当前 loader，干净导入会回退 placeholder |
+| 证据 | `RogueShooterGame.ts` 角色资源加载；`assets/resources/art/characters/`；`ART_REPLACEMENT_GUIDE.md` 第 6 节 |
+| 下一步 | 选择补齐 9 张 960×160 资源，或正式把 loader、帧尺寸和方向状态迁移到 80px 合同；增加缺图与条带尺寸测试，并在干净 AssetDB 运行验证 |
+
+### GAP-ART-002：17 把主武器的场上挂载图未闭合
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P1 / OPEN |
+| 设计期望 | 每个主武器 family 都有可辨识的角色手持/场上挂载图 |
+| 当前实现 | 运行时按 `art/weapons/weapon_<family>_icon` 推导资源；当前仅 5/17 个 family 能命中同名文件，其余回退通用或无专属表现 |
+| 证据 | `RogueShooterGame.ts` 武器外观加载；`assets/resources/art/weapons/`；`ART_REPLACEMENT_GUIDE.md` 第 8 节 |
+| 下一步 | 为 17 个 family 建唯一 key 和尺寸合同，补齐缺失 PNG/meta、资源映射测试及逐武器运行截图 |
+
+### GAP-ART-003：霜束与织网武器 UI 图标 key 不完整
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P1 / OPEN |
+| 设计期望 | 17 个主武器 family 都能在机库、掉落和详情界面显示唯一图标 |
+| 当前实现 | `frost-beamer` 通过通用推导得到 `wpn_frost_beamer`，现有文件/loader 使用 `wpn_frost_beam`；`webmaster` 缺少 `wpn_webmaster` 文件和 `loadIcons()` 项 |
+| 证据 | `equipmentManager.ts::equipIconKey()`；`RogueShooterGame.ts::loadIcons()`；`assets/resources/effects/ui_icons/` |
+| 下一步 | 建立显式 family→icon 映射或统一命名；补 17/17 映射测试，并验证异步加载后的机库刷新 |
+
 ## 4. P2 架构、状态与显示差异
+
+### GAP-ART-004：大 Boss 专属动画未被运行时使用
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P2 / OPEN |
+| 设计期望 | 5 个大 Boss 具有可辨识的专属轮廓与动画 |
+| 当前实现 | Boss 路径会强制选择通用 `boss` 条带；已有个别专属资源也无法从当前分支到达，5 个 Boss 主要共享同一视觉 |
+| 证据 | `enemyManager.ts` 的 strip 选择；`assets/resources/art/enemies/` |
+| 下一步 | 以 boss ID 建立专属 strip meta 与 fallback，补 5 个 Boss 资源和选择测试 |
+
+### GAP-ART-005：副武器没有专属战斗 Sprite 合同
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P2 / DECISION |
+| 设计期望 | 15 把副武器有稳定、可替换且互相可辨识的战斗美术 |
+| 当前实现 | `offhandManager.ts` 主要用 Graphics/Node 绘制机制表现，catalog 的 `iconKey` 大量复用通用 UI 图标；没有独立 PNG loader、尺寸或命名合同 |
+| 证据 | `offhandCatalog.ts`；`offhand/offhandManager.ts`；`ART_REPLACEMENT_GUIDE.md` 第 9 节 |
+| 下一步 | 决定保留程序化表现还是新增专属 Sprite 层；若新增，先定义不改变 15 种机制身份的资源表、回退和对象池规则 |
 
 ### GAP-ARCH-001：战斗公式存在运行时与测试镜像双源
 
@@ -197,40 +245,40 @@
 | 证据 | `runItemCatalog.ts:28,106-126`；`equipmentManager.ts:835-843` |
 | 下一步 | 上限 clamp 到 5，或正式设计并生成 T6-T10 |
 
-## 5. `AGENTS.md` 与源码差异
+## 5. 旧 `AGENTS.md` 的迁移核对
 
-以下差异必须在机制修复决策完成后同步回 `AGENTS.md`，否则它不能继续承担权威约束角色。
+以下是本次基线审计发现并用于重写 `AGENTS.md` 的旧描述。当前 `AGENTS.md` 已改为链接机制基线；本表保留用于防止历史说法回流。若源码再次变化，应更新当前机制文档，而不是照抄本表。
 
-| 严重度 | `AGENTS.md` 当前描述 | 2026-07-11 源码事实 | 下一步 |
+| 严重度 | 旧 `AGENTS.md` 描述 | 2026-07-11 源码事实 | 迁移结果 |
 |---|---|---|---|
-| P1 | XP 掉率 56%，掉落量 ×2.6 | 所有击杀直接给 XP；普通×2.6、精英×2.4、Boss×3 | 更新 XP 章节 |
-| P1 | HP/伤害进度常量 2.5/1.3 | 当前为 1.8/1.0 | 更新怪物公式与 early factor |
-| P1 | 早期 interval/batch/cap 使用旧表 | runtime 已有另一组 early relief、批量和 Boss cap | 从 runtime 生成表，避免手抄 |
-| P1 | 22 blueprint ×5=110 本局道具 | 32×5=160 | 更新数量与分类 |
-| P1 | 移速 +18~42、射程 +55~120 | 当前 +8~18、+20~50 | 更新升级表或恢复设计数值 |
-| P1 | `attackSpeed` 只由升级提供 | `bullet-time` 本局道具和多件 gear 也提供攻速 | 删除“专属”断言 |
-| P1 | 装备战斗内固定 level=1 | gear 效果乘持久装备等级 | 更新属性来源 |
-| P1 | 无人机伤害约 `dronePower×8` | `12 + dronePower×3.4 + reactorLevel×2` | 更新无人机公式 |
-| P1 | 风暴步枪 `crit_stacks` | 当前家族为冲锋枪 `overheat`，但机制未接线 | 先解决 `GAP-MECH-005` |
-| P1 | 回声弓 `pierce_stacks` | 当前为 `echo_chain` | 更新机制表 |
-| P1 | 织网击杀回血 15% | 当前为子弹伤害 5% | 确认平衡值后更新 |
-| P2 | 战术目镜攻击范围 +36 | catalog 为 +18 | 更新 Starter 表或调整数据 |
-| P2 | 角色属性只列武器 fireRate/pierce 贡献 | 当前还包括 bulletSpeed×6 和 drone | 补全属性来源 |
+| P1 | XP 掉率 56%，掉落量 ×2.6 | 所有击杀直接给 XP；普通×2.6、精英×2.4、Boss×3 | 已更新 XP 章节 |
+| P1 | HP/伤害进度常量 2.5/1.3 | 当前为 1.8/1.0 | 已更新怪物公式 |
+| P1 | 早期 interval/batch/cap 使用旧表 | runtime 已有另一组 early relief、批量和 Boss cap | 已改为引用 runtime，避免手抄 |
+| P1 | 22 blueprint ×5=110 本局道具 | 65 个单属性 blueprint ×5=325 | 已更新数量与单属性设计 |
+| P1 | 移速 +18~42、射程 +55~120 | 当前 +8~18、+20~50 | 已更新升级表 |
+| P1 | `attackSpeed` 只由升级提供 | 当前单属性 RUN_ITEM 不再直接加 `attackSpeed`，但 gear 仍可能提供 | 已删除“升级专属”断言 |
+| P1 | 装备战斗内固定 level=1 | gear 效果乘持久装备等级 | 已更新属性来源 |
+| P1 | 无人机伤害约 `dronePower×8` | `12 + dronePower×3.4 + reactorLevel×2` | 已更新无人机公式 |
+| FIXED | 冲锋枪 `overheat` | 已接入每次开火叠层与停火 0.8 秒逐层冷却 | 已补机制接线测试 |
+| P1 | 回声弓 `pierce_stacks` | 当前为 `echo_chain` | 已更新机制表 |
+| FIXED | 织网击杀回血 | 统一为子弹伤害 5% | `AGENTS.md`、catalog、机制基线已同步 |
+| P2 | 战术目镜攻击范围 +36 | catalog 为 +18 | 已更新 Starter 说明 |
+| P2 | 角色属性只列武器 fireRate/pierce 贡献 | 当前还包括 bulletSpeed×6 和 drone | 已补全属性来源 |
 
-## 6. 现有 `docs/` 文档差异
+## 6. 文档迁移状态
 
-| 文档 | 严重度 | 当前问题 | 下一步 |
-|---|---|---|---|
-| `GDD.md` | P1 | 仍写 10 武器、5 怪物、500 XP、旧公式、商店卖武器装备、XP 球、Boss 尚未开发；页首 v1.1、页尾 v1.2 | 保留产品愿景，机制与数值全部改为引用 `GAMEPLAY_MECHANICS.md`；历史诊断移入 archive |
-| `offhand_weapon_design.md` | P0 | 声称“代码与设计一致”，实际材料、T5 数值和多种机制不一致 | 保留为设计期望，并链接本文件三个 offhand gap；修复前去掉“完全一致”结论 |
-| `weapon_attack_effects.md` | P1 | 回声弓仍写 `pierce_stacks`；表现层文档混入过时机制字段 | 改为 `echo_chain`，其余机制数值只链接机制基线 |
-| `upgrade_thresholds.md` | P2 | 使用旧武器伤害、旧 AP 假设和旧 HP 缩放 | 用当前公式自动生成，或明确标记历史快照 |
-| `upgrade_thresholds 2.md` | P2 | 与上一文件重复的冲突副本 | 清理重复文件，不作为基线 |
-| `BP1_BALANCE_PROGRESS_2026-06-28.md` | P2 | 历史现场，包含 56% XP 掉率和已不存在的武器名/数值 | 移入历史目录或加醒目“非当前基线”页首 |
-| `p0-balance-plan-2026-07-10.md` | P2 | 标记“待执行”，其中目标值与当前源码再次不同 | 记录最终执行结果后归档，不能作当前表 |
-| `PROJECT_ARCHITECTURE.md` | P1 | 描述目标架构，包含当前不存在的 `systems/`、`adapters/` 和多个 state 文件 | 分成“当前架构”与“目标架构”，不要把目标目录写成现状 |
-| `ENGINEERING_STATUS.md` | P2 | 代码行数、包体、脚本数量和质量缺口快照过时 | 重新生成工程快照并标生成日期 |
-| `playtest/PLAYTEST_TEMPLATE.md` | P2 | 没有覆盖当前 Boss、撤离、复活、副武器、宝箱和永久进度指标 | 增加这些观测项，并引用本机制基线 |
+| 文档 | 状态 | 2026-07-11 处理结果 |
+|---|---|---|
+| `GDD.md` | FIXED | 已重写为产品目标文档，易变公式和数量改为引用机制基线 |
+| `offhand_weapon_design.md` | FIXED（文档） | 已明确其为设计目标并链接 offhand gaps；运行实现差异仍保持 OPEN/DECISION |
+| `weapon_attack_effects.md` | FIXED | 回声弓已改为 `echo_chain`，表现资源链接美术替换指南 |
+| `PROJECT_ARCHITECTURE.md` | FIXED | 已按当前真实目录、双 UI、HostContext 和单状态对象重写 |
+| `ENGINEERING_STATUS.md` | FIXED | 已记录本次构建、包体、AppID 导入和发布阻塞 |
+| `playtest/PLAYTEST_TEMPLATE.md` | FIXED | 已覆盖 Boss、撤离、复活、副武器、宝箱、存档、UI 与平台 |
+| `upgrade_thresholds.md` | ARCHIVED | 已加历史警告，不再作为当前平衡表 |
+| `BP1_BALANCE_PROGRESS_2026-06-28.md` | ARCHIVED | 已加历史警告，不再作为当前平衡结论 |
+| `p0-balance-plan-2026-07-10.md` | EXCLUDED | 当前为未跟踪计划快照；文档索引明确不作为基线 |
+| 文件名带 ` 2`、` 3` 的副本 | EXCLUDED | 视为冲突副本，不纳入正式入口；未擅自删除用户文件 |
 
 ## 7. 关闭流程
 

@@ -27,6 +27,7 @@ DEFAULT_CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chr
 
 sys.path.insert(0, str(BOT_DIR))
 from cdp_client import CDPClient  # noqa: E402
+from run_balance_cdp import validate_run_configuration  # noqa: E402
 
 
 def info(message: str) -> None:
@@ -145,11 +146,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--weapon", action="append", default=[])
     parser.add_argument("--weapon-level", type=int, default=1)
     parser.add_argument("--max-seconds", type=int, default=600)
+    parser.add_argument("--with-offhand", action="store_true", help="include orbit-blade; default isolates main weapons")
+    parser.add_argument("--with-shop", action="store_true", help="include shop RNG; default disables shops")
+    parser.add_argument("--per-weapon-seed", action="store_true", help="use different seeds per weapon; default uses identical seeds")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", default="data/balance_e2e_smoke")
     parser.add_argument("--allow-balance-fail", action="store_true")
     parser.add_argument("--keep-open", action="store_true", help="leave Chrome/server/profile running for manual inspection")
     args = parser.parse_args(list(argv) if argv is not None else None)
+    try:
+        validate_run_configuration(runs=args.runs, max_seconds=args.max_seconds, weapon_level=args.weapon_level)
+    except ValueError as config_err:
+        print(f"ERROR: {config_err}", file=sys.stderr)
+        return 2
 
     server: subprocess.Popen | None = None
     chrome_proc: subprocess.Popen | None = None
@@ -180,6 +189,12 @@ def main(argv: Iterable[str] | None = None) -> int:
         ]
         for weapon in args.weapon:
             cmd.extend(["--weapon", weapon])
+        if args.with_offhand:
+            cmd.append("--with-offhand")
+        if args.with_shop:
+            cmd.append("--with-shop")
+        if args.per_weapon_seed:
+            cmd.append("--per-weapon-seed")
         if args.allow_balance_fail:
             cmd.append("--allow-balance-fail")
         result = subprocess.run(cmd, cwd=ROOT)

@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 import statistics
 import sys
@@ -39,6 +40,7 @@ TARGETS = {
     "standard": (8, 9, 10),
     "boss_gate": (10, 10, 10),
     "boss_clear": (10, 11, 12),
+    "legendary": (10, 12, 13),
 }
 
 
@@ -73,6 +75,10 @@ WEAPON_TIER_MAP = {
     'meteor-launcher': 'boss_clear',
     'orbital-drone': 'boss_clear',
     'gravity-hammer': 'boss_clear',
+    # Legendary (must not fall back to standard targets)
+    'void-tearer': 'legendary',
+    'icefire-judge': 'legendary',
+    'webmaster': 'legendary',
 }
 
 
@@ -230,22 +236,41 @@ def select_offhand_runtime(cdp: CDPClient, offhand_id: str = 'orbit-blade') -> N
   if (!shop.offhandLevels || !shop.offhandLevels['{offhand_id}']) {{
     if (!shop.synthesizeOffhand('{offhand_id}')) return 'synth failed';
   }}
-  // Equip
+  // Equip and verify
   shop.equipOffhand('{offhand_id}');
-  return 'ok';
+  return shop.equippedOffhandId === '{offhand_id}' ? 'ok' : 'equip mismatch: ' + String(shop.equippedOffhandId);
 }})()
 """,
         timeout=5,
     )
     if result != "ok":
-        # Non-fatal: offhand is best-effort
-        print(f"[balance-cdp] WARN: offhand equip failed: {result}")
+        raise RuntimeError(f"Failed to equip required offhand {offhand_id}: {result}")
 
 
-def start_real_run(cdp: CDPClient, weapon_id: str, seed: int) -> None:
+def clear_offhand_runtime(cdp: CDPClient) -> None:
+    """Disable offhand damage so a fair baseline isolates the main weapon."""
+    result = cdp.evaluate(
+        """
+(function(){
+  var g = window.__starfallGame;
+  if (!g || !g.shop) return 'missing game/shop';
+  g.shop.equipOffhand(null);
+  return g.shop.equippedOffhandId === null ? 'ok' : 'clear mismatch: ' + String(g.shop.equippedOffhandId);
+})()
+""",
+        timeout=5,
+    )
+    if result != "ok":
+        raise RuntimeError(f"Failed to clear offhand: {result}")
+
+
+def start_real_run(cdp: CDPClient, weapon_id: str, seed: int, *, with_offhand: bool = False) -> None:
     set_runtime_seed(cdp, seed)
     select_weapon_runtime(cdp, weapon_id)
-    select_offhand_runtime(cdp)  # auto-equip offhand for CDP testing
+    if with_offhand:
+        select_offhand_runtime(cdp)
+    else:
+        clear_offhand_runtime(cdp)
     result = cdp.evaluate(
         """
 (function(){
@@ -302,44 +327,62 @@ def read_state(cdp: CDPClient) -> Dict[str, Any]:
 """,
         timeout=10,
     )
-    return state if isinstance(state, dict) else {"phase": "unknown"}
+    if not isinstance(state, dict):
+        raise RuntimeError(f"Failed to read state: {state!r}")
+    known_phases = {'menu', 'combat', 'level-up', 'item-choice', 'discard', 'shop', 'loot', 'hangar', 'paused', 'settlement'}
+    phase = state.get('phase')
+    if not isinstance(phase, str) or phase not in known_phases:
+        raise RuntimeError(f"Failed to read state: invalid phase {phase!r}")
+    for field in ('combatTime', 'wave', 'hp', 'kills', 'level'):
+        value = state.get(field)
+        if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise RuntimeError(f"Failed to read state: invalid {field}={value!r}")
+    return state
+
+
+def _require_cdp_ok(action: str, result: Any) -> None:
+    if result != "ok":
+        raise RuntimeError(f"{action} failed: {result}")
 
 
 def handle_modal_choices(cdp: CDPClient, state: Dict[str, Any]) -> None:
     phase = state.get("phase")
     if phase in {"level-up", "item-choice"}:
-        cdp.evaluate(
-            "(function(){try{window.__starfallGame.pickupMgr.choosePanelChoice(0);return'ok'}catch(e){return e.message}})()",
+        result = cdp.evaluate(
+            "(function(){try{var g=window.__starfallGame;var before=g.cs.phase;g.pickupMgr.choosePanelChoice(0);return g.cs.phase!==before?'ok':'phase unchanged: '+before}catch(e){return e.message}})()",
             timeout=5,
         )
+        _require_cdp_ok('choose panel choice', result)
     elif phase == "discard":
         # 道具满→丢弃第0个(最旧的)腾出格子
-        cdp.evaluate(
-            "(function(){try{window.__starfallGame.pickupMgr.chooseDiscard(0);return'ok'}catch(e){return e.message}})()",
+        result = cdp.evaluate(
+            "(function(){try{var g=window.__starfallGame;var before=g.cs.phase;g.pickupMgr.chooseDiscard(0);return g.cs.phase!==before?'ok':'phase unchanged: '+before}catch(e){return e.message}})()",
             timeout=5,
         )
+        _require_cdp_ok('choose discard', result)
     elif phase == "shop":
         # Buy first affordable item, then close shop.
-        cdp.evaluate(
-            "(function(){try{var g=window.__starfallGame;if(g.shop.chooseShopItemByIndex)g.shop.chooseShopItemByIndex(0);if(g.shop.closeShop)g.shop.closeShop();return'ok'}catch(e){return e.message}})()",
+        result = cdp.evaluate(
+            "(function(){try{var g=window.__starfallGame;var s=g.shop;var beforeItems=g.pickupMgr&&g.pickupMgr.acquiredRunItemIds?g.pickupMgr.acquiredRunItemIds.size:0;var beforeAlloy=g.cs.battleAlloy||0;var idx=-1;for(var i=0;i<s.shopOffers.length;i++){var o=s.shopOffers[i];if(o&&s.getShopItemCost&&beforeAlloy>=s.getShopItemCost(o)){idx=i;break}}if(idx>=0)s.chooseShopItemByIndex(idx);var afterItems=g.pickupMgr&&g.pickupMgr.acquiredRunItemIds?g.pickupMgr.acquiredRunItemIds.size:0;var afterAlloy=g.cs.battleAlloy||0;var purchaseOk=idx<0||afterItems>beforeItems||afterAlloy<beforeAlloy;s.closeShop();return purchaseOk&&g.cs.phase==='combat'?'ok':'shop postcondition failed idx='+idx+' phase='+String(g.cs.phase)+' items='+beforeItems+'->'+afterItems+' alloy='+beforeAlloy+'->'+afterAlloy}catch(e){return e.message}})()",
             timeout=5,
         )
+        _require_cdp_ok('handle shop modal', result)
     elif phase == "paused":
-        cdp.evaluate(
-            "(function(){try{window.__starfallGame.declineRevive();return'ok'}catch(e){return e.message}})()",
+        result = cdp.evaluate(
+            "(function(){try{var g=window.__starfallGame;var before=g.cs.phase;g.declineRevive();return g.cs.phase!==before?'ok':'phase unchanged: '+before}catch(e){return e.message}})()",
             timeout=5,
         )
+        _require_cdp_ok('decline revive', result)
 
 
 def trigger_shop(cdp: CDPClient) -> None:
-    """Open the in-game shop from combat. Silently skips on timeout."""
-    try:
-        cdp.evaluate(
-            "(function(){try{var g=window.__starfallGame;if(g&&g.pickupMgr&&g.pickupMgr.autoCollectAll)g.pickupMgr.autoCollectAll();if(g.shop&&g.shop.openShop)g.shop.openShop();return'ok'}catch(e){return e.message}})()",
-            timeout=3,
-        )
-    except Exception:
-        pass  # late-game WebSocket slowdown — skip this shop tick
+    """Open the required in-game shop phase or fail the benchmark."""
+    result = cdp.evaluate(
+        "(function(){try{var g=window.__starfallGame;if(!g||!g.shop||!g.shop.ensureShopOffers)return'missing shop';if(g.pickupMgr&&g.pickupMgr.autoCollectAll)g.pickupMgr.autoCollectAll();g.shop.shopOffers=[];g.shop.ensureShopOffers();g.cs.phase='shop';var offers=g.shop.shopOffers;return offers&&offers.length>0&&g.cs.phase==='shop'?'ok':'shop open failed phase='+String(g.cs.phase)+' offers='+String(offers&&offers.length)}catch(e){return e.message}})()",
+        timeout=5,
+    )
+    if result != "ok":
+        raise RuntimeError(f"Failed to open required shop: {result}")
 
 
 def _safe_read_state(cdp: CDPClient) -> Dict[str, Any]:
@@ -418,6 +461,21 @@ def stable_weapon_seed_offset(weapon_id: str) -> int:
     return value % 100_000
 
 
+def advance_elapsed(previous: float, state: Dict[str, Any], ran_frames: int) -> float:
+    """Advance benchmark time from real combat state, falling back to frames actually ticked."""
+    raw = state.get("combatTime")
+    if isinstance(raw, (int, float)) and float(raw) >= previous:
+        return float(raw)
+    return previous + max(0, int(ran_frames)) / 60.0
+
+
+def derive_run_seed(base_seed: int, weapon_id: str, weapon_index: int, run_idx: int, *, per_weapon_seed: bool) -> int:
+    """Use identical seeds across weapons for fair baselines; opt into per-weapon seeds for stress runs."""
+    if not per_weapon_seed:
+        return int(base_seed) + int(run_idx)
+    return int(base_seed) + stable_weapon_seed_offset(weapon_id) + int(weapon_index) * 1000 + int(run_idx)
+
+
 def set_weapon_level_runtime(cdp: CDPClient, weapon_id: str, level: int) -> None:
     safe_level = max(1, int(level))
     result = cdp.evaluate(
@@ -436,18 +494,33 @@ def set_weapon_level_runtime(cdp: CDPClient, weapon_id: str, level: int) -> None
         raise RuntimeError(f"Failed to set weapon {weapon_id} level {safe_level}: {result}")
 
 
-def run_weapon_once(cdp: CDPClient, weapon: Dict[str, Any], run_idx: int, max_seconds: int, seed: int, weapon_level: int = 1) -> RunResult:
+def run_weapon_once(
+    cdp: CDPClient,
+    weapon: Dict[str, Any],
+    run_idx: int,
+    max_seconds: int,
+    seed: int,
+    weapon_level: int = 1,
+    *,
+    with_offhand: bool = False,
+    with_shop: bool = False,
+) -> RunResult:
     if weapon_level > 1:
         set_weapon_level_runtime(cdp, weapon["id"], weapon_level)
-    start_real_run(cdp, weapon["id"], seed)
+    start_real_run(cdp, weapon["id"], seed, with_offhand=with_offhand)
     final_state: Dict[str, Any] = {}
     # 每隔 N 秒打开商店买道具
     shop_interval = 28
     next_shop_at = shop_interval
 
-    for elapsed in range(max_seconds):
+    elapsed = 0.0
+    iterations = 0
+    max_iterations = max(100, int(max_seconds) * 20)
+    while elapsed < max_seconds and iterations < max_iterations:
+        iterations += 1
+        frames_requested = min(60, max(1, int(round((max_seconds - elapsed) * 60))))
         try:
-            tick_real_game(cdp, 60)
+            ran_frames = tick_real_game(cdp, frames_requested)
         except Exception as tick_err:
             # WebSocket timeout mid-run — read final state and return gracefully
             import traceback
@@ -475,19 +548,16 @@ def run_weapon_once(cdp: CDPClient, weapon: Dict[str, Any], run_idx: int, max_se
             )
         try:
             state = read_state(cdp)
-        except Exception:
-            # Late-game CDP slowdown — use whatever we last saw
-            state = final_state or {"phase": "unknown", "wave": 0, "hp": 0}
+        except Exception as read_err:
+            raise RuntimeError(f"Failed to read runtime state: {read_err}") from read_err
         final_state = state
-        try:
-            handle_modal_choices(cdp, state)
-        except Exception:
-            pass  # non-critical, skip and continue
+        elapsed = advance_elapsed(elapsed, state, ran_frames)
+        handle_modal_choices(cdp, state)
         phase = state.get("phase")
 
         # 定期打开商店（仅在 combat 阶段有效）
-        if phase == "combat" and elapsed >= next_shop_at and elapsed < max_seconds - 10:
-            next_shop_at = elapsed + shop_interval
+        if with_shop and phase == "combat" and elapsed >= next_shop_at and elapsed < max_seconds - 10:
+            next_shop_at += shop_interval
             trigger_shop(cdp)
 
         # 追 Boss 集火秒杀
@@ -497,6 +567,9 @@ def run_weapon_once(cdp: CDPClient, weapon: Dict[str, Any], run_idx: int, max_se
         hp = float(state.get("hp") or 0)
         if hp <= 0 or phase in {"settlement", "hangar", "menu"}:
             break
+
+    if iterations >= max_iterations and elapsed < max_seconds:
+        raise RuntimeError(f"run loop made insufficient combat-time progress: elapsed={elapsed:.2f}s iterations={iterations}")
 
     wave = int(final_state.get("wave") or 0)
     hp = float(final_state.get("hp") or 0)
@@ -532,7 +605,7 @@ def summarize(results: List[RunResult]) -> List[Dict[str, Any]]:
         by_weapon.setdefault(r.weapon_id, []).append(r)
 
     rows = []
-    tier_order = {'novice': 0, 'standard': 1, 'boss_gate': 2, 'boss_clear': 3}
+    tier_order = {'novice': 0, 'standard': 1, 'boss_gate': 2, 'boss_clear': 3, 'legendary': 4}
     for wid, runs in sorted(by_weapon.items(), key=lambda kv: (tier_order.get(kv[1][0].tier, 99), kv[1][0].weapon_name)):
         waves = sorted(r.final_wave for r in runs)
         profile = runs[0].tier
@@ -563,6 +636,28 @@ def print_summary(rows: List[Dict[str, Any]]) -> None:
         print(f"| {r['weapon_name']} | {r['target_profile']} | {r['runs']} | {r['p50']} | {r['p90']} | {r['avg_kills']} | {r['avg_level']} | {mark} |")
 
 
+def validate_run_configuration(*, runs: int, max_seconds: int, weapon_level: int) -> None:
+    if runs <= 0:
+        raise ValueError(f"runs must be positive, got {runs}")
+    if max_seconds <= 0:
+        raise ValueError(f"max_seconds must be positive, got {max_seconds}")
+    if weapon_level <= 0:
+        raise ValueError(f"weapon_level must be positive, got {weapon_level}")
+
+
+def select_requested_weapons(weapons: List[Dict[str, Any]], requested: Optional[List[str]]) -> List[Dict[str, Any]]:
+    if not weapons:
+        raise ValueError("Weapon catalog is empty")
+    if not requested:
+        return weapons
+    wanted = set(requested)
+    available = {str(w.get("id")) for w in weapons}
+    missing = sorted(wanted - available)
+    if missing:
+        raise ValueError(f"Requested weapon ids not found: {', '.join(missing)}")
+    return [w for w in weapons if str(w.get("id")) in wanted]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run balance checks in the real Cocos game via CDP")
     ap.add_argument("--runs", type=int, default=3, help="runs per weapon")
@@ -573,9 +668,17 @@ def main() -> int:
     ap.add_argument("--target-filter", default="localhost:7457", help="Chrome target URL substring")
     ap.add_argument("--weapon", action="append", help="weapon id to test; repeatable. Defaults to all base families")
     ap.add_argument("--weapon-level", type=int, default=1, help="override hangar level of equipped weapon (1..N)")
+    ap.add_argument("--with-offhand", action="store_true", help="equip orbit-blade; default baseline isolates the main weapon")
+    ap.add_argument("--with-shop", action="store_true", help="open/buy from shop; default baseline disables shop RNG")
+    ap.add_argument("--per-weapon-seed", action="store_true", help="derive a different seed per weapon; default uses identical seeds")
     ap.add_argument("--out", default="data/balance_cdp", help="output directory")
     ap.add_argument("--allow-balance-fail", action="store_true", help="exit 0 after producing reports even when measured waves miss balance targets")
     args = ap.parse_args()
+    try:
+        validate_run_configuration(runs=args.runs, max_seconds=args.max_seconds, weapon_level=args.weapon_level)
+    except ValueError as config_err:
+        print(f"ERROR: {config_err}", file=sys.stderr)
+        return 2
 
     cdp = CDPClient(host=args.cdp_host, port=args.cdp_port)
     if not cdp.connect(target_url_filter=args.target_filter):
@@ -585,26 +688,25 @@ def main() -> int:
     ensure_game_ready(cdp)
 
     weapons = weapon_catalog(cdp)
-    if args.weapon:
-        wanted = set(args.weapon)
-        weapons = [w for w in weapons if w["id"] in wanted]
-        if not weapons:
-            print(f"ERROR: requested weapon(s) not found: {', '.join(sorted(wanted))}", file=sys.stderr)
-            return 2
-    else:
-        # Only test base family/standard entries by default, not all variants.
-        # Fallback rows parsed from WEAPON_FAMILIES are already base families and
-        # their ids contain hyphens (e.g. storm-rifle), so do not filter them out.
-        legacy_base_ids = {"storm-rifle", "split-barrel", "orbital-drone"}
-        weapons = [
-            w for w in weapons
-            if w.get("id") and (
-                w.get("base_family")
-                or str(w["id"]).endswith("-standard")
-                or w["id"] in legacy_base_ids
-                or "-" not in str(w["id"])
-            )
-        ]
+    try:
+        if args.weapon:
+            weapons = select_requested_weapons(weapons, args.weapon)
+        else:
+            # Only test base family/standard entries by default, not all variants.
+            legacy_base_ids = {"storm-rifle", "split-barrel", "orbital-drone"}
+            weapons = [
+                w for w in weapons
+                if w.get("id") and (
+                    w.get("base_family")
+                    or str(w["id"]).endswith("-standard")
+                    or w["id"] in legacy_base_ids
+                    or "-" not in str(w["id"])
+                )
+            ]
+            weapons = select_requested_weapons(weapons, None)
+    except ValueError as selection_err:
+        print(f"ERROR: {selection_err}", file=sys.stderr)
+        return 2
 
     out = ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -612,16 +714,30 @@ def main() -> int:
     results: List[RunResult] = []
     for weapon_index, w in enumerate(weapons):
         print(f"\n== {w.get('name', w['id'])} ({w['id']}) ==")
-        weapon_seed_base = args.seed + stable_weapon_seed_offset(str(w["id"])) + weapon_index * 1000
         for i in range(args.runs):
-            run_seed = weapon_seed_base + i + 1
+            run_seed = derive_run_seed(
+                args.seed,
+                str(w["id"]),
+                weapon_index,
+                i + 1,
+                per_weapon_seed=args.per_weapon_seed,
+            )
             # Guard: Chrome may have crashed between runs — reconnect if needed
             if not cdp.is_connected():
                 import time
                 time.sleep(1)
                 cdp.connect(target_url_filter=args.target_filter)
             try:
-                r = run_weapon_once(cdp, w, i + 1, args.max_seconds, run_seed, args.weapon_level)
+                r = run_weapon_once(
+                    cdp,
+                    w,
+                    i + 1,
+                    args.max_seconds,
+                    run_seed,
+                    args.weapon_level,
+                    with_offhand=args.with_offhand,
+                    with_shop=args.with_shop,
+                )
             except Exception as run_err:
                 import traceback
                 traceback.print_exception(type(run_err), run_err, run_err.__traceback__)
@@ -631,12 +747,17 @@ def main() -> int:
                     target_profile=WEAPON_TIER_MAP.get(w.get("family", w["id"]), WEAPON_TIER_MAP.get(w["id"].replace("-standard", ""), "standard")),
                     run=i + 1, seed=run_seed, final_wave=0, combat_time=0.0,
                     kills=0, level=0, items=0, alloy=0, hp=0.0, phase="error", died=True,
+                    error=str(run_err),
                 )
             results.append(r)
             print(f"run {i+1}/{args.runs}: seed={run_seed} wave={r.final_wave} time={r.combat_time}s kills={r.kills} level={r.level} items={r.items} alloy={r.alloy} hp={r.hp}")
 
     with (out / "runs.csv").open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(asdict(results[0]).keys()) if results else [])
+        writer = csv.DictWriter(
+            f,
+            fieldnames=list(asdict(results[0]).keys()) if results else [],
+            lineterminator="\n",
+        )
         if results:
             writer.writeheader()
             for r in results:
@@ -647,6 +768,10 @@ def main() -> int:
     print_summary(rows)
     print(f"\n输出: {out}")
     passed = all(r["passes"] for r in rows)
+    runtime_failed = any(r.error or r.phase == "error" for r in results)
+    if runtime_failed:
+        print("\nERROR: one or more CDP runs failed; balance overrides cannot mask runtime errors.", file=sys.stderr)
+        return 2
     if args.allow_balance_fail and not passed:
         print("\n注意: 本次已产出真实跑局报告，但结果未达到平衡目标；--allow-balance-fail 使烟测以 0 退出。")
         return 0

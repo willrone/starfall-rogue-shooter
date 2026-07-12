@@ -1,0 +1,21 @@
+{
+  "report_type": "canonical_full_weapon_baseline",
+  "generated_at": "2026-07-11",
+  "runtime": "real Cocos Creator 3.8.8 web-mobile via fresh Chrome CDP profile per weapon",
+  "build_bundle_bytes": 891398,
+  "weapon_count": 17,
+  "runs_per_weapon": 1,
+  "base_seed": 42,
+  "run_seeds": [43],
+  "per_weapon_seed": false,
+  "max_combat_seconds": 600,
+  "step_seconds": 1,
+  "with_offhand": true,
+  "fixed_offhand": "orbit-blade",
+  "with_shop": false,
+  "sample_policy": "uniform; every weapon has exactly one run in this canonical report",
+  "focused_multiseed_policy": "three-seed runs for selected weapons are retained separately and are not merged into this canonical summary",
+  "focused_report": "data/balance_cdp_reviewfinal_multiseed_20260711",
+  "runtime_errors": 0,
+  "cdp_errors": 0
+}

@@ -1,5 +1,9 @@
 # 架构与包体复查报告
 
+> [!WARNING]
+> **历史快照（已归档）**
+> 本文保留当时的架构与包体复查现场，不得作为当前实现、目录结构或数值基线。当前开发入口请使用 [文档索引](./README.md)、[基线总览](./BASELINE.md)、[机制基线](./GAMEPLAY_MECHANICS.md) 和 [基线差异清单](./BASELINE_GAPS.md)。
+
 日期：2026-06-24  
 项目：`starfall-rogue-shooter` / Cocos Creator 3.8.8
 

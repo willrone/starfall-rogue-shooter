@@ -1,5 +1,9 @@
 # 架构整改重构计划
 
+> [!WARNING]
+> **历史快照（已归档）**
+> 本文保留早期单文件架构的重构计划，不得作为当前实现、目录结构或数值基线。当前开发入口请使用 [文档索引](./README.md)、[基线总览](./BASELINE.md)、[机制基线](./GAMEPLAY_MECHANICS.md) 和 [基线差异清单](./BASELINE_GAPS.md)。
+
 > **For Hermes:** 按本计划小步执行，每步完成后运行 TypeScript 校验；涉及资源/构建后运行 Cocos 抖音构建。
 
 **Goal:** 将 `RogueShooterGame.ts` 从 6000+ 行 God Component 逐步改造成入口编排组件。

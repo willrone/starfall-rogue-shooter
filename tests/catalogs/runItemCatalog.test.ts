@@ -14,7 +14,8 @@ import {
 } from '../../assets/scripts/catalogs/runItemCatalog';
 
 function testRunItemCatalogCount() {
-    // 30 blueprints × 5 tiers = 150 run items
+    assert.equal(RUN_ITEM_BLUEPRINTS.length, 65, 'RUN_ITEM_BLUEPRINTS must contain exactly 65 single-stat items');
+    // 65 blueprints × 5 tiers = 325 run items
     assert(RUN_ITEM_COUNT === RUN_ITEM_BLUEPRINTS.length * ITEM_TIER_NAMES.length,
         `RUN_ITEM_COUNT should be ${RUN_ITEM_BLUEPRINTS.length * ITEM_TIER_NAMES.length}, got ${RUN_ITEM_COUNT}`);
     assert(RUN_ITEMS.length === RUN_ITEM_COUNT, 'RUN_ITEMS length must match RUN_ITEM_COUNT');
@@ -150,6 +151,35 @@ function testBuildRunItemCatalogFresh() {
     }
 }
 
+function testTierOnePreservesBlueprintAmounts(): void {
+    for (const blueprint of RUN_ITEM_BLUEPRINTS) {
+        const original = blueprint.effects[0];
+        const scaled = scaleRunItemEffect(original, 1);
+        assert.equal(scaled.amount, original.amount, `${blueprint.id} tier-I amount must equal its blueprint amount`);
+    }
+}
+
+function testRunItemBlueprintContract() {
+    const expectedCategories: Record<string, number> = {
+        '攻击': 32,
+        '防御': 8,
+        '生存': 6,
+        '机动': 10,
+        '资源': 4,
+        '成长': 3,
+        '其他': 2,
+    };
+    const actual: Record<string, number> = {};
+    for (const blueprint of RUN_ITEM_BLUEPRINTS) {
+        assert.equal(blueprint.effects.length, 1, `${blueprint.id} must have exactly one StatEffect`);
+        const stat = blueprint.effects[0].stat;
+        assert.notEqual(stat, 'attackPower', `${blueprint.id} must not use level-up-exclusive attackPower`);
+        assert.notEqual(stat, 'attackSpeed', `${blueprint.id} must not use level-up-exclusive attackSpeed`);
+        actual[blueprint.category] = (actual[blueprint.category] || 0) + 1;
+    }
+    assert.deepEqual(actual, expectedCategories);
+}
+
 // Run all tests
 testRunItemCatalogCount();
 testLevelUpBlueprintsCount();
@@ -163,5 +193,7 @@ testScaleRunItemEffectNegative();
 testScaleRunItemEffectTradeoff();
 testFormatRunItemEffect();
 testBuildRunItemCatalogFresh();
+testTierOnePreservesBlueprintAmounts();
+testRunItemBlueprintContract();
 
 console.log('runItemCatalog tests passed.');

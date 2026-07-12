@@ -28,49 +28,86 @@ export interface StatUpgradeBlueprint {
 export const ITEM_TIER_NAMES = ['I', 'II', 'III', 'IV', 'V'];
 export const TRADEOFF_POSITIVE_BONUS = 1.24;
 
+// ── Every blueprint has exactly ONE effect (single-stat). ────────────
+// Split from original 32 multi-effect blueprints → 65 single-stat items.
+// Each standalone value is ~1.4-1.75x the old combo component to compensate
+// for losing the bundled bonus.
+
 export const RUN_ITEM_BLUEPRINTS: RunItemBlueprint[] = [
-    // ── 攻击（12件）数值大幅提升，纯正面 ──────────────────────────
-    { id: 'charged-magazine', name: '高能弹匣', category: '攻击', color: '#F94144', effects: [{ stat: 'weaponDamagePct', amount: 0.36 }, { stat: 'weaponFireRatePct', amount: 0.18 }] },
-    { id: 'rapid-trigger', name: '急速扳机', category: '攻击', color: '#4CC9F0', effects: [{ stat: 'weaponFireRatePct', amount: 0.48 }] },
-    { id: 'longscope', name: '远距瞄具', category: '攻击', color: '#38BDF8', effects: [{ stat: 'attackRange', amount: 48 }, { stat: 'critChance', amount: 0.07 }] },
-    { id: 'crit-lens', name: '暴击透镜', category: '攻击', color: '#F15BB5', effects: [{ stat: 'critChance', amount: 0.12 }, { stat: 'critDamage', amount: 0.48 }] },
-    { id: 'execution-protocol', name: '处决协议', category: '攻击', color: '#B5179E', effects: [{ stat: 'lethalChance', amount: 0.04 }, { stat: 'lethalDamage', amount: 0.72 }] },
-    { id: 'fracture-warhead', name: '裂解弹头', category: '攻击', color: '#C084FC', effects: [{ stat: 'lethalMaxHpPct', amount: 0.03 }, { stat: 'weaponDamagePct', amount: 0.18 }] },
-    { id: 'piercing-coil', name: '穿甲线圈', category: '攻击', color: '#F9C74F', effects: [{ stat: 'pierce', amount: 1.8 }, { stat: 'pierceDamagePct', amount: 0.42 }] },
-    { id: 'armor-piercing-round', name: '破甲弹', category: '攻击', color: '#E879F9', effects: [{ stat: 'pierceDamagePct', amount: 0.54 }, { stat: 'pierce', amount: 1.2 }] },
-    { id: 'superconductor-round', name: '超导弹体', category: '攻击', color: '#22D3EE', effects: [{ stat: 'bulletSpeed', amount: 96 }, { stat: 'attackRange', amount: 36 }] },
-    { id: 'overload-reactor', name: '过载反应', category: '攻击', color: '#EF4444', effects: [{ stat: 'weaponDamagePct', amount: 0.48 }] },
-    { id: 'drone-uplink', name: '无人机上行链', category: '攻击', color: '#90BE6D', effects: [{ stat: 'dronePower', amount: 3.0 }, { stat: 'attackRange', amount: 24 }] },
-    { id: 'sniper-heuristic', name: '狙击演算', category: '攻击', color: '#577590', effects: [{ stat: 'critDamage', amount: 0.72 }, { stat: 'attackRange', amount: 60 }] },
+    // ── 攻击（32 件）─────────────────────────────────────────────
+    { id: 'charged-magazine',      name: '高能弹匣',      category: '攻击', color: '#F94144', effects: [{ stat: 'weaponDamagePct',    amount: 0.54 }] },
+    { id: 'rapid-feed',            name: '速射弹匣',      category: '攻击', color: '#F94144', effects: [{ stat: 'weaponFireRatePct', amount: 0.32 }] },
+    { id: 'rapid-trigger',         name: '急速扳机',      category: '攻击', color: '#4CC9F0', effects: [{ stat: 'weaponFireRatePct', amount: 0.55 }] },
+    { id: 'longscope',             name: '远距瞄具',      category: '攻击', color: '#38BDF8', effects: [{ stat: 'attackRange',       amount: 72 }] },
+    { id: 'target-lens',           name: '精准透镜',      category: '攻击', color: '#38BDF8', effects: [{ stat: 'critChance',        amount: 0.10 }] },
+    { id: 'crit-lens',             name: '暴击透镜',      category: '攻击', color: '#F15BB5', effects: [{ stat: 'critChance',        amount: 0.16 }] },
+    { id: 'deadly-lens',           name: '致命透镜',      category: '攻击', color: '#F15BB5', effects: [{ stat: 'critDamage',        amount: 0.72 }] },
+    { id: 'execution-protocol',    name: '处决协议',      category: '攻击', color: '#B5179E', effects: [{ stat: 'lethalChance',      amount: 0.06 }] },
+    { id: 'lethal-strike',         name: '致命处决',      category: '攻击', color: '#B5179E', effects: [{ stat: 'lethalDamage',      amount: 1.00 }] },
+    { id: 'fracture-warhead',      name: '裂解弹头',      category: '攻击', color: '#C084FC', effects: [{ stat: 'lethalMaxHpPct',    amount: 0.05 }] },
+    { id: 'explosive-charge',      name: '高爆弹药',      category: '攻击', color: '#C084FC', effects: [{ stat: 'weaponDamagePct',    amount: 0.30 }] },
+    { id: 'piercing-coil',         name: '穿甲线圈',      category: '攻击', color: '#F9C74F', effects: [{ stat: 'pierce',            amount: 2.6 }] },
+    { id: 'armor-piercing-tip',    name: '穿甲弹头',      category: '攻击', color: '#E879F9', effects: [{ stat: 'pierceDamagePct',   amount: 0.65 }] },
+    { id: 'armor-piercing-round',  name: '破甲弹',        category: '攻击', color: '#E879F9', effects: [{ stat: 'pierceDamagePct',   amount: 0.80 }] },
+    { id: 'reinforced-pin',        name: '强化穿透',      category: '攻击', color: '#F9C74F', effects: [{ stat: 'pierce',            amount: 1.8 }] },
+    { id: 'superconductor-round',  name: '超导弹体',      category: '攻击', color: '#22D3EE', effects: [{ stat: 'bulletSpeed',       amount: 140 }] },
+    { id: 'range-extender',        name: '增距镜',        category: '攻击', color: '#22D3EE', effects: [{ stat: 'attackRange',       amount: 54 }] },
+    { id: 'overload-reactor',      name: '过载反应',      category: '攻击', color: '#EF4444', effects: [{ stat: 'weaponDamagePct',    amount: 0.60 }] },
+    { id: 'drone-uplink',          name: '无人机上行链',  category: '攻击', color: '#90BE6D', effects: [{ stat: 'dronePower',        amount: 4.5 }] },
+    { id: 'recon-scan',            name: '侦查扫描',      category: '攻击', color: '#90BE6D', effects: [{ stat: 'attackRange',       amount: 40 }] },
+    { id: 'sniper-heuristic',      name: '狙击演算',      category: '攻击', color: '#577590', effects: [{ stat: 'critDamage',        amount: 1.00 }] },
+    { id: 'long-range-targeting',  name: '长程瞄准',      category: '攻击', color: '#577590', effects: [{ stat: 'attackRange',       amount: 90 }] },
+    { id: 'bullet-time',           name: '子弹时间',      category: '攻击', color: '#84CC16', effects: [{ stat: 'weaponFireRatePct', amount: 0.36 }] },
+    { id: 'neural-accelerator',    name: '神经加速',      category: '攻击', color: '#84CC16', effects: [{ stat: 'weaponFireRatePct', amount: 0.42 }] },
+    { id: 'precision-chip',        name: '精密芯片',      category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance',        amount: 0.12 }] },
+    { id: 'scope-lens',            name: '瞄准镜',        category: '攻击', color: '#FB7185', effects: [{ stat: 'attackRange',       amount: 60 }] },
+    { id: 'frenzy-injector',       name: '狂热注射',      category: '攻击', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.90 }] },
+    { id: 'stimulant',             name: '兴奋剂',        category: '攻击', color: '#DC2626', effects: [{ stat: 'moveSpeed',         amount: 14 }] },
+    { id: 'blast-focuser',         name: '爆破聚焦器',    category: '攻击', color: '#F97316', effects: [{ stat: 'aoeDamagePct',      amount: 0.80 }] },
+    { id: 'shockwave',             name: '冲击波',        category: '攻击', color: '#F97316', effects: [{ stat: 'aoeRangePct',       amount: 0.36 }] },
+    { id: 'napalm-catalyst',       name: '燃油催化',      category: '攻击', color: '#EF4444', effects: [{ stat: 'aoeRangePct',       amount: 0.72 }] },
+    { id: 'volatile-fuel',         name: '烈性燃料',      category: '攻击', color: '#EF4444', effects: [{ stat: 'aoeDamagePct',      amount: 0.28 }] },
 
-    // ── 防御/生存（7件，替代原元素防） ────────────────────────────
-    { id: 'composite-armor', name: '复合护甲', category: '防御', color: '#64748B', effects: [{ stat: 'maxHp', amount: 84 }, { stat: 'damageReduction', amount: 0.04 }] },
-    { id: 'arcane-film', name: '秘法隔膜', category: '防御', color: '#8B5CF6', effects: [{ stat: 'shieldMax', amount: 72 }, { stat: 'shieldRegen', amount: 3.6 }] },
-    { id: 'warmog-heart', name: '狂徒之心', category: '生存', color: '#F3722C', effects: [{ stat: 'hpRegen', amount: 3.6 }, { stat: 'maxHp', amount: 48 }] },
-    { id: 'evasion-field', name: '闪避力场', category: '机动', color: '#4CC9F0', effects: [{ stat: 'dodgeChance', amount: 0.08 }, { stat: 'moveSpeed', amount: 12 }] },
-    { id: 'bullet-time', name: '子弹时间', category: '攻击', color: '#84CC16', effects: [{ stat: 'weaponFireRatePct', amount: 0.22 }, { stat: 'attackSpeed', amount: 0.05 }] },
-    { id: 'cryo-field', name: '冰霜力场', category: '机动', color: '#A7F3D0', effects: [{ stat: 'moveSpeed', amount: 20 }, { stat: 'shieldMax', amount: 36 }] },
-    { id: 'deflector-shield', name: '偏转护盾', category: '防御', color: '#14B8A6', effects: [{ stat: 'shieldMax', amount: 96 }, { stat: 'shieldRegen', amount: 3.6 }] },
+    // ── 防御（8 件）───────────────────────────────────────────────
+    { id: 'composite-armor',       name: '复合护甲',      category: '防御', color: '#64748B', effects: [{ stat: 'maxHp',            amount: 120 }] },
+    { id: 'alloy-plating',         name: '合金镀层',      category: '防御', color: '#64748B', effects: [{ stat: 'damageReduction',  amount: 0.06 }] },
+    { id: 'arcane-film',           name: '秘法隔膜',      category: '防御', color: '#8B5CF6', effects: [{ stat: 'shieldMax',        amount: 100 }] },
+    { id: 'fast-recharge',         name: '快速充能',      category: '防御', color: '#8B5CF6', effects: [{ stat: 'shieldRegen',      amount: 5.4 }] },
+    { id: 'deflector-shield',      name: '偏转护盾',      category: '防御', color: '#14B8A6', effects: [{ stat: 'shieldMax',        amount: 140 }] },
+    { id: 'energy-recovery',       name: '能量回复',      category: '防御', color: '#14B8A6', effects: [{ stat: 'shieldRegen',      amount: 5.4 }] },
+    { id: 'bulwark-protocol',      name: '坚壁协议',      category: '防御', color: '#475569', effects: [{ stat: 'damageReduction',  amount: 0.10 }] },
+    { id: 'fortified-constitution',name: '耐久强化',      category: '防御', color: '#475569', effects: [{ stat: 'maxHp',            amount: 90 }] },
 
-    // ── 机动/生存（3件） ───────────────────────────────────────────
-    { id: 'evasion-servo', name: '闪避伺服', category: '机动', color: '#43AA8B', effects: [{ stat: 'dodgeChance', amount: 0.10 }, { stat: 'moveSpeed', amount: 16 }, { stat: 'shieldMax', amount: 24 }] },
-    { id: 'regen-vat', name: '再生培养仓', category: '生存', color: '#90BE6D', effects: [{ stat: 'hpRegen', amount: 3.6 }, { stat: 'maxHp', amount: 60 }] },
-    { id: 'bulwark-protocol', name: '坚壁协议', category: '防御', color: '#475569', effects: [{ stat: 'damageReduction', amount: 0.07 }, { stat: 'maxHp', amount: 60 }] },
+    // ── 生存（6 件）───────────────────────────────────────────────
+    { id: 'warmog-heart',          name: '狂徒之心',      category: '生存', color: '#F3722C', effects: [{ stat: 'hpRegen',          amount: 5.4 }] },
+    { id: 'life-boost',            name: '生命强化',      category: '生存', color: '#F3722C', effects: [{ stat: 'maxHp',            amount: 72 }] },
+    { id: 'regen-vat',             name: '再生培养仓',    category: '生存', color: '#90BE6D', effects: [{ stat: 'hpRegen',          amount: 5.4 }] },
+    { id: 'cellular-activation',   name: '细胞活化',      category: '生存', color: '#90BE6D', effects: [{ stat: 'maxHp',            amount: 90 }] },
+    { id: 'stable-core',           name: '稳态核心',      category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp',            amount: 140 }] },
+    { id: 'energy-core',           name: '能量核心',      category: '生存', color: '#CBD5E1', effects: [{ stat: 'shieldMax',        amount: 72 }] },
 
-    // ── 资源/成长/其他（4件） ──────────────────────────────────────
-    { id: 'lucky-dice', name: '幸运骰', category: '其他', color: '#F9C74F', effects: [{ stat: 'luck', amount: 30 }, { stat: 'critChance', amount: 0.06 }] },
-    { id: 'scavenger-field', name: '拾荒磁场', category: '资源', color: '#577590', effects: [{ stat: 'pickupRange', amount: 108 }, { stat: 'resourceGain', amount: 0.14 }, { stat: 'moveSpeed', amount: 8 }] },
-    { id: 'xp-prism', name: '经验棱镜', category: '成长', color: '#38BDF8', effects: [{ stat: 'xpGain', amount: 0.30 }, { stat: 'luck', amount: 10 }] },
-    { id: 'greed-converter', name: '贪婪转换器', category: '资源', color: '#F8961E', effects: [{ stat: 'resourceGain', amount: 0.42 }, { stat: 'xpGain', amount: 0.10 }] },
+    // ── 机动（10 件）─────────────────────────────────────────────
+    { id: 'evasion-field',         name: '闪避力场',      category: '机动', color: '#4CC9F0', effects: [{ stat: 'dodgeChance',      amount: 0.12 }] },
+    { id: 'lightweight-frame',     name: '轻量化',        category: '机动', color: '#4CC9F0', effects: [{ stat: 'moveSpeed',         amount: 20 }] },
+    { id: 'cryo-field',            name: '冰霜力场',      category: '机动', color: '#A7F3D0', effects: [{ stat: 'moveSpeed',         amount: 32 }] },
+    { id: 'ice-shield',            name: '冰盾',          category: '机动', color: '#A7F3D0', effects: [{ stat: 'shieldMax',        amount: 56 }] },
+    { id: 'evasion-servo',         name: '闪避伺服',      category: '机动', color: '#43AA8B', effects: [{ stat: 'dodgeChance',      amount: 0.14 }] },
+    { id: 'thrusters',             name: '推进器',        category: '机动', color: '#43AA8B', effects: [{ stat: 'moveSpeed',         amount: 26 }] },
+    { id: 'shimmer-shield',        name: '微光盾',        category: '机动', color: '#43AA8B', effects: [{ stat: 'shieldMax',        amount: 36 }] },
+    { id: 'phase-thruster',        name: '相位推进器',    category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed',         amount: 44 }] },
+    { id: 'phase-dodge',           name: '相位闪避',      category: '机动', color: '#2DD4BF', effects: [{ stat: 'dodgeChance',      amount: 0.09 }] },
+    { id: 'wide-pickup',           name: '广域拾取',      category: '机动', color: '#2DD4BF', effects: [{ stat: 'pickupRange',       amount: 54 }] },
 
-    // ── 混合（2件） ────────────────────────────────────────────────
-    { id: 'phase-thruster', name: '相位推进器', category: '机动', color: '#2DD4BF', effects: [{ stat: 'moveSpeed', amount: 28 }, { stat: 'dodgeChance', amount: 0.06 }, { stat: 'pickupRange', amount: 36 }] },
-    { id: 'stable-core', name: '稳态核心', category: '生存', color: '#CBD5E1', effects: [{ stat: 'maxHp', amount: 96 }, { stat: 'shieldMax', amount: 48 }] },
-    { id: 'precision-chip', name: '精密芯片', category: '攻击', color: '#FB7185', effects: [{ stat: 'critChance', amount: 0.08 }, { stat: 'attackRange', amount: 40 }] },
-    { id: 'frenzy-injector', name: '狂热注射', category: '攻击', color: '#DC2626', effects: [{ stat: 'weaponFireRatePct', amount: 0.60 }, { stat: 'moveSpeed', amount: 8 }] },
-    // ── 爆炸/燃烧特化（2件） ──────────────────────────────────────
-    { id: 'blast-focuser', name: '爆破聚焦器', category: '攻击', color: '#F97316', effects: [{ stat: 'aoeDamagePct', amount: 0.54 }, { stat: 'aoeRangePct', amount: 0.24 }] },
-    { id: 'napalm-catalyst', name: '燃油催化', category: '攻击', color: '#EF4444', effects: [{ stat: 'aoeRangePct', amount: 0.48 }, { stat: 'aoeDamagePct', amount: 0.18 }] },
+    // ── 资源/成长/其他（9 件）───────────────────────────────────
+    { id: 'scavenger-field',       name: '拾荒磁场',      category: '资源', color: '#577590', effects: [{ stat: 'pickupRange',       amount: 160 }] },
+    { id: 'resource-recycling',    name: '资源回收',      category: '资源', color: '#577590', effects: [{ stat: 'resourceGain',      amount: 0.22 }] },
+    { id: 'swift-looting',         name: '迅捷拾荒',      category: '资源', color: '#577590', effects: [{ stat: 'moveSpeed',         amount: 14 }] },
+    { id: 'xp-prism',              name: '经验棱镜',      category: '成长', color: '#38BDF8', effects: [{ stat: 'xpGain',           amount: 0.44 }] },
+    { id: 'luck-prism',            name: '幸运棱镜',      category: '成长', color: '#38BDF8', effects: [{ stat: 'luck',             amount: 16 }] },
+    { id: 'greed-converter',       name: '贪婪转换器',    category: '资源', color: '#F8961E', effects: [{ stat: 'resourceGain',      amount: 0.60 }] },
+    { id: 'xp-boost',              name: '经验增幅',      category: '成长', color: '#F8961E', effects: [{ stat: 'xpGain',           amount: 0.16 }] },
+    { id: 'lucky-dice',            name: '幸运骰',        category: '其他', color: '#F9C74F', effects: [{ stat: 'luck',             amount: 48 }] },
+    { id: 'crit-dice',             name: '暴击骰',        category: '其他', color: '#F9C74F', effects: [{ stat: 'critChance',        amount: 0.09 }] },
 ];
 
 // ── RUN_ITEM (chest/shop) catalog ──────────────────────────────────
@@ -79,6 +116,9 @@ const SCALE_POSITIVE = (tier: number) => 1 + (tier - 1) * 0.52;
 const SCALE_NEGATIVE = (tier: number) => 0.45 + (tier - 1) * 0.24;
 
 export function scaleRunItemEffect(effect: StatEffect, tier: number, tradeoffItem = false): StatEffect {
+    if (tier === 1 && !tradeoffItem) {
+        return { stat: effect.stat, amount: effect.amount };
+    }
     const scale = effect.amount < 0
         ? SCALE_NEGATIVE(tier)
         : SCALE_POSITIVE(tier) * (tradeoffItem ? TRADEOFF_POSITIVE_BONUS : 1);

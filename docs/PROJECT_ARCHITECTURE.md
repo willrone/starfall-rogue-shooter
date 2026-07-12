@@ -183,10 +183,10 @@ assets/scripts/state/combatState.ts
 | Manager | 文件 | 所有权 |
 |---|---|---|
 | `EnemyManager` | `enemy/enemyManager.ts` | 刷怪、移动、技能、受伤、死亡、Boss、敌人视觉和敌方掉落 |
-| `ProjectileManager` | `projectile/projectileManager.ts` | 玩家子弹、敌方弹、命中、主武器机制和攻击 VFX 对象池 |
+| `ProjectileManager` | `projectile/projectileManager.ts` | 玩家子弹、敌方弹、命中、主武器机制和攻击 VFX 对象池；子弹贴图成功时只启用 Sprite，缺图时使用 Graphics fallback |
 | `PickupManager` | `pickup/pickupManager.ts` | 拾取物、浮字、本局属性、升级/宝箱选择和道具应用 |
 | `EquipmentManager` | `shop/equipmentManager.ts` | 商店、仓库、配装、强化、合成、进度和本地存档 |
-| `OffhandManager` | `offhand/offhandManager.ts` | 15 种副武器战斗行为和副武器实体 |
+| `OffhandManager` | `offhand/offhandManager.ts` | 15 种副武器战斗行为和副武器实体；持续范围伤害使用固定频率结算 |
 | `AudioManager` | `audio/audioManager.ts` | BGM、SFX、冷却和淡入淡出 |
 | `BotAIController` | `ai/botAI.ts` | CDP 平衡跑局使用的移动和选择策略 |
 | `AdManager` | `ad/AdManager.ts` | 激励广告占位实现、战前增益和复活次数 |
@@ -231,8 +231,8 @@ new EnemyManager(this as unknown as EnemyHostContext)
 6. 更新敌方弹。
 7. 更新敌人、副武器和玩家/敌人碰撞修正。
 8. 更新拾取、生命恢复和护盾。
-9. 更新攻击特效池、血条、地面标记、死亡粒子和屏幕 VFX。
-10. 刷新 HUD。
+9. 更新攻击特效池、`WorldVfxLayer` 短时特效池、血条、地面标记、死亡粒子和屏幕 VFX。
+10. 逐帧检查 HUD 条形宽度；HUD 文案按 0.1 秒节流，阶段变化时立即刷新。
 
 变更顺序可能影响命中、死亡掉落、副武器触发、碰撞和同帧结算。涉及顺序调整时必须补回归测试并跑真实 Cocos 烟测。
 
@@ -304,7 +304,7 @@ art/enemies
 art/weapons
 ```
 
-UI、攻击特效和音频按各模块中的 `resources.load()` / `resources.loadDir()` 路径加载。资源加载失败时，部分对象会回退为 `Graphics` 程序绘制。
+UI、攻击特效和音频按各模块中的 `resources.load()` / `resources.loadDir()` 路径加载。玩家子弹的对应 SpriteFrame 成功加载后会关闭并清空该弹丸的 `Graphics` fallback；资源尚未加载或缺失时才保留程序化弹丸。其他部分对象也可能回退为 `Graphics` 程序绘制。
 
 源素材和预览位于 `assets/art_source/`，不属于运行时 resources。替换资源时必须同时保留或正确更新对应 `.meta`，避免 UUID 变化和引用失效。
 

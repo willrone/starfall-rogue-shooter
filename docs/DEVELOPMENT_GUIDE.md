@@ -232,7 +232,7 @@ npm run balance:cdp
 npm run build:check
 ```
 
-该命令只检查现有 `build/bytedance-mini-game`，不会重新构建。
+该命令不会重新构建，但仍会先运行 typecheck 和默认测试，再检查现有 `build/bytedance-mini-game`。
 
 ### 7.2 包体报告
 
@@ -248,7 +248,7 @@ npm run size:bytedance
 npm run build:bytedance
 ```
 
-流程：typecheck -> `npm test` -> Cocos 抖音构建 -> 产物和包体校验。
+流程：typecheck -> `npm test` -> Cocos 抖音构建 -> 写入项目级 AppID/项目名 -> 产物和包体校验。
 
 只跳过测试、不跳过 typecheck：
 
@@ -267,6 +267,8 @@ build/bytedance-mini-game
 - `assets/main/index.js` 存在且不小于 100 KB。
 - `project.config.json`、`game.json`、`game.js`、`src/settings.json` 和 `engine-adapter.js` 存在。
 - 总包体不超过 19 MiB。
+
+平台身份来自 `config/bytedance-project.json`。Cocos 模板会生成 `testappId`，守门脚本在每次构建后把正式 AppID 和项目名写入生成的 `project.config.json`；不要直接修改 Cocos 安装目录模板。
 
 旧文档中的 `--marker`、`--sync-slim2`、12 MiB 限制、自动备份和三次重试不是当前 `tools/cocos_build_guard.py` 的能力，不要继续使用这些参数或说法。
 
@@ -451,6 +453,10 @@ tests/ui/offhandUiIntegration.test.ts
 ```
 
 15 把副武器的数量、类型和机制受 `AGENTS.md` 保护。修改设计必须同步设计文档、catalog、Manager、UI 和测试，不能只改其中一层。
+
+持续范围效果不得恢复为逐帧全怪扫描。当前回旋利刃、烈焰漩涡和静电力场统一使用 10 Hz 固定 tick；优化其碰撞或时间积分时必须保持固定 tick catch-up、回旋扫掠碰撞和每秒总伤害合同，并运行 `tests/offhand/offhandContinuousEffectCadence.test.ts` 与真实 Cocos 跑局。
+
+短时战斗 VFX 优先复用有上限的对象池。`RogueShooterGame.ts` 的范围波纹和无人机电弧统一挂在 `WorldVfxLayer`，不能恢复为每次命中 `new Node + scheduleOnce(destroy)`；HUD 文案只在阶段变化或 0.1 秒节拍刷新，生命、XP、护盾条仍逐帧检查实际宽度变化。
 
 ## 13. 存档开发
 

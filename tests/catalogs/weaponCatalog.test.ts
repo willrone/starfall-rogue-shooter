@@ -118,6 +118,27 @@ function testBuildWeaponCatalogFresh() {
     }
 }
 
+function testFamilyAttackRangeIsWiredIntoGeneratedWeapons(): void {
+    for (const family of WEAPON_FAMILIES) {
+        const familyWeapons = WEAPON_CATALOG.filter(weapon => getWeaponFamilyId(weapon.id) === family.id);
+        assert(familyWeapons.length > 0, `${family.id} should generate weapons`);
+        for (const weapon of familyWeapons) {
+            assert.equal(weapon.weaponStats?.attackRange, family.attackRange, `${weapon.id} must preserve family attackRange`);
+        }
+    }
+}
+
+function testBossClearCadenceRebalance(): void {
+    const gravity = WEAPON_FAMILIES.find(family => family.id === 'gravity-hammer');
+    const icefire = WEAPON_FAMILIES.find(family => family.id === 'icefire-judge');
+    assert(gravity, 'gravity-hammer family must exist');
+    assert(icefire, 'icefire-judge family must exist');
+    assert.equal(gravity.damage, 220);
+    assert.equal(gravity.fireRate, 0.62);
+    assert.equal(icefire.damage, 95);
+    assert.equal(icefire.fireRate, 1.35);
+}
+
 // Run all tests
 testWeaponCatalogCount();
 testWeaponIdsAreUnique();
@@ -130,5 +151,7 @@ testWeaponFamilyIdLookup();
 testWeaponVariantAndTierLookup();
 testWeaponTierProgression();
 testBuildWeaponCatalogFresh();
+testFamilyAttackRangeIsWiredIntoGeneratedWeapons();
+testBossClearCadenceRebalance();
 
 console.log('weaponCatalog tests passed.');

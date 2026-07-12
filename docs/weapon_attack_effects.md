@@ -1,7 +1,10 @@
-# Weapon Attack Effects · 主武器攻击视觉/音效 v1.4
+# Weapon Attack Effects · 主武器攻击视觉/音效 v1.5
 
-> Last updated: 2026-07-05  
-> Source of truth: `assets/scripts/catalogs/weaponCatalog.ts` + `assets/scripts/projectile/projectileManager.ts` + `assets/scripts/audio/audioManager.ts`
+> 表现基线复核：2026-07-11
+>
+> 当前表现事实源：`assets/scripts/catalogs/weaponCatalog.ts` + `assets/scripts/projectile/projectileManager.ts` + `assets/scripts/audio/audioManager.ts`。资源目录、命名、透明通道、`.meta` 和替换步骤以 [美术资源替换指南](./ART_REPLACEMENT_GUIDE.md) 为准；机制和文档差异以 [基线差异清单](./BASELINE_GAPS.md) 为准。
+>
+> 本文只维护攻击视觉和音效表现合同。除已核对的 `echo_chain` 外，机制数值不能从历史效果说明反推，必须以当前代码和基线差异清单为准。
 
 ## 目标
 
@@ -23,7 +26,7 @@
 | 冲锋枪 `storm-rifle` | `overheat` | `smg` | `sfx_shoot_smg` | 短小橙色高速曳光弹；短促高频“哒哒哒” |
 | 瘟疫喷射器 `plague-sprayer` | `poison` | `spray` | `sfx_shoot_spray` | 扇形绿色毒雾；不发实体多弹，直接范围检测；持续喷雾嘶声 |
 | 霜束发射器 `frost-beamer` | `slow` | `frost` | `sfx_shoot_frost` | 冰晶长束、两侧冰棱；晶体冷冻音 |
-| 回声弓 `echo-bow` | `pierce_stacks` | `echo` | `sfx_shoot_echo` | 箭矢 + 两层回声残响环；带二段回响的弓弦声 |
+| 回声弓 `echo-bow` | `echo_chain` | `echo` | `sfx_shoot_echo` | 命中击杀后搜索附近目标连续弹射；箭矢和回声残响环配合二段弓弦声 |
 | 裂变枪管 `split-barrel` | `multishot_3` | `scatter` | `sfx_shoot_scatter` | 三枚热粉霰弹丸；粗短散射爆响 |
 | 镜像棱镜 `mirror-prism` | `radial_5` | `prism` | `sfx_shoot_prism` | 菱形核心 + 五向折射光针；亮晶体分光声 |
 | 量子织机 `quantum-loom` | `split` | `quantum` | `sfx_shoot_quantum` | 青色量子核 + 双卫星；上扬量子啁啾 |
