@@ -521,7 +521,7 @@ export class RogueShooterGame extends Component {
             this.perfPickupMs = this.perfNow() - t;
 
             this.proj.updateEffectPools(combatDt);
-            this.enemyMgr.drawAllBars();
+            this.enemyMgr.drawAllBars(combatDt);
             this.enemyMgr.updateGroundMarks(combatDt);
             this.enemyMgr.updateDeathParticles(combatDt);
             this.updateVfx(combatDt);
@@ -3361,6 +3361,7 @@ export class RogueShooterGame extends Component {
         this.enemyMgr.enemySet.clear();
         this.enemyMgr.currentWaveSpecs = [];
         this.enemyMgr.enemySepTick = 999;
+        this.enemyMgr.resetBarLayer();
 
         this.playerNode = null;
         this.playerGfx = null;

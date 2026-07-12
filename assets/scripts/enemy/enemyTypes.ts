@@ -67,7 +67,6 @@ export interface Enemy {
     _lastAngle?: number;
     _wasHitColor?: boolean;
     visualSkip?: number;
-    lastBarDrawTime?: number;
     wobbleSin: number;
     wobbleCos: number;
     _botX?: number;

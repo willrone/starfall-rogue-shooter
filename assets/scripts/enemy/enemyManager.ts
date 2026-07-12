@@ -51,6 +51,7 @@ function resetBossPool(): void {
 const AURA_BUFF_INTERVAL = 0.125; // 8 Hz
 const AURA_PULSE_INTERVAL = 0.25; // 4 Hz
 const AURA_RANGE_SQ = 80 * 80;
+export const ENEMY_BAR_REFRESH_INTERVAL = 0.1; // 10 Hz
 
 const ENEMY_TINT_PALETTE = [
     '',
@@ -144,6 +145,7 @@ export class EnemyManager {
     // ── Shared health bar layer ────────────────────────────────────
     private barLayer: Node | null = null;
     private barGfx: Graphics | null = null;
+    private barRefreshElapsed = ENEMY_BAR_REFRESH_INTERVAL;
 
     // ── Ground mark pool ──────────────────────────────────────────
     private groundMarkNodes: Node[] = [];
@@ -175,6 +177,7 @@ export class EnemyManager {
         this.barLayer = new Node('BarLayer');
         worldNode.addChild(this.barLayer);
         this.barGfx = this.barLayer.addComponent(Graphics);
+        this.resetBarLayer();
         // 批量敌人绘制层
         this._batchGfx = worldNode.addComponent(Graphics);
         // 设ZOrder在敌人节点之上
@@ -266,10 +269,17 @@ export class EnemyManager {
         }
     }
 
-    public drawAllBars(): void {
+    public resetBarLayer(): void {
+        this.barRefreshElapsed = ENEMY_BAR_REFRESH_INTERVAL;
+        this.barGfx?.clear();
+    }
+
+    public drawAllBars(dt: number): void {
         if (!this.barGfx) return;
+        this.barRefreshElapsed += Math.max(0, dt);
+        if (this.barRefreshElapsed + 1e-6 < ENEMY_BAR_REFRESH_INTERVAL) return;
+        this.barRefreshElapsed %= ENEMY_BAR_REFRESH_INTERVAL;
         this.barGfx.clear();
-        const now = this.cs.combatTime;
         const totalEnemies = this.enemies.length;
         // 移动端性能保护：怪数>150时只画血量<80%的怪（跳过满血怪的HP条绘制）
         const renderThreshold = totalEnemies > 150 ? 0.5 : 1.0;
@@ -307,9 +317,7 @@ export class EnemyManager {
             if (enemy.hp >= enemy.maxHp) continue;
             const ratio = enemy.hp / enemy.maxHp;
             if (ratio >= renderThreshold) continue;  // 满血怪跳过
-            if (now - enemy.lastBarDrawTime < 0.15) continue;
             if (barCount >= maxBars) break;  // 限制单帧绘制数
-            enemy.lastBarDrawTime = now;
             const pos = this.getEnemyPosition(enemy);
             const r = enemy.radius || 14;
             if (enemy.boss) continue; // handled above

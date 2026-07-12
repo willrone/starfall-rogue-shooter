@@ -39,7 +39,7 @@ function testExpiredBulletsUseOneBatchCompaction(): void {
 
 function testOptionalSpawnSnapshotKeepsLegacyFallbacks(): void {
     const snapshotBody = sliceBetween('createBulletSpawnSnapshot()', 'createBullet(');
-    const createBody = sliceBetween('createBullet(', 'acquireBullet()');
+    const createBody = sliceBetween('createBullet(', 'acquireBullet(): Bullet');
 
     assert(source.includes('export interface BulletSpawnSnapshot'), 'spawn snapshots must have a public type for callers');
     assert(snapshotBody.includes('speed: this.getBulletSpeed()'));

@@ -30,9 +30,13 @@ npm test
 
 当前默认入口已包含以下性能回归合同：
 
+- `tests/combat/projectileLifecyclePerformance.test.ts`：子弹轨迹分配、批量回收和齐射快照。
 - `tests/combat/projectileVisualFallback.test.ts`：Sprite/Graphics fallback 切换及对象池复用。
 - `tests/combat/rogueShooterEntryPerformance.test.ts`：HUD 节流、条形脏更新、`WorldVfxLayer` 和短时特效池。
+- `tests/enemy/enemyAuraPerformance.test.ts`：光环全怪扫描与表现脉冲的独立降频。
+- `tests/enemy/enemyBarPerformance.test.ts`：共享敌人血条层 8-10 Hz 整体重绘与跨局清理。
 - `tests/offhand/offhandContinuousEffectCadence.test.ts`：持续副武器 10 Hz cadence、catch-up、扫掠碰撞和时间积分。
+- `tests/ui/floatingTextPerformance.test.ts`：浮字池上限、复用和透明度脏更新。
 
 这些测试验证源码与纯逻辑合同，不采集真实渲染帧、GPU、GC、温控或功耗。性能结论必须保留真实 `requestAnimationFrame` 调度，并在目标真机持续运行；`__starfallBulkTick` 只适合玩法推进和平衡采样。
 
