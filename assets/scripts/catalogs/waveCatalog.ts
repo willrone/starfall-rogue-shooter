@@ -72,8 +72,8 @@ export const BOSS_OVERTIME_PROFILE: BossAddProfile = {
 export const EARLY_WAVE_PROFILES: readonly WaveSpawnProfile[] = [
     { wave: 1, intervalStart: 2.20, intervalEnd: 2.05, batchMin: 2, batchMax: 3, enemyCap: 35, hpProgressFactor: 0.28, damageProgressFactor: 0.75 },
     { wave: 2, intervalStart: 2.05, intervalEnd: 1.90, batchMin: 2, batchMax: 3, enemyCap: 45, hpProgressFactor: 0.32, damageProgressFactor: 0.76 },
-    { wave: 3, intervalStart: 1.90, intervalEnd: 1.75, batchMin: 3, batchMax: 4, enemyCap: 65, hpProgressFactor: 0.38, damageProgressFactor: 0.78 },
-    { wave: 4, intervalStart: 1.75, intervalEnd: 1.58, batchMin: 3, batchMax: 4, enemyCap: 85, hpProgressFactor: 0.44, damageProgressFactor: 0.80 },
+    { wave: 3, intervalStart: 1.85, intervalEnd: 1.70, batchMin: 3, batchMax: 5, enemyCap: 75, hpProgressFactor: 0.38, damageProgressFactor: 0.78 },
+    { wave: 4, intervalStart: 1.70, intervalEnd: 1.55, batchMin: 3, batchMax: 5, enemyCap: 95, hpProgressFactor: 0.44, damageProgressFactor: 0.80 },
     { wave: 5, intervalStart: 1.48, intervalEnd: 1.33, batchMin: 4, batchMax: 5, enemyCap: 130, hpProgressFactor: 0.55, damageProgressFactor: 0.84 },
     { wave: 6, intervalStart: 1.33, intervalEnd: 1.17, batchMin: 4, batchMax: 5, enemyCap: 170, hpProgressFactor: 0.64, damageProgressFactor: 0.87 },
     { wave: 7, intervalStart: 1.54, intervalEnd: 1.39, batchMin: 5, batchMax: 7, enemyCap: 200, hpProgressFactor: 0.74, damageProgressFactor: 0.92 },
