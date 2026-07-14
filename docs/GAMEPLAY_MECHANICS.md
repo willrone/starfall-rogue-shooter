@@ -325,12 +325,12 @@ price = max(50, round(baseCost × effectMultiplier
 
 ### 9.1 波次规则
 
-- 每波持续时间随机 50~60 秒。
+- `assets/scripts/catalogs/waveCatalog.ts` 是方案 B 的波次静态配置权威源；`EnemyManager` 消费该 catalog 执行调度。
+- 普通波持续时间随机 50~60 秒，到时直接进入下一波。
 - Boss 波为第 10 波，以及之后每 3 波一次：13、16、19、22……
-- Boss 波超时后停止继续刷怪；必须击败 Boss 才能进入下一波。
+- Boss 波不使用普通波的 50~60 秒时长作为通关条件；60 秒是 overtime 起点，只有击败 Boss 才进入胜利过渡。
 - 第 11 波开始进入无尽指数缩放：`endlessScale = 1.05^(wave - 10)`。
 - `endlessCycle = floor((wave - 1) / 10) + 1`，用于部分额外成长和奖励。
-- 第 13 波起的非 Boss 波，每次刷怪批次有 30% 概率尝试加入一只小 Boss；场上已有小 Boss 时不重复加入。
 
 ### 9.2 怪物内容
 
@@ -340,22 +340,51 @@ price = max(50, round(baseCost × effectMultiplier
 - 5 个小 Boss：狂暴重甲块、电弧灵能体、自爆母体、迅捷分裂体、再生巨兽。
 - 5 个大 Boss：虚空巨像、噬能蠕虫、冰霜女皇、狱炎领主、虚空织网者。
 
-首轮怪池大致按以下方式扩展：1-2 波碎壳虫；3-4 波加入疾行体；5-6 波加入重甲块；7-8 波加入裂变囊；9-10 波由 catalog 分片选择；11 波后开放全部普通实例。`spawnAfter` 与实际怪池选择没有统一，见 `GAP-WAVE-002`。
+`EnemySpec` 只有一个首次解锁字段 `unlockWave`，不再存在 `spawnAfter`。基础家族解锁顺序：
+
+| 波次 | 新解锁家族 |
+|---:|---|
+| 1 | `mite` |
+| 2 | `swarm` |
+| 3 | `runner` |
+| 4 | `bomber` |
+| 5 | `brute` |
+| 6 | `aura` |
+| 7 | `splitter` |
+| 8 | `seeker` |
+| 9 | `warden`、`beacon` |
+
+变体从基础到原初依次在波 1~11 解锁：`base`、`acid`、`crystal`、`swift`、`armored`、`rage`、`shade`、`arc`、`regen`、`venom`、`prime`。每个组合实例的 `unlockWave = max(家族解锁波次, 变体解锁波次)`；候选池按 `unlockWave <= 当前波` 累计过滤，因此已解锁实例不会在后续波次被分片移除，波 11 开放全部 110 个普通实例。
 
 ### 9.3 刷怪与场上限
 
-运行时生成间隔：
+波 1~9 使用显式压力表。间隔在每波内按已过时间从“开始”线性插值到“结束”；场上限另加 `battleIndex×2`。
+
+| 波 | 间隔（开始→结束） | 批量 budget | 基础场上限 | HP 进度系数 | 伤害系数 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1.60s → 1.48s | 4 | 40 | 0.30 | 0.76 |
+| 2 | 1.55s → 1.41s | 4 | 55 | 0.34 | 0.77 |
+| 3 | 1.50s → 1.36s | 4 | 75 | 0.40 | 0.78 |
+| 4 | 1.45s → 1.31s | 4 | 95 | 0.47 | 0.80 |
+| 5 | 1.48s → 1.33s | 4~5 | 130 | 0.55 | 0.84 |
+| 6 | 1.33s → 1.17s | 4~5 | 170 | 0.64 | 0.87 |
+| 7 | 1.54s → 1.39s | 5~7 | 200 | 0.74 | 0.92 |
+| 8 | 1.44s → 1.29s | 5~7 | 240 | 0.84 | 0.95 |
+| 9 | 1.40s → 1.25s | 6~7 | 240 | 0.92 | 0.98 |
+
+第 10 波是 Boss 波，不套用普通波压力表；HP 进度系数与伤害系数均为 `1.0`。第 11 波起普通波使用：
 
 ```text
-base = 1.62 - waveSlot×0.035 - (endlessCycle-1)×0.06
-       - min(0.12, waveElapsed/420)
+baseInterval = 1.62 - 10×0.035 - (endlessCycle-1)×0.06
+               - min(0.12, waveElapsed/420)
+interval = max(0.45, (baseInterval + wave11Breather) / endlessScale)
+wave11Breather = wave == 11 ? 0.08 : 0
+
+batch = min(60, round((3 + floor(10×0.38) + endlessCycle) × endlessScale))
+enemyCap = min(600, max(240, round(200×endlessScale)))
 ```
 
-1-10 波另叠加 early relief 和各波硬下限；11 波后使用 `max(0.45, (base + wave11Breather)/endlessScale)`。
-
-首轮 1-2 波每批固定 4 只；3-4 波约 3~4 只；5-6 波约 4~5 只；7-8 波约 5~7 只。11 波后批量按 `endlessScale` 增长并限制为 60。
-
-首轮非 Boss 场上限：波 1~9 分别为 40、55、75、95、130、170、200、240、240，再加 `battleIndex×2`。Boss 波为 `60 + endlessCycle×10`。11 波后非 Boss 上限为 `min(600, max(240, round(200×endlessScale)))`。
+普通批次选择环形、十字、钳形或冲锋阵型时，共享同一个 `batch` budget；阵型只拆分 budget，不得额外补怪。
 
 ### 9.4 HP 与伤害缩放
 
@@ -364,7 +393,7 @@ base = 1.62 - waveSlot×0.035 - (endlessCycle-1)×0.06
 ```text
 hpScale = (1 + battleIndex×0.06 + (endlessCycle-1)×0.28
            + (waveIndex×0.028 + combatTime×0.0018)
-             × 1.8 × earlyProgressFactor)
+             × 1.8 × hpProgressFactor)
           × endlessScale
 
 finalHp = round(spec.hp × hpScale × eliteScale)
@@ -373,17 +402,36 @@ eliteScale = boss ? (6.4 + endlessCycle×0.58) : elite ? 2.65 : 1
 damage = spec.damage × (boss ? 1.85 : elite ? 1.42 : 1.05)
          × (1 + (endlessCycle-1)×0.16
             + (waveIndex×0.012 + combatTime×0.0009)
-              × 1.0 × earlyProgressFactor)
-         × earlyDamageFactor × endlessScale
+              × 1.0 × hpProgressFactor)
+         × damageProgressFactor × endlessScale
 ```
 
-首轮 `earlyProgressFactor` 为：波 1-2 `0.3`，3-4 `0.4`，5-6 `0.55`，7-8 `0.78`，9-10 `1`。首轮 `earlyDamageFactor` 为：波 1-2 `0.82`，3-4 `0.75`，5-6 `0.85`，7-8 `0.95`，之后 `1`。
+`hpProgressFactor` 与 `damageProgressFactor` 取自上表；波 10 及之后均为 `1.0`。不要恢复旧分段系数或旧常量 `2.5 / 1.3`。
+
+### 9.5 Boss 波状态机
+
+| 阶段 | 时间/条件 | 当前合同 |
+|---|---|---|
+| intro | 0~3 秒 | Boss 开场；不执行援军刷新 |
+| combat | 3 秒后至 60 秒前 | 每 5 秒刷新 3~4 只普通援军；普通援军存活上限 24 |
+| overtime | 60 秒起且 Boss 未死亡 | Boss 速度 ×1.15、伤害 ×1.20、技能冷却 ×0.85；援军每 10 秒固定 4 只，普通援军存活上限 16 |
+| victory | Boss 死亡 | 立即停止战斗阶段，等待 2.5 秒后进入下一波 |
+
+Boss 波不会因普通波计时结束而自动推进，也不要求 Boss 必须撑满 50~60 秒；击杀发生后固定走 2.5 秒胜利过渡。
+
+### 9.6 小 Boss 调度
+
+- 从第 14 波开始，仅非 Boss 波有资格。
+- 每个合资格波次只在开波时做一次 35% 判定，不按刷怪批次重复判定。
+- 判定成功后，在开波 20~35 秒安排一次生成；每波最多 1 只。
+- 小 Boss 不阻塞普通波按 50~60 秒推进。
 
 权威源码：
 
 - `assets/scripts/enemy/enemyConstants.ts`
+- `assets/scripts/catalogs/waveCatalog.ts`
 - `assets/scripts/catalogs/enemyCatalog.ts`
-- `assets/scripts/enemy/enemyManager.ts`：`startNextWave()`、刷怪 getter、怪池 getter、`createEnemy()`、Boss 行为
+- `assets/scripts/enemy/enemyManager.ts`：`startNextWave()`、普通波/Boss 波调度、刷怪 getter、`createEnemy()`、Boss 行为
 - `assets/scripts/enemy/enemySpawnPatterns.ts`
 - `assets/scripts/enemy/enemyMovement.ts`
 

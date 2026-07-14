@@ -8,12 +8,12 @@
   "fps": 8,
   "output_dir": "characters",
   "raw_size": [
-    2067,
-    761
+    2172,
+    724
   ],
   "trimmed_size": [
-    2067,
-    761
+    2053,
+    408
   ],
-  "generated_at": 1782726693
+  "generated_at": 1783861382
 }

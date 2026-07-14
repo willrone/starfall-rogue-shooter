@@ -119,32 +119,24 @@ xpToNext = 65 × 1.24^level + 22 + level × 5
 XP 掉率 = 56%，掉落量 = monsterXP × 2.6
 ```
 
-### 2.7 怪物公式（`enemyManager.ts` + `enemyCatalog.ts`）
+### 2.7 怪物公式（`waveCatalog.ts` + `enemyManager.ts` + `enemyCatalog.ts`）
 
 **10 种基础怪**（`BASE_ENEMY_ARCHETYPES`）：
 
 | 怪 | HP | 伤害 | 速度 | 权重 | 首次出 |
 |---|---:|---:|---:|---:|---:|
 | 碎壳虫 mite | 18 | 4 | 126 | 7.0 | 波 1+ |
-| 疾行体 runner | 24 | 6 | 196 | 4.0 | 波 10+ |
-| 重甲块 brute | 88 | 10 | 78 | 3.0 | 波 18+ |
-| 裂变囊 splitter | 54 | 7 | 112 | 3.0 | 波 28+ |
-| 磁暴卫士 warden | 160 | 15 | 92 | 2.0 | 波 46+ |
-| 自爆虫 bomber | 14 | 8 | 140 | 3.0 | 波 2+ |
-| 蜂群 swarm | 8 | 2 | 140 | 3.0 | 波 5+ |
-| 灵能体 aura | 40 | 5 | 80 | 1.5 | 波 12+ |
-| 追踪眼 seeker | 30 | 8 | 100 | 2.0 | 波 10+ |
-| 信标 beacon | 60 | 0 | 0 | 1.0 | 波 20+ |
+| 疾行体 runner | 24 | 6 | 196 | 4.0 | 波 3+ |
+| 重甲块 brute | 88 | 10 | 78 | 3.0 | 波 5+ |
+| 裂变囊 splitter | 54 | 7 | 112 | 3.0 | 波 7+ |
+| 磁暴卫士 warden | 160 | 15 | 92 | 2.0 | 波 9+ |
+| 自爆虫 bomber | 14 | 8 | 140 | 3.0 | 波 4+ |
+| 蜂群 swarm | 8 | 2 | 140 | 3.0 | 波 2+ |
+| 灵能体 aura | 40 | 5 | 80 | 1.5 | 波 6+ |
+| 追踪眼 seeker | 30 | 8 | 100 | 2.0 | 波 8+ |
+| 信标 beacon | 60 | 0 | 0 | 1.0 | 波 9+ |
 
-**生成间隔**（波 1-10）：
-```
-interval = max(hardFloor, 1.62 - slot×0.035 - earlyRelief)
-  波1: 1.5s / 波2: 1.4s / 波3: 1.3s / 波4: 1.2s / 波5: 1.1s / 波6: 1.0s / 波7+: 0.95s
-  波11: ~1.29s（略慢于波10，给喘口气）
-  波12+: 指数递减，每波 ×1.05 缩放
-```
-
-**每批数量**：波 1-2: 2 / 波 3-4: 3 / 波 5-6: 4 / 波 7+: 5 / 波 11+: min(60, 5×1.05^(wave-10))
+**显式压力表**：波1～9的间隔、批次、场上限、HP/伤害进度系数统一由 `waveCatalog.ts::EARLY_WAVE_PROFILES` 提供；波10走Boss状态机；波11+使用指数公式。阵型只能重新分配固定budget，不得额外补怪。
 
 **场上限**：波 1: 40 → 波 8+: 240 / 波 11+: max(240, 200×1.05^(wave-10)), min(600)
 
@@ -153,10 +145,10 @@ interval = max(hardFloor, 1.62 - slot×0.035 - earlyRelief)
 
 **无尽缩放**：波 ≥ 11 时，scale = 1.05^(wave-10)，作用于 HP/伤害/间隔/上限。
 
-**5 种小 Boss**（无尽穿插，30% 概率，不掉材料，不挡进度）：
+**5 种小 Boss**（波14起非Boss波开波只判定一次，35%命中后于20～35秒出现，每波最多1只；不掉Boss材料，不挡进度）：
 狂暴重甲块 / 电弧灵能体 / 自爆母体 / 迅捷分裂体 / 再生巨兽
 
-**5 种大 Boss**（波 10/13/16... 每 Cycle 随机选一个，独占护盾+技能）：虚空巨像 / 噬能蠕虫 / 冰霜女皇 / 狱炎领主 / 虚空织网者
+**5 种大 Boss**（波10/13/16...；intro 3秒，combat每5秒3～4只援军上限24，60秒overtime后每10秒4只上限16，死亡2.5秒后进下一波）：虚空巨像 / 噬能蠕虫 / 冰霜女皇 / 狱炎领主 / 虚空织网者
 
 ### 2.8 武器系统（`weaponCatalog.ts`）
 
@@ -291,11 +283,11 @@ npm run balance:pipeline
 
 ```typescript
 { id, name, family, artId, hp, speed, damage, radius, xp,
-  alloyChance, color, accent, spawnAfter, weight,
+  alloyChance, color, accent, unlockWave, weight,
   bossMaterial? }  // bossMaterial: 大 Boss 掉落材料
 ```
 
-基础值会被 HP/伤害缩放公式直接乘。`spawnAfter` = 最早出现的波次（0-based index）。
+基础值会被 HP/伤害缩放公式直接乘。`unlockWave` 是唯一首次出现规则；组合实例取家族和变体解锁波次的较大值，候选池累计扩大。
 
 ### 4.4 新增道具格式（`runItemCatalog.ts`）
 
@@ -335,7 +327,8 @@ assets/scripts/
 │   ├── equipmentCatalog.ts           # 装备蓝图 + 品质 + Starter 装备
 │   ├── equipmentProgression.ts       # 武器/装备解锁进度
 │   ├── runItemCatalog.ts            # 22 blueprint × 5 tiers 道具 + 12 种升级选项
-│   └── enemyCatalog.ts              # 10 种基础怪 + 5 小 Boss + 5 大 Boss + 10 变体
+│   ├── enemyCatalog.ts              # 10 种基础怪 + 5 小 Boss + 5 大 Boss + 11 变体
+│   └── waveCatalog.ts               # 波1~9压力、Boss状态机、小Boss调度、阵型budget
 ├── enemy/
 │   ├── enemyManager.ts              # 怪物生成/更新/死亡/分裂
 │   └── enemyConstants.ts            # 怪物常量

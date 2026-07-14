@@ -1,0 +1,48 @@
+{
+  "variant": "cartoon_v4",
+  "raw_path": "assets/art_source/yuz_generated_candidates/player_modular_animation/player_body_no_weapon_animation_cartoon_v4_raw.png",
+  "runtime_outputs": {
+    "idle": "assets/resources/art/characters/player_body_no_weapon_idle.png",
+    "run_south": "assets/resources/art/characters/player_body_no_weapon_run_south.png",
+    "run_east": "assets/resources/art/characters/player_run_east.png"
+  },
+  "source_outputs": {
+    "idle": "assets/art_source/yuz_generated_candidates/player_modular_animation/processed/player_body_no_weapon_idle_cartoon_v4.png",
+    "run_south": "assets/art_source/yuz_generated_candidates/player_modular_animation/processed/player_body_no_weapon_run_south_cartoon_v4.png",
+    "run_east": "assets/art_source/yuz_generated_candidates/player_modular_animation/processed/player_run_east_cartoon_v4.png"
+  },
+  "review_path": "assets/art_source/yuz_generated_candidates/player_modular_animation/processed/player_body_no_weapon_animation_cartoon_v4_review.png",
+  "scores": {
+    "idle": [
+      13.91609375,
+      12.4353125,
+      6.62046875,
+      20.10125,
+      12.4665625
+    ],
+    "run_south": [
+      39.283125,
+      44.34171875,
+      40.40546875,
+      30.50890625,
+      5.300625
+    ],
+    "run_east": [
+      41.36578125,
+      45.86296875,
+      43.605625,
+      30.43640625,
+      5.300625
+    ]
+  },
+  "raw_size": [
+    1663,
+    946
+  ],
+  "processed_sheet_size": [
+    1553,
+    781
+  ],
+  "generated_at": 1783921646,
+  "model_prompt": "Use case: stylized-concept\nAsset type: Cocos Creator 2D mobile game sprite sheet, modular player body only\nPrimary request: Generate one polished, highly readable sci-fi survivor mech body animation sheet for Starfall Survivor.\nCanvas/layout: exactly 2 rows by 6 columns, same character identity and same scale in every cell. Row 1 is idle breathing. Row 2 is run south/front-facing. No grid lines, no labels, no numbers, no text.\nSubject: compact cheerful cyan salvage-mech hero with a large white rounded face visor, centered yellow chest badge, two small coral shoulder fins, matching chunky yellow boots and simple white gloves. Body only, no weapon held, no backpack clutter. The design must match bright clean arcade cartoon enemies rather than realistic armor.\nView/framing: strict front view facing straight toward the bottom of the canvas, full body visible, left-right symmetrical silhouette, generous padding, uniform dark-navy 2-3px outline, saturated flat cyan/yellow/coral/white color blocks, minimal internal detail, readable at 80px.\nAnimation choreography:\nRow 1 idle: frame 1 neutral combat ready stance; frame 2 shoulders lift and torso inhales; frame 3 visor and chest light glow slightly, head bobs up; frame 4 shoulders lower and torso exhales; frame 5 subtle sway left; frame 6 subtle sway right.\nRow 2 run south: a front-facing synchronized bounce-run. Both boots compress, torso lowers, both boots extend, torso rises, recoil, return. The body never turns, leans sideways, or changes camera angle.\nHands/weapon constraint: hands stay near the lower chest/centerline for a separate weapon overlay. Do not draw any weapon, gun, rifle, muzzle, blade, shield, or prop.\nStyle/quality: bright clean arcade sci-fi cartoon, simple chunky rounded geometry, saturated flat colors, two-step cel shading, crisp antialiased edges, minimal micro-detail, professional mobile survivor game asset.\nBackground: perfectly flat solid #FF00FF chroma-key background only. No cast shadow, no contact shadow, no floor, no gradient, no texture. Do not use magenta on the character.\nAvoid: repeated identical frames, static pose copy-paste, weapon baked into body, extra characters, frame borders, text, watermark, UI, large empty margins, cropped body parts, photorealism."
+}

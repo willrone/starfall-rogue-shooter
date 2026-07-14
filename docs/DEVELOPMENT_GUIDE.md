@@ -416,6 +416,7 @@ tests/visual/weaponAttackPresentation.test.ts
 
 ```text
 assets/scripts/catalogs/enemyCatalog.ts
+assets/scripts/catalogs/waveCatalog.ts
 assets/scripts/enemy/enemyManager.ts
 assets/scripts/enemy/enemyConstants.ts
 assets/scripts/enemy/enemyMovement.ts
@@ -425,7 +426,9 @@ tests/catalogs/enemyCatalog.test.ts
 tests/enemy/
 ```
 
-`spawnAfter` 不是首循环唯一解锁来源；实际首循环池还受 `EnemyManager.getUnlockedEnemySpecs()` 控制。修改首次出现波次时必须同时检查两处。
+敌人首次出现只有一套规则：`EnemySpec.unlockWave`。`enemyCatalog.ts` 生成组合实例时取家族与变体 `unlockWave` 的较大值，`EnemyManager` 通过 `waveCatalog.ts::getUnlockedEnemySpecsForWave()` 累计过滤；不得恢复 `spawnAfter`、波 9~10 分片或另一套隐式解锁规则。
+
+波 1~9 压力表、Boss 阶段/援军、小 Boss 开波判定与阵型共享 budget 的静态合同统一放在 `waveCatalog.ts`。`enemyManager.ts` 只负责消费配置并执行运行行为；改波次时必须同步 `tests/enemy/waveSystem.test.ts`、`tests/flows/waveSystemWiring.test.ts`、机制基线和差异状态。
 
 ### 本局道具与升级
 

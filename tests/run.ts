@@ -1,6 +1,7 @@
 import './core/gameTimer.test';
 import './enemy/enemyMovement.test';
 import './enemy/enemySpawnPatterns.test';
+import './enemy/waveSystem.test';
 import './core/resources.test';
 import './core/stats.test';
 import './core/eventBus.test';
@@ -16,6 +17,7 @@ import './flows/battleFlow.test';
 import './flows/hostContextContract.test';
 import './flows/combatTargetingContract.test';
 import './flows/weaponMechanicsWiring.test';
+import './flows/waveSystemWiring.test';
 import './combat/projectileLifecyclePerformance.test';
 import './combat/weaponMechanics.test';
 import './combat/projectileVisualFallback.test';
@@ -30,7 +32,11 @@ import './ui/mainWeaponReplacement.test';
 import './ui/startupVisibility.test';
 import './ui/uiLayoutIntegrity.test';
 import './visual/poisonSprayVfx.test';
+import './visual/uiWorldArtWiring.test';
 import './visual/weaponAttackPresentation.test';
+import './visual/enemySpriteColor.test';
+import './visual/enemyBossArtWiring.test';
+import './visual/itemArtWiring.test';
 import './state/combatState.test';
 import './balance/combatBalance.test';
 

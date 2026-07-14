@@ -58,6 +58,7 @@ assets/scripts/
 │   └── audioManager.ts
 ├── catalogs/
 │   ├── enemyCatalog.ts
+│   ├── waveCatalog.ts
 │   ├── equipmentCatalog.ts
 │   ├── equipmentLootChoices.ts
 │   ├── equipmentProgression.ts
@@ -154,6 +155,7 @@ assets/scripts/
 | `equipmentLootChoices.ts` | Boss 装备战利品候选和应用规则 |
 | `runItemCatalog.ts` | 本局商店道具和升级三选一蓝图 |
 | `enemyCatalog.ts` | 基础怪、词缀、小 Boss 和大 Boss 数据 |
+| `waveCatalog.ts` | 波 1~9 压力表、累计解锁过滤、阵型 budget、Boss 阶段/援军和小 Boss 调度合同 |
 | `offhandCatalog.ts` | 15 把副武器及 T1-T5 数值 |
 
 新增内容时，catalog 负责“它是什么”，对应 Manager 负责“它如何运行”。不要把 Cocos Node 或存档副作用写进 catalog。
@@ -182,7 +184,7 @@ assets/scripts/state/combatState.ts
 
 | Manager | 文件 | 所有权 |
 |---|---|---|
-| `EnemyManager` | `enemy/enemyManager.ts` | 刷怪、移动、技能、受伤、死亡、Boss、敌人视觉和敌方掉落 |
+| `EnemyManager` | `enemy/enemyManager.ts` | 消费 `waveCatalog.ts` 执行普通波/Boss 波调度，并负责刷怪、移动、技能、受伤、死亡、敌人视觉和敌方掉落 |
 | `ProjectileManager` | `projectile/projectileManager.ts` | 玩家子弹、敌方弹、命中、主武器机制和攻击 VFX 对象池；子弹贴图成功时只启用 Sprite，缺图时使用 Graphics fallback |
 | `PickupManager` | `pickup/pickupManager.ts` | 拾取物、浮字、本局属性、升级/宝箱选择和道具应用 |
 | `EquipmentManager` | `shop/equipmentManager.ts` | 商店、仓库、配装、强化、合成、进度和本地存档 |

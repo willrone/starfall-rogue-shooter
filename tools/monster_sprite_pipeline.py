@@ -7,12 +7,13 @@ Pipeline A+B:
 - Postprocess: save raw output, remove flat background if possible, slice frames, normalize cells,
   make a clean Cocos-ready strip and GIF preview.
 
-Secrets: reads YUZ_API_KEY from the environment; never prints the token.
+Secrets: reads TOKENX_API_KEY or YUZ_API_KEY from the environment; never prints the token.
 """
 from __future__ import annotations
 
 import argparse
 import base64
+from collections import deque
 import json
 import os
 import sys
@@ -22,9 +23,9 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageFilter
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PROMPT_FILE = PROJECT_ROOT / "assets" / "art_source" / "monster_prompts.json"
@@ -32,7 +33,14 @@ RAW_DIR = PROJECT_ROOT / "assets" / "art_source" / "generated"
 FINAL_DIR = PROJECT_ROOT / "assets" / "resources" / "art" / "enemies"
 FRAME_DIR = PROJECT_ROOT / "assets" / "art_source" / "frames"
 PREVIEW_DIR = PROJECT_ROOT / "assets" / "art_source" / "previews"
-DEFAULT_IMAGES_ENDPOINT = "https://yuzapi.fun/v1/images/generations"
+DEFAULT_IMAGES_ENDPOINT = "https://tokenx24.com/v1/images/generations"
+MONSTER_STYLE_GUARD = (
+    "Mandatory style lock: polished flat 2D mobile-game cartoon, vector-like silhouettes, "
+    "large clean color blocks, broad readable features, very few internal seams, minimal surface texture, "
+    "raised midtones, soft deep-navy outlines, exactly two hard cel-shading tones. "
+    "Do not use painterly rendering, realistic metal, realistic lighting, glossy 3D rendering, "
+    "dense facets, tiny scratches, excessive glow, or dark crushed shadows."
+)
 
 
 @dataclass
@@ -45,6 +53,7 @@ class SpriteSpec:
     cell_size: int = 128
     fps: int = 8
     output_dir: str = "enemies"
+    frame_order: list[int] | None = None
 
 
 def load_specs(path: Path = PROMPT_FILE) -> dict[str, SpriteSpec]:
@@ -60,6 +69,7 @@ def load_specs(path: Path = PROMPT_FILE) -> dict[str, SpriteSpec]:
             cell_size=int(item.get("cell_size", 128)),
             fps=int(item.get("fps", 8)),
             output_dir=item.get("output_dir", "enemies"),
+            frame_order=item.get("frame_order"),
         )
     return specs
 
@@ -92,13 +102,13 @@ def post_json(url: str, payload: dict[str, Any], api_key: str, timeout: int = 60
 
 
 def generate(spec: SpriteSpec, endpoint: str, output_path: Path) -> Path:
-    api_key = os.environ.get("YUZ_API_KEY")
+    api_key = os.environ.get("TOKENX_API_KEY") or os.environ.get("YUZ_API_KEY")
     if not api_key:
-        raise SystemExit("Missing YUZ_API_KEY in environment")
+        raise SystemExit("Missing TOKENX_API_KEY or YUZ_API_KEY in environment")
 
     payload = {
         "model": spec.model,
-        "prompt": spec.prompt,
+        "prompt": f"{MONSTER_STYLE_GUARD}\n\n{spec.prompt}",
         "size": spec.size,
         "n": 1,
     }
@@ -142,23 +152,67 @@ def trim_uniform_border(image: Image.Image, tolerance: int = 16) -> Image.Image:
 def chroma_to_alpha(image: Image.Image, tolerance: int = 18) -> Image.Image:
     """If the image has a flat corner background, convert near-corner pixels to alpha."""
     rgba = image.convert("RGBA")
-    alpha_min, _alpha_max = cast(tuple[int, int], rgba.getchannel("A").getextrema())
-    if alpha_min < 255:
-        return rgba
     corners = [rgba.getpixel((0, 0)), rgba.getpixel((rgba.width - 1, 0)), rgba.getpixel((0, rgba.height - 1)), rgba.getpixel((rgba.width - 1, rgba.height - 1))]
     # Use the most common corner color.
     bg = max(set(corners), key=corners.count)
     out = Image.new("RGBA", rgba.size)
     src = rgba.load()
     dst = out.load()
+    removable = bytearray(rgba.width * rgba.height)
     for y in range(rgba.height):
         for x in range(rgba.width):
             r, g, b, a = src[x, y]
             dist = abs(r - bg[0]) + abs(g - bg[1]) + abs(b - bg[2])
-            if dist <= tolerance * 3:
-                dst[x, y] = (r, g, b, 0)
-            else:
-                dst[x, y] = (r, g, b, a)
+            magenta_key = r > 145 and b > 145 and g < 155 and abs(r - b) < 120
+            green_key = g > 145 and r < 155 and b < 155
+            yellow_key = r > 155 and g > 155 and b < 145 and abs(r - g) < 110
+            exact_key = dist <= tolerance * 2
+            removable[y * rgba.width + x] = 1 if exact_key or magenta_key or green_key or yellow_key else 0
+            # Exact key-color islands can be enclosed by legs or detached parts,
+            # so remove them globally. Broader purple/green ranges are still
+            # protected by the edge-connected flood fill below.
+            # Prompt contracts forbid the selected key hue in the subject, so
+            # remove high-confidence key pixels globally as well as the broader
+            # edge-connected matte. This clears tiny enclosed islands between
+            # horns, fingers and armor plates.
+            dst[x, y] = (0, 0, 0, 0) if exact_key or magenta_key or green_key or yellow_key else (r, g, b, a)
+
+    # Only erase key-colored pixels connected to the canvas edge, so purple
+    # details enclosed by the creature remain intact.
+    visited = bytearray(rgba.width * rgba.height)
+    queue: deque[tuple[int, int]] = deque()
+    for x in range(rgba.width):
+        queue.append((x, 0))
+        queue.append((x, rgba.height - 1))
+    for y in range(rgba.height):
+        queue.append((0, y))
+        queue.append((rgba.width - 1, y))
+    while queue:
+        x, y = queue.popleft()
+        index = y * rgba.width + x
+        if visited[index] or not removable[index]:
+            continue
+        visited[index] = 1
+        r, g, b, _a = dst[x, y]
+        dst[x, y] = (r, g, b, 0)
+        if x > 0: queue.append((x - 1, y))
+        if x + 1 < rgba.width: queue.append((x + 1, y))
+        if y > 0: queue.append((x, y - 1))
+        if y + 1 < rgba.height: queue.append((x, y + 1))
+    # Contract the matte by one source pixel and suppress key-color spill on
+    # antialiased edge pixels before the much smaller runtime cells are built.
+    alpha = out.getchannel("A").filter(ImageFilter.MinFilter(3))
+    pixels = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, _a = pixels[x, y]
+            if bg[1] > bg[0] + 40 and bg[1] > bg[2] + 40 and g > max(r, b) + 18:
+                g = min(g, max(r, b) + 18)
+            elif bg[0] > bg[1] + 40 and bg[2] > bg[1] + 40:
+                excess = max(0, min(r, b) - g - 18)
+                r = max(g, r - excess)
+                b = max(g, b - excess)
+            pixels[x, y] = (r, g, b, alpha.getpixel((x, y)))
     return out
 
 
@@ -173,30 +227,71 @@ def fit_to_cell(frame: Image.Image, cell_size: int) -> Image.Image:
     scale = min((cell_size * 0.86) / max_side, 1.0 if max_side <= cell_size else cell_size / max_side)
     new_size = (max(1, round(content.width * scale)), max(1, round(content.height * scale)))
     content = content.resize(new_size, Image.Resampling.LANCZOS)
+    content_pixels = content.load()
+    for y in range(content.height):
+        for x in range(content.width):
+            r, g, b, a = content_pixels[x, y]
+            keyed_edge = (
+                g > max(r, b) + 28
+                or (r > g + 34 and b > g + 34)
+                or (r > 150 and g > 150 and b + 38 < min(r, g))
+            )
+            if a < 245 and keyed_edge:
+                content_pixels[x, y] = (r, g, b, 0)
     cell = Image.new("RGBA", (cell_size, cell_size), (0, 0, 0, 0))
     cell.alpha_composite(content, ((cell_size - content.width) // 2, (cell_size - content.height) // 2))
     return cell
+
+
+def find_frame_bounds(image: Image.Image, frame_count: int) -> list[tuple[int, int]]:
+    """Split a generated row at alpha-projection valleys instead of equal widths."""
+    alpha = image.getchannel("A")
+    bbox = alpha.getbbox()
+    if not bbox:
+        return [(round(i * image.width / frame_count), round((i + 1) * image.width / frame_count)) for i in range(frame_count)]
+
+    left_edge, _top, right_edge, _bottom = bbox
+    pixels = alpha.load()
+    projection = [sum(1 for y in range(image.height) if pixels[x, y] > 12) for x in range(image.width)]
+    boundaries = [left_edge]
+    span = right_edge - left_edge
+    for index in range(1, frame_count):
+        expected = left_edge + span * index / frame_count
+        radius = max(8, round(span / frame_count * 0.28))
+        start = max(boundaries[-1] + 1, round(expected - radius))
+        end = min(right_edge - 1, round(expected + radius))
+        minimum = min(projection[start:end + 1])
+        candidates = [x for x in range(start, end + 1) if projection[x] == minimum]
+        boundaries.append(round(sum(candidates) / len(candidates)))
+    boundaries.append(right_edge)
+    bounds = [(boundaries[i], boundaries[i + 1]) for i in range(frame_count)]
+    for boundary in boundaries[1:-1]:
+        if projection[boundary] > max(1, round(image.height * 0.005)):
+            raise ValueError(f"No clean frame gap near x={boundary}; projection={projection[boundary]}")
+    return bounds
 
 
 def slice_horizontal_strip(raw_path: Path, spec: SpriteSpec) -> dict[str, Any]:
     image = Image.open(raw_path).convert("RGBA")
     cleaned = chroma_to_alpha(image)
     trimmed = trim_uniform_border(cleaned)
-
-    # Most image models create a full sheet inside one image. Slice equal vertical bands.
-    frame_w = trimmed.width / spec.frames
+    frame_bounds = find_frame_bounds(trimmed, spec.frames)
     frames: list[Image.Image] = []
     out_frame_dir = FRAME_DIR / spec.name
     out_frame_dir.mkdir(parents=True, exist_ok=True)
 
     for index in range(spec.frames):
-        left = round(index * frame_w)
-        right = round((index + 1) * frame_w)
+        left, right = frame_bounds[index]
         crop = trimmed.crop((left, 0, right, trimmed.height))
         cell = fit_to_cell(crop, spec.cell_size)
         frame_path = out_frame_dir / f"{index:02d}.png"
         cell.save(frame_path)
         frames.append(cell)
+
+    if spec.frame_order is not None:
+        if sorted(spec.frame_order) != list(range(spec.frames)):
+            raise ValueError(f"Invalid frame_order for {spec.name}: {spec.frame_order}")
+        frames = [frames[index] for index in spec.frame_order]
 
     strip = Image.new("RGBA", (spec.cell_size * spec.frames, spec.cell_size), (0, 0, 0, 0))
     for index, frame in enumerate(frames):
@@ -234,7 +329,8 @@ def slice_horizontal_strip(raw_path: Path, spec: SpriteSpec) -> dict[str, Any]:
         "trimmed_size": trimmed.size,
         "generated_at": int(time.time()),
     }
-    meta_path = final_dir / f"{spec.name}.json"
+    meta_path = RAW_DIR / f"{spec.name}.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     return metadata
 
@@ -242,13 +338,17 @@ def slice_horizontal_strip(raw_path: Path, spec: SpriteSpec) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("name", help="Sprite spec name from assets/art_source/monster_prompts.json")
+    parser.add_argument("--prompt-file", type=Path, default=PROMPT_FILE)
     parser.add_argument("--generate", action="store_true", help="Call the image API before processing")
     parser.add_argument("--process", action="store_true", help="Slice/process the raw generated image")
-    parser.add_argument("--endpoint", default=os.environ.get("YUZ_IMAGE_ENDPOINT", DEFAULT_IMAGES_ENDPOINT))
+    parser.add_argument(
+        "--endpoint",
+        default=os.environ.get("TOKENX_IMAGE_ENDPOINT") or os.environ.get("YUZ_IMAGE_ENDPOINT") or DEFAULT_IMAGES_ENDPOINT,
+    )
     parser.add_argument("--raw", type=Path, help="Existing raw image path to process")
     args = parser.parse_args()
 
-    specs = load_specs()
+    specs = load_specs(args.prompt_file)
     if args.name not in specs:
         raise SystemExit(f"Unknown sprite spec {args.name!r}; available: {', '.join(specs)}")
     spec = specs[args.name]

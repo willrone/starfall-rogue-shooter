@@ -32,6 +32,7 @@ import type {
     LevelUpgrade,
     LootChoice,
 } from '../core/types';
+import { runItemIconKey } from '../core/artKeys';
 import {
     addCharacterStats as addStats,
     createEmptyCharacterStats,
@@ -171,8 +172,10 @@ export class PickupManager {
     // ── Pickup art helpers ─────────────────────────────────────────────────
 
     pickupArtName(type: PickupType): string {
-        if (this.isChestPickup(type)) return '';
-        if (type === 'cores') return 'pickup_core';
+        if (type === 'xp') return '';
+        if (type === 'chest-common') return 'pickup_chest_common';
+        if (type === 'chest-rare') return 'pickup_chest_rare';
+        if (type === 'cores') return 'pickup_cores';
         return `pickup_${type}`;
     }
 
@@ -580,7 +583,9 @@ export class PickupManager {
                     }));
                 },
                 getIcon: (id: string) => {
-                    const iconKey = iconMap[id];
+                    const iconKey = this.cs.phase === 'item-choice'
+                        ? runItemIconKey(id)
+                        : iconMap[id];
                     return iconKey ? this.ctx.getIcon(iconKey) : null;
                 },
             });

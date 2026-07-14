@@ -207,7 +207,7 @@ export interface EnemySpec {
     alloyChance: number;
     color: string;
     accent: string;
-    spawnAfter: number;
+    unlockWave: number;
     weight: number;
     bossMaterial?: BossMaterialType;
 }

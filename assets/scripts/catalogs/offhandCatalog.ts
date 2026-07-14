@@ -27,7 +27,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 1 回旋利刃 ──────────────────────────────────────────────
     {
         id: 'orbit-blade', name: '回旋利刃', category: 'orbit',
-        mechanic: 'orbit_blade', color: '#F97316', iconKey: 'wpn_storm_rifle',
+        mechanic: 'orbit_blade', color: '#F97316', iconKey: 'offhand_orbit_blade',
         baseStats: { damage: 12, damagePct: 0, cooldown: 0, duration: 0, radius: 180, count: 3, speed: 1.0, pierce: 1, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ count: 4, speed: 1.2, damage: 16 }),
@@ -41,7 +41,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 2 守护星环 ──────────────────────────────────────────────
     {
         id: 'orbit-block', name: '守护星环', category: 'orbit',
-        mechanic: 'orbit_block', color: '#4CC9F0', iconKey: 'stat_defense',
+        mechanic: 'orbit_block', color: '#4CC9F0', iconKey: 'offhand_orbit_block',
         baseStats: { damage: 0, damagePct: 0, cooldown: 0.33, duration: 0, radius: 160, count: 6, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 1, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ cooldown: 0.28, count: 7 }),
@@ -55,7 +55,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 3 烈焰漩涡 ──────────────────────────────────────────────
     {
         id: 'orbit-burn', name: '烈焰漩涡', category: 'orbit',
-        mechanic: 'orbit_burn', color: '#EF4444', iconKey: 'stat_shield',
+        mechanic: 'orbit_burn', color: '#EF4444', iconKey: 'offhand_orbit_burn',
         baseStats: { damage: 8, damagePct: 0, cooldown: 0.5, duration: 2.0, radius: 150, count: 0, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ damage: 12, duration: 2.5, radius: 170 }),
@@ -74,7 +74,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 4 影刃猎手 ──────────────────────────────────────────────
     {
         id: 'summon-blade', name: '影刃猎手', category: 'summon',
-        mechanic: 'summon_blade', color: '#B5179E', iconKey: 'wpn_rail_cannon',
+        mechanic: 'summon_blade', color: '#B5179E', iconKey: 'offhand_summon_blade',
         baseStats: { damage: 18, damagePct: 0, cooldown: 2.0, duration: 0, radius: 400, count: 3, speed: 400, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ cooldown: 1.6, count: 4, damage: 22 }),
@@ -88,7 +88,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 5 静电蜂群 ──────────────────────────────────────────────
     {
         id: 'summon-bee', name: '静电蜂群', category: 'summon',
-        mechanic: 'summon_bee', color: '#FACC15', iconKey: 'wpn_meteor_launcher',
+        mechanic: 'summon_bee', color: '#FACC15', iconKey: 'offhand_summon_bee',
         baseStats: { damage: 8, damagePct: 0, cooldown: 1.0, duration: 0, radius: 300, count: 4, speed: 200, pierce: 2, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ damage: 11, count: 5, pierce: 3 }),
@@ -102,7 +102,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 6 幽影分身 ──────────────────────────────────────────────
     {
         id: 'summon-clone', name: '幽影分身', category: 'summon',
-        mechanic: 'summon_clone', color: '#8B5CF6', iconKey: 'stat_attack_power',
+        mechanic: 'summon_clone', color: '#8B5CF6', iconKey: 'offhand_summon_clone',
         baseStats: { damage: 0, damagePct: 0.50, cooldown: 0, duration: 10.0, radius: 0, count: 1, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ damagePct: 0.55, duration: 14.0 }),
@@ -116,7 +116,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 7 治愈蜂鸟 ──────────────────────────────────────────────
     {
         id: 'summon-bird', name: '治愈蜂鸟', category: 'summon',
-        mechanic: 'summon_bird', color: '#43AA8B', iconKey: 'stat_hp',
+        mechanic: 'summon_bird', color: '#43AA8B', iconKey: 'offhand_summon_bird',
         baseStats: { damage: 0, damagePct: 0, cooldown: 3.0, duration: 0, radius: 150, count: 0, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 3.0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ healPct: 4.0, radius: 180 }),
@@ -135,7 +135,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 8 冰霜地雷 ──────────────────────────────────────────────
     {
         id: 'control-mine', name: '冰霜地雷', category: 'control',
-        mechanic: 'control_mine', color: '#A7F3D0', iconKey: 'wpn_frost_beam',
+        mechanic: 'control_mine', color: '#A7F3D0', iconKey: 'offhand_control_mine',
         baseStats: { damage: 0, damagePct: 0, cooldown: 3.0, duration: 1.5, radius: 60, count: 3, speed: 0, pierce: 0, slowFactor: 0.40, slowDuration: 1.5, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ count: 4, cooldown: 2.5, radius: 70, slowFactor: 0.45 }),
@@ -149,7 +149,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 9 静电力场 ──────────────────────────────────────────────
     {
         id: 'control-field', name: '静电力场', category: 'control',
-        mechanic: 'control_field', color: '#60A5FA', iconKey: 'stat_lightning_def',
+        mechanic: 'control_field', color: '#60A5FA', iconKey: 'offhand_control_field',
         baseStats: { damage: 5, damagePct: 0, cooldown: 0, duration: 0, radius: 180, count: 0, speed: 0, pierce: 0, slowFactor: 0.20, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ damage: 8, radius: 200, slowFactor: 0.25 }),
@@ -163,7 +163,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 10 黑曜石封印 ───────────────────────────────────────────
     {
         id: 'control-seal', name: '黑曜石封印', category: 'control',
-        mechanic: 'control_seal', color: '#475569', iconKey: 'stat_defense',
+        mechanic: 'control_seal', color: '#475569', iconKey: 'offhand_control_seal',
         baseStats: { damage: 0, damagePct: 0, cooldown: 10.0, duration: 5.0, radius: 300, count: 1, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ cooldown: 9.0, duration: 6.0 }),
@@ -182,7 +182,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 11 虚空裂隙 ─────────────────────────────────────────────
     {
         id: 'burst-rift', name: '虚空裂隙', category: 'burst',
-        mechanic: 'burst_rift', color: '#22D3EE', iconKey: 'resource_core',
+        mechanic: 'burst_rift', color: '#22D3EE', iconKey: 'offhand_burst_rift',
         baseStats: { damage: 45, damagePct: 0, cooldown: 8.0, duration: 0, radius: 400, count: 3, speed: 600, pierce: 2, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ damage: 55, count: 4, cooldown: 7.0 }),
@@ -196,7 +196,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 12 暴风之眼 ─────────────────────────────────────────────
     {
         id: 'burst-eye', name: '暴风之眼', category: 'burst',
-        mechanic: 'burst_eye', color: '#CBD5E1', iconKey: 'stat_attack_speed',
+        mechanic: 'burst_eye', color: '#CBD5E1', iconKey: 'offhand_burst_eye',
         baseStats: { damage: 0, damagePct: 0.30, cooldown: 12.0, duration: 0, radius: 200, count: 0, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ damagePct: 0.37, radius: 220, cooldown: 11.0 }),
@@ -210,7 +210,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 13 时间扭曲 ─────────────────────────────────────────────
     {
         id: 'burst-time', name: '时间扭曲', category: 'burst',
-        mechanic: 'burst_time', color: '#E879F9', iconKey: 'stat_attack_speed',
+        mechanic: 'burst_time', color: '#E879F9', iconKey: 'offhand_burst_time',
         baseStats: { damage: 0, damagePct: 0, cooldown: 15.0, duration: 0, radius: 0, count: 0, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 2.0, burstDuration: 4.0 },
         levelUpgrades: [
             T({ attackSpeedMultiplier: 2.0, burstDuration: 5.0, cooldown: 13.0 }),
@@ -229,7 +229,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 14 纳米修复器 ───────────────────────────────────────────
     {
         id: 'support-nano', name: '纳米修复器', category: 'support',
-        mechanic: 'support_nano', color: '#34D399', iconKey: 'stat_hp',
+        mechanic: 'support_nano', color: '#34D399', iconKey: 'offhand_support_nano',
         baseStats: { damage: 0, damagePct: 0, cooldown: 30.0, duration: 3.0, radius: 0, count: 0, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 0, healPct: 30.0, triggerHpPct: 0.50, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ healPct: 35.0, triggerHpPct: 0.55, cooldown: 26.0 }),
@@ -243,7 +243,7 @@ export const OFFHAND_CATALOG: OffhandDef[] = [
     // ── 15 铜墙护盾 ────────────────────────────────────────────
     {
         id: 'support-shield', name: '铜墙护盾', category: 'support',
-        mechanic: 'support_shield', color: '#F9C74F', iconKey: 'stat_defense',
+        mechanic: 'support_shield', color: '#F9C74F', iconKey: 'offhand_support_shield',
         baseStats: { damage: 0, damagePct: 0, cooldown: 0, duration: 0, radius: 0, count: 0, speed: 0, pierce: 0, slowFactor: 0, slowDuration: 0, shieldAmount: 10, healPct: 0, triggerHpPct: 0, attackSpeedMultiplier: 0, burstDuration: 0 },
         levelUpgrades: [
             T({ shieldAmount: 8 }),

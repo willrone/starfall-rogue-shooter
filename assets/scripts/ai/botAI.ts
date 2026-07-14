@@ -38,10 +38,6 @@ export class BotAIController {
         if (h.cs.killCount > this.lastKillCount) {
             this.pickupChaseTimer = 5.5;
         }
-        const xpPickups = (h.pickupMgr.pickups || []).filter((p: { type: string }) => p.type === 'xp');
-        if (xpPickups.length > 0 && this.pickupChaseTimer <= 1) {
-            this.pickupChaseTimer = Math.max(this.pickupChaseTimer, 2);
-        }
         this.lastKillCount = h.cs.killCount;
         this.pickupChaseTimer = Math.max(0, this.pickupChaseTimer - dt);
 

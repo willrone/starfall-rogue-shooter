@@ -13,10 +13,6 @@ print(f"Batch generating {len(monsters)} monsters...")
 for i, name in enumerate(monsters):
     spec = prompts[name]
     cell = spec.get('cell_size', 128)
-    if name == 'enemy_mite_walk':
-        print(f"[{i+1}/{len(monsters)}] {name}: already generated, skip")
-        continue
-
     raw = ROOT / 'assets/art_source/generated' / f'{name}_raw.png'
     if raw.exists():
         raw.unlink()

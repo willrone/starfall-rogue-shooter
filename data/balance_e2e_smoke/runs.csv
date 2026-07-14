@@ -1,2 +1,2 @@
 weapon_id,weapon_name,tier,target_profile,run,seed,final_wave,combat_time,kills,level,alloy,items,phase,hp,died,error
-storm-rifle,冲锋枪,novice,novice,1,43,1,21.7,29,2,0,0,paused,0.0,True,
+storm-rifle,冲锋枪,novice,novice,1,43,4,165.2,244,6,67,0,paused,0.0,True,

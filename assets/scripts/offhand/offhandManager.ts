@@ -7,7 +7,7 @@
  * 设计基线：docs/offhand_weapon_design.md
  * 副武器数据：catalogs/offhandCatalog.ts
  */
-import { Color, Graphics, Layers, Node, Vec2 } from 'cc';
+import { Color, Graphics, Layers, Node, Sprite, Vec2 } from 'cc';
 import type { Enemy } from '../enemy/enemyTypes';
 import { findOffhand, getOffhandStats } from '../catalogs/offhandCatalog';
 import type { OffhandDef, OffhandStats } from '../core/types';
@@ -138,6 +138,7 @@ export interface OffhandHostContext {
     healPlayer(amount: number): void;
     applyAttackSpeedMultiplier(multiplier: number, duration: number): void;
     drawAreaPulse(x: number, y: number, radius: number, color: string): void;
+    addSpriteChild(parent: Node, name: string, frameName: string, width: number, height: number): Sprite | null;
 }
 
 // ── OffhandManager ─────────────────────────────────────────────
@@ -145,6 +146,8 @@ export class OffhandManager {
     private ctx: OffhandHostContext;
     private entities: OffhandEntity[] = [];
     private entityNode: Node | null = null;
+    private equippedVisualNode: Node | null = null;
+    private equippedVisualId = '';
 
     // Cooldown tracking (seconds remaining)
     private _cooldowns: Record<string, number> = {};
@@ -187,6 +190,9 @@ export class OffhandManager {
             e.gfx?.clear();
         }
         this.entities = [];
+        if (this.equippedVisualNode?.parent) this.equippedVisualNode.removeFromParent();
+        this.equippedVisualNode = null;
+        this.equippedVisualId = '';
         this.burnTrail = [];
         this.burnFrameX = 0;
         this.burnFrameY = 0;
@@ -210,6 +216,7 @@ export class OffhandManager {
 
         const def = findOffhand(offhandId);
         if (!def) return;
+        this.updateEquippedVisual(def);
 
         const level = this.ctx.cs.offhandLevel || 1;
         const stats = getOffhandStats(def, level);
@@ -724,6 +731,38 @@ export class OffhandManager {
         for (let i = count; i < this.entities.length; i++) {
             if (this.entities[i].node.active) this.entities[i].node.active = false;
         }
+    }
+
+    private updateEquippedVisual(def: OffhandDef): void {
+        if (!this.equippedVisualNode || this.equippedVisualId !== def.id) {
+            if (this.equippedVisualNode?.parent) this.equippedVisualNode.removeFromParent();
+            const node = new Node('EquippedOffhandArt');
+            if (this.entityNode) this.entityNode.addChild(node);
+            const sprite = this.ctx.addSpriteChild(
+                node,
+                'OffhandSprite',
+                `offhand_${def.id.replace(/-/g, '_')}`,
+                38,
+                38,
+            );
+            const fallback = node.addComponent(Graphics);
+            if (!sprite) {
+                fallback.fillColor = this.ctx.hex(def.color, 220);
+                fallback.circle(0, 0, 13);
+                fallback.fill();
+                fallback.strokeColor = this.ctx.hex('#F8FAFC', 220);
+                fallback.lineWidth = 2;
+                fallback.circle(0, 0, 13);
+                fallback.stroke();
+            }
+            this.equippedVisualNode = node;
+            this.equippedVisualId = def.id;
+        }
+        this.equippedVisualNode.setPosition(
+            this.ctx.cs.playerX - 42,
+            this.ctx.cs.playerY + 32,
+            8,
+        );
     }
 
     private findClosestEnemyExcluding(exclude: Enemy, maxDist: number): Enemy | null {

@@ -14,7 +14,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.05,
         color: '#9BE564',
         accent: '#31572C',
-        spawnAfter: 0,
+        unlockWave: 1,
         weight: 7,
     },
     {
@@ -30,7 +30,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.08,
         color: '#4CC9F0',
         accent: '#1B4965',
-        spawnAfter: 10,
+        unlockWave: 3,
         weight: 4,
     },
     {
@@ -46,7 +46,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.22,
         color: '#F9C74F',
         accent: '#8A5A00',
-        spawnAfter: 18,
+        unlockWave: 5,
         weight: 3,
     },
     {
@@ -62,7 +62,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.16,
         color: '#F15BB5',
         accent: '#6A0572',
-        spawnAfter: 28,
+        unlockWave: 7,
         weight: 3,
     },
     {
@@ -78,7 +78,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.35,
         color: '#F3722C',
         accent: '#6B240C',
-        spawnAfter: 46,
+        unlockWave: 9,
         weight: 2,
     },
     {
@@ -94,7 +94,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.05,
         color: '#EF4444',
         accent: '#FCA5A5',
-        spawnAfter: 2,
+        unlockWave: 4,
         weight: 3,
     },
     {
@@ -110,7 +110,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.02,
         color: '#EAB308',
         accent: '#FDE047',
-        spawnAfter: 5,
+        unlockWave: 2,
         weight: 3,
     },
     {
@@ -126,7 +126,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.12,
         color: '#38BDF8',
         accent: '#BAE6FD',
-        spawnAfter: 12,
+        unlockWave: 6,
         weight: 1.5,
     },
     {
@@ -142,7 +142,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.10,
         color: '#BE123C',
         accent: '#FDA4AF',
-        spawnAfter: 10,
+        unlockWave: 8,
         weight: 2,
     },
     {
@@ -158,7 +158,7 @@ export const BASE_ENEMY_ARCHETYPES: EnemySpec[] = [
         alloyChance: 0.25,
         color: '#CA8A04',
         accent: '#FCD34D',
-        spawnAfter: 20,
+        unlockWave: 9,
         weight: 1,
     },
 ];
@@ -179,7 +179,7 @@ export const MINI_BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#78350F',
         accent: '#F59E0B',
-        spawnAfter: 11,
+        unlockWave: 14,
         weight: 0,
     },
     // 电弧灵能体：短距离连锁闪电
@@ -196,7 +196,7 @@ export const MINI_BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#1E3A5F',
         accent: '#60A5FA',
-        spawnAfter: 11,
+        unlockWave: 14,
         weight: 0,
     },
     // 自爆母体：附近有敌人时自爆
@@ -213,7 +213,7 @@ export const MINI_BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#7F1D1D',
         accent: '#FCA5A5',
-        spawnAfter: 11,
+        unlockWave: 14,
         weight: 0,
     },
     // 迅捷分裂体：极快+分裂
@@ -230,7 +230,7 @@ export const MINI_BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#4C1D95',
         accent: '#C4B5FD',
-        spawnAfter: 11,
+        unlockWave: 14,
         weight: 0,
     },
     // 再生巨兽：HP缓慢回复
@@ -247,7 +247,7 @@ export const MINI_BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#064E3B',
         accent: '#34D399',
-        spawnAfter: 11,
+        unlockWave: 14,
         weight: 0,
     },
 ];
@@ -267,7 +267,7 @@ export const BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#0F0A1A',
         accent: '#22D3EE',
-        spawnAfter: 50,
+        unlockWave: 10,
         weight: 0,
         bossMaterial: 'voidFragment',
     },
@@ -284,7 +284,7 @@ export const BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#2D3A1A',
         accent: '#A3E635',
-        spawnAfter: 50,
+        unlockWave: 10,
         weight: 0,
         bossMaterial: 'energyCore',
     },
@@ -301,7 +301,7 @@ export const BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#1A2A3A',
         accent: '#7DD3FC',
-        spawnAfter: 50,
+        unlockWave: 10,
         weight: 0,
         bossMaterial: 'frostCore',
     },
@@ -318,7 +318,7 @@ export const BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#2A1A0A',
         accent: '#FB923C',
-        spawnAfter: 50,
+        unlockWave: 10,
         weight: 0,
         bossMaterial: 'infernoCore',
     },
@@ -335,7 +335,7 @@ export const BOSS_SPECS: EnemySpec[] = [
         alloyChance: 1.0,
         color: '#2A2A0A',
         accent: '#FACC15',
-        spawnAfter: 50,
+        unlockWave: 10,
         weight: 0,
         bossMaterial: 'webSilk',
     },
@@ -350,22 +350,22 @@ export interface EnemyVariantDef {
     radius: number;
     xp: number;
     alloy: number;
-    spawn: number;
+    unlockWave: number;
     weight: number;
 }
 
 export const ENEMY_VARIANTS: EnemyVariantDef[] = [
-    { id: '', prefix: '', hp: 1, speed: 1, damage: 1, radius: 1, xp: 1, alloy: 1, spawn: 0, weight: 1 },
-    { id: 'acid', prefix: '腐蚀', hp: 1.12, speed: 0.96, damage: 1.18, radius: 1, xp: 1.12, alloy: 1.2, spawn: 6, weight: 0.86 },
-    { id: 'crystal', prefix: '晶化', hp: 1.38, speed: 0.88, damage: 1.08, radius: 1.05, xp: 1.24, alloy: 1.35, spawn: 10, weight: 0.78 },
-    { id: 'swift', prefix: '迅捷', hp: 0.82, speed: 1.34, damage: 1.06, radius: 0.94, xp: 1.16, alloy: 1.05, spawn: 14, weight: 0.82 },
-    { id: 'armored', prefix: '装甲', hp: 1.72, speed: 0.78, damage: 1.12, radius: 1.08, xp: 1.42, alloy: 1.55, spawn: 22, weight: 0.58 },
-    { id: 'rage', prefix: '暴怒', hp: 1.18, speed: 1.16, damage: 1.42, radius: 1.02, xp: 1.32, alloy: 1.3, spawn: 30, weight: 0.52 },
-    { id: 'shade', prefix: '幽影', hp: 0.94, speed: 1.22, damage: 1.22, radius: 0.9, xp: 1.28, alloy: 1.24, spawn: 38, weight: 0.48 },
-    { id: 'arc', prefix: '电弧', hp: 1.24, speed: 1.08, damage: 1.32, radius: 1, xp: 1.44, alloy: 1.42, spawn: 48, weight: 0.42 },
-    { id: 'regen', prefix: '再生', hp: 1.58, speed: 0.94, damage: 1.18, radius: 1.04, xp: 1.5, alloy: 1.48, spawn: 58, weight: 0.36 },
-    { id: 'venom', prefix: '剧毒', hp: 1.3, speed: 1.06, damage: 1.58, radius: 1, xp: 1.62, alloy: 1.58, spawn: 68, weight: 0.3 },
-    { id: 'prime', prefix: '原初', hp: 2.1, speed: 1.05, damage: 1.85, radius: 1.16, xp: 2.05, alloy: 2.1, spawn: 78, weight: 0.22 },
+    { id: '', prefix: '', hp: 1, speed: 1, damage: 1, radius: 1, xp: 1, alloy: 1, unlockWave: 1, weight: 1 },
+    { id: 'acid', prefix: '腐蚀', hp: 1.12, speed: 0.96, damage: 1.18, radius: 1, xp: 1.12, alloy: 1.2, unlockWave: 2, weight: 0.86 },
+    { id: 'crystal', prefix: '晶化', hp: 1.38, speed: 0.88, damage: 1.08, radius: 1.05, xp: 1.24, alloy: 1.35, unlockWave: 3, weight: 0.78 },
+    { id: 'swift', prefix: '迅捷', hp: 0.82, speed: 1.34, damage: 1.06, radius: 0.94, xp: 1.16, alloy: 1.05, unlockWave: 4, weight: 0.82 },
+    { id: 'armored', prefix: '装甲', hp: 1.72, speed: 0.78, damage: 1.12, radius: 1.08, xp: 1.42, alloy: 1.55, unlockWave: 5, weight: 0.58 },
+    { id: 'rage', prefix: '暴怒', hp: 1.18, speed: 1.16, damage: 1.42, radius: 1.02, xp: 1.32, alloy: 1.3, unlockWave: 6, weight: 0.52 },
+    { id: 'shade', prefix: '幽影', hp: 0.94, speed: 1.22, damage: 1.22, radius: 0.9, xp: 1.28, alloy: 1.24, unlockWave: 7, weight: 0.48 },
+    { id: 'arc', prefix: '电弧', hp: 1.24, speed: 1.08, damage: 1.32, radius: 1, xp: 1.44, alloy: 1.42, unlockWave: 8, weight: 0.42 },
+    { id: 'regen', prefix: '再生', hp: 1.58, speed: 0.94, damage: 1.18, radius: 1.04, xp: 1.5, alloy: 1.48, unlockWave: 9, weight: 0.36 },
+    { id: 'venom', prefix: '剧毒', hp: 1.3, speed: 1.06, damage: 1.58, radius: 1, xp: 1.62, alloy: 1.58, unlockWave: 10, weight: 0.3 },
+    { id: 'prime', prefix: '原初', hp: 2.1, speed: 1.05, damage: 1.85, radius: 1.16, xp: 2.05, alloy: 2.1, unlockWave: 11, weight: 0.22 },
 ];
 
 export function buildEnemyCatalog(): EnemySpec[] {
@@ -386,7 +386,7 @@ export function buildEnemyCatalog(): EnemySpec[] {
                 radius: Math.max(9, Math.round(base.radius * variant.radius)),
                 xp: Math.max(1, Math.round(base.xp * variant.xp)),
                 alloyChance: Math.min(0.85, Number((base.alloyChance * variant.alloy).toFixed(3))),
-                spawnAfter: base.spawnAfter + variant.spawn,
+                unlockWave: Math.max(base.unlockWave, variant.unlockWave),
                 weight: Number(Math.max(0.12, base.weight * variant.weight).toFixed(2)),
             });
         }

@@ -8,6 +8,7 @@ import type { EnemySpec } from '../core/types';
 import type { EnemyManager } from './enemyManager';
 import type { Vec2 } from 'cc';
 import { WORLD_LEFT, WORLD_RIGHT, WORLD_BOTTOM, WORLD_TOP } from './enemyConstants';
+import { allocateSpawnBudget } from '../catalogs/waveCatalog';
 
 /** Spawn formation type for debug / tooltip */
 export type SpawnFormation = 'random' | 'ring' | 'charge' | 'cross' | 'pincer';
@@ -56,7 +57,7 @@ export function spawnChargeWave(
 ): void {
     const cap = mgr.getEnemyCap();
     const room = Math.max(0, cap - mgr.enemies.length);
-    const total = Math.min(count, room);
+    const [total] = allocateSpawnBudget(Math.min(count, room), 1);
     if (total <= 0) return;
 
     // Compute spawn origin: on the world edge in the opposite direction of the charge
@@ -83,23 +84,22 @@ export function spawnChargeWave(
 }
 
 /**
- * Spawn enemies in a cross pattern (4 directions, tight clusters).
+ * Spawn one exact budget in a cross pattern (4 directions, tight clusters).
  * Good for "get out of the way" area-denial.
  */
 export function spawnCross(
     mgr: EnemyManager,
     spec: EnemySpec,
-    countPerArm: number,
+    budget: number,
     radius: number,
 ): void {
-    const total = countPerArm * 4;
     const cap = mgr.getEnemyCap();
     const room = Math.max(0, cap - mgr.enemies.length);
-    if (total > room) return;
+    const armBudgets = allocateSpawnBudget(Math.min(budget, room), 4);
 
     for (let arm = 0; arm < 4; arm++) {
         const baseAngle = (Math.PI / 2) * arm;
-        for (let j = 0; j < countPerArm; j++) {
+        for (let j = 0; j < armBudgets[arm]; j++) {
             const angle = baseAngle + (Math.random() - 0.5) * 0.3;
             const r = radius + mgr['ctx'].randomRange(-30, 80);
             const point = mgr.getSpawnPointAroundPlayer(r, angle);
@@ -116,16 +116,15 @@ export function spawnCross(
 export function spawnPincer(
     mgr: EnemyManager,
     spec: EnemySpec,
-    countPerWave: number,
+    budget: number,
     angle: number,
     spread: number = 300,
     speedOverride: number = 0,
 ): void {
     const cap = mgr.getEnemyCap();
     const room = Math.max(0, cap - mgr.enemies.length);
-    const total = Math.min(countPerWave * 2, room);
-    const perWave = Math.max(1, Math.floor(total / 2));
-    if (perWave <= 0) return;
+    const sideBudgets = allocateSpawnBudget(Math.min(budget, room), 2);
+    if (sideBudgets[0] + sideBudgets[1] <= 0) return;
 
     const spawnDist = Math.max(WORLD_RIGHT - WORLD_LEFT, WORLD_TOP - WORLD_BOTTOM) * 0.65;
     const px = mgr['ctx'].playerX;
@@ -139,9 +138,10 @@ export function spawnPincer(
 
         const perpX = -Math.sin(sideAngle);
         const perpY = Math.cos(sideAngle);
+        const sideCount = sideBudgets[side];
 
-        for (let i = 0; i < perWave; i++) {
-            const offset = (i / Math.max(1, perWave - 1) - 0.5) * spread + (Math.random() - 0.5) * 30;
+        for (let i = 0; i < sideCount; i++) {
+            const offset = (i / Math.max(1, sideCount - 1) - 0.5) * spread + (Math.random() - 0.5) * 30;
             const x = mgr['ctx'].clamp(originX + perpX * offset, WORLD_LEFT + padding, WORLD_RIGHT - padding);
             const y = mgr['ctx'].clamp(originY + perpY * offset, WORLD_BOTTOM + padding, WORLD_TOP - padding);
             mgr.createEnemy(

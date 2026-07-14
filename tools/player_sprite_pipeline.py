@@ -38,16 +38,16 @@ CELL_SIZE = 80
 
 PROMPT = """Use case: stylized-concept
 Asset type: Cocos Creator 2D mobile game sprite sheet, modular player body only
-Primary request: Generate one polished sci-fi survivor character animation sheet for Starfall Survivor.
+Primary request: Generate one polished, highly readable sci-fi survivor mech body animation sheet for Starfall Survivor.
 Canvas/layout: exactly 2 rows by 6 columns, same character identity and same scale in every cell. Row 1 is idle breathing. Row 2 is run south/front-facing. No grid lines, no labels, no numbers, no text.
-Subject: compact heroic human survivor in dark navy tactical sci-fi armor, rounded helmet with bright cyan visor, cyan chest light, one orange shoulder pad and one amber shoulder pad. Body only, no weapon held.
-View/framing: orthographic 2.5D top-down/front hybrid for a vertical survivor shooter, character facing mostly downward toward camera, full body visible, generous padding in every cell.
+Subject: compact cheerful cyan salvage-mech hero with a large white rounded face visor, centered yellow chest badge, two small coral shoulder fins, matching chunky yellow boots and simple white gloves. Body only, no weapon held, no backpack clutter. The design must match bright clean arcade cartoon enemies rather than realistic armor.
+View/framing: strict front view facing straight toward the bottom of the canvas, full body visible, left-right symmetrical silhouette, generous padding, uniform dark-navy 2-3px outline, saturated flat cyan/yellow/coral/white color blocks, minimal internal detail, readable at 80px.
 Animation choreography:
 Row 1 idle: frame 1 neutral combat ready stance; frame 2 shoulders lift and torso inhales; frame 3 visor and chest light glow slightly, head bobs up; frame 4 shoulders lower and torso exhales; frame 5 subtle sway left; frame 6 subtle sway right.
-Row 2 run south: frame 1 left foot forward right foot back, left shoulder lower; frame 2 passing pose with body rising; frame 3 right foot forward left foot back, right shoulder lower; frame 4 passing pose with body rising; frame 5 left foot push-off with torso dipping; frame 6 right foot push-off with torso dipping. The legs, boots, shoulders, and hands must visibly change pose across frames.
-Hands/weapon constraint: hands stay near the lower chest/centerline as if ready to hold a compact SMG overlay, but do not draw any weapon, gun, rifle, muzzle, blade, shield, or prop.
-Style/quality: high-quality hand-painted game sprite, clean readable silhouette at 80px, crisp antialiased edges, painterly details but not noisy, professional mobile game asset.
-Background: perfectly flat solid #00ff00 chroma-key background only. No cast shadow, no contact shadow, no floor, no gradient, no texture.
+Row 2 run south: a front-facing synchronized bounce-run. Both boots compress, torso lowers, both boots extend, torso rises, recoil, return. The body never turns, leans sideways, or changes camera angle.
+Hands/weapon constraint: hands stay near the lower chest/centerline for a separate weapon overlay. Do not draw any weapon, gun, rifle, muzzle, blade, shield, or prop.
+Style/quality: bright clean arcade sci-fi cartoon, simple chunky rounded geometry, saturated flat colors, two-step cel shading, crisp antialiased edges, minimal micro-detail, professional mobile survivor game asset.
+Background: perfectly flat solid #FF00FF chroma-key background only. No cast shadow, no contact shadow, no floor, no gradient, no texture. Do not use magenta on the character.
 Avoid: repeated identical frames, static pose copy-paste, weapon baked into body, extra characters, frame borders, text, watermark, UI, large empty margins, cropped body parts, photorealism."""
 
 
@@ -113,12 +113,14 @@ def chroma_to_alpha(image: Image.Image, tolerance: int = 84) -> Image.Image:
     src = rgba.load()
     dst = out.load()
     assert src is not None and dst is not None
+    corners = [rgba.getpixel((0, 0)), rgba.getpixel((rgba.width - 1, 0)), rgba.getpixel((0, rgba.height - 1)), rgba.getpixel((rgba.width - 1, rgba.height - 1))]
+    bg = max(set(corners), key=corners.count)
     for y in range(rgba.height):
         for x in range(rgba.width):
             r, g, b, a = src[x, y]
-            dist = abs(r - 0) + abs(g - 255) + abs(b - 0)
+            dist = abs(r - bg[0]) + abs(g - bg[1]) + abs(b - bg[2])
             if dist <= tolerance:
-                dst[x, y] = (r, g, b, 0)
+                dst[x, y] = (0, 0, 0, 0)
             else:
                 dst[x, y] = (r, g, b, a)
     return out
@@ -180,6 +182,13 @@ def process(raw_path: Path, variant: str) -> dict[str, Any]:
             crop = cleaned.crop((left, top, right, bottom))
             rows[key].append(fit_to_cell(crop))
 
+    lateral_offsets = [1, 3, 5, 4, 2, 1]
+    rows["run_east"] = []
+    for frame, offset in zip(rows["run_south"], lateral_offsets):
+        lateral = Image.new("RGBA", (CELL_SIZE, CELL_SIZE), (0, 0, 0, 0))
+        lateral.alpha_composite(frame, (offset, 0))
+        rows["run_east"].append(lateral)
+
     RUNTIME_CHARACTER_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     output_paths: dict[str, str] = {}
@@ -189,7 +198,11 @@ def process(raw_path: Path, variant: str) -> dict[str, Any]:
         strip = Image.new("RGBA", (CELL_SIZE * FRAMES, CELL_SIZE), (0, 0, 0, 0))
         for index, frame in enumerate(frames):
             strip.alpha_composite(frame, (index * CELL_SIZE, 0))
-        runtime_name = "player_body_no_weapon_idle.png" if key == "idle" else "player_body_no_weapon_run_south.png"
+        runtime_name = {
+            "idle": "player_body_no_weapon_idle.png",
+            "run_south": "player_body_no_weapon_run_south.png",
+            "run_east": "player_run_east.png",
+        }[key]
         runtime_path = RUNTIME_CHARACTER_DIR / runtime_name
         source_path = PROCESSED_DIR / f"{runtime_name.removesuffix('.png')}_{variant}.png"
         strip.save(runtime_path)

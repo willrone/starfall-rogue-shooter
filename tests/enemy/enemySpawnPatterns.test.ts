@@ -1,5 +1,45 @@
 import assert from 'node:assert/strict';
 import { WORLD_LEFT, WORLD_RIGHT, WORLD_BOTTOM, WORLD_TOP } from '../../assets/scripts/enemy/enemyConstants';
+import { ENEMY_SPECS } from '../../assets/scripts/catalogs/enemyCatalog';
+import { spawnChargeWave, spawnCross, spawnPincer } from '../../assets/scripts/enemy/enemySpawnPatterns';
+
+function makeSpawnManager(cap: number, initialCount: number) {
+    const enemies = Array.from({ length: initialCount }, () => ({}));
+    return {
+        enemies,
+        ctx: {
+            playerX: 0,
+            playerY: 0,
+            randomRange: (min: number, max: number) => (min + max) / 2,
+            clamp: (value: number, min: number, max: number) => Math.max(min, Math.min(max, value)),
+        },
+        getEnemyCap: () => cap,
+        getSpawnPointAroundPlayer: (radius: number, angle: number) => ({
+            x: Math.cos(angle) * radius,
+            y: Math.sin(angle) * radius,
+        }),
+        createEnemy: () => enemies.push({}),
+    };
+}
+
+function testFormationsConsumeExactAvailableBudget() {
+    const cases = [
+        ['charge', spawnChargeWave],
+        ['cross', spawnCross],
+        ['pincer', spawnPincer],
+    ] as const;
+    const spec = ENEMY_SPECS[0];
+
+    for (const [name, spawn] of cases) {
+        const roomy = makeSpawnManager(20, 3);
+        spawn(roomy as never, spec, 7, 0);
+        assert.equal(roomy.enemies.length - 3, 7, `${name} should consume the full batch budget`);
+
+        const tight = makeSpawnManager(5, 3);
+        spawn(tight as never, spec, 7, 0);
+        assert.equal(tight.enemies.length - 3, 2, `${name} must clamp to remaining enemy-cap room`);
+    }
+}
 
 function testChargeWaveOrigin() {
     const px = 360, py = 640;
@@ -112,13 +152,14 @@ function testPatternChanceStrictIncrease() {
     }
 }
 
-function testCrossArmCount() {
-    // Cross: armCount 3 should produce 12 enemies total
-    const armCount = 3;
-    const total = armCount * 4;
-    assert.equal(total, 12, '3 per arm × 4 arms = 12 total');
+function testBudgetSplitsDoNotInflateTotals() {
+    const crossBudget = [3, 2, 2, 2];
+    assert.equal(crossBudget.reduce((sum, value) => sum + value, 0), 9, 'cross arms must share one total budget');
+    const pincerBudget = [4, 3];
+    assert.equal(pincerBudget.reduce((sum, value) => sum + value, 0), 7, 'pincer sides must share one total budget');
 }
 
+testFormationsConsumeExactAvailableBudget();
 testChargeWaveOrigin();
 testPerpendicularLine();
 testCircleAnglesEven();
@@ -131,6 +172,6 @@ testPincerPerpLine();
 testPincerCountSplit();
 testPatternChanceScaling();
 testPatternChanceStrictIncrease();
-testCrossArmCount();
+testBudgetSplitsDoNotInflateTotals();
 
 console.log('✅ enemy/enemySpawnPatterns tests passed');

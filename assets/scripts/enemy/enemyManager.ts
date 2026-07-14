@@ -3,7 +3,7 @@ import type { CharacterStats, ChestPickupType, DamageType, EnemySpec, PickupType
 import type { GameEventBus } from '../core/gameContext';
 import {
     WORLD_LEFT, WORLD_RIGHT, WORLD_BOTTOM, WORLD_TOP,
-    WAVES_PER_CYCLE, ORDINARY_WAVES_PER_CYCLE, WAVE_MIN_DURATION, WAVE_MAX_DURATION,
+    WAVES_PER_CYCLE, WAVE_MIN_DURATION, WAVE_MAX_DURATION,
     ENEMY_PLAYER_PADDING, ENEMY_SEPARATION_PADDING, ENEMY_SEPARATION_CELL,
     ENEMY_SEPARATION_BUCKET_SCAN, ENEMY_SEPARATION_MAX_CHECKS,
     ENEMY_PROJECTILE_LIMIT, MAX_CHESTS_PER_WAVE,
@@ -19,6 +19,26 @@ import {
 } from "./enemyConstants";
 
 import { BASE_ENEMY_ARCHETYPES, ENEMY_SPECS, BOSS_SPECS, MINI_BOSS_SPECS } from '../catalogs/enemyCatalog';
+import {
+    BOSS_ADD_PROFILE,
+    BOSS_OVERTIME_DAMAGE_MULTIPLIER,
+    BOSS_OVERTIME_PROFILE,
+    BOSS_OVERTIME_SKILL_COOLDOWN_MULTIPLIER,
+    BOSS_OVERTIME_SPEED_MULTIPLIER,
+    BOSS_VICTORY_DELAY,
+    MINI_BOSS_SPAWN_MAX_TIME,
+    MINI_BOSS_SPAWN_MIN_TIME,
+    advanceBossSpawnState,
+    advanceBossVictoryTimer,
+    getBossAddSpawnBudget,
+    getUnlockedEnemySpecsForWave,
+    getWaveProgressFactors,
+    getWaveSpawnInterval as getConfiguredWaveSpawnInterval,
+    getWaveSpawnProfile,
+    scaleBossSkillCooldown,
+    shouldScheduleMiniBoss,
+    type BossAddProfile,
+} from '../catalogs/waveCatalog';
 import type { CombatState } from '../state/combatState';
 
 import { periodicFollowPhase } from './enemyMovement';
@@ -141,6 +161,10 @@ export class EnemyManager {
     public enemySet: Set<Enemy> = new Set();
     public enemySepTick = 999;
     public currentWaveSpecs: EnemySpec[] = [];
+    private bossOvertimeActive = false;
+    private bossVictoryTimer = -1;
+    private miniBossSpawnAt = -1;
+    private miniBossSpawnedThisWave = false;
 
     // ── Shared health bar layer ────────────────────────────────────
     private barLayer: Node | null = null;
@@ -358,13 +382,29 @@ export class EnemyManager {
         enemy.node.setPosition(x, y, z);
     }
 
+    public resetWaveRuntime(): void {
+        this.currentWaveSpecs = [];
+        this.bossOvertimeActive = false;
+        this.bossVictoryTimer = -1;
+        this.miniBossSpawnAt = -1;
+        this.miniBossSpawnedThisWave = false;
+        resetBossPool();
+    }
+
     public updateSpawning(dt: number) {
         if (this.cs.waveIndex <= 0) {
             this.startNextWave();
         }
 
+        const previousWaveElapsed = this.cs.waveElapsed;
         this.cs.waveElapsed += dt;
         this.cs.cycleTime = this.cs.waveElapsed;
+
+        if (this.isBossWave()) {
+            this.updateBossWaveSpawning(dt, previousWaveElapsed);
+            return;
+        }
+
         this.cs.waveSpawnTimer -= dt;
         while (this.cs.waveSpawnTimer <= 0) {
             if (this.enemies.length < this.getEnemyCap()) {
@@ -373,13 +413,64 @@ export class EnemyManager {
             this.cs.waveSpawnTimer += this.getWaveSpawnInterval();
         }
 
-        if (this.cs.waveElapsed < this.cs.waveDuration) return;
-        // Boss 波：超时后停止刷怪，让玩家专心打 Boss
-        if (this.isBossWave() && !this.cs.bossDefeatedThisWave) {
-            // 不减 spawnTimer → 不会触发 while 循环内的 spawnCurrentWaveBatch
+        this.updateScheduledMiniBoss();
+        if (this.cs.waveElapsed >= this.cs.waveDuration) this.startNextWave();
+    }
+
+    private updateBossWaveSpawning(dt: number, previousWaveElapsed: number): void {
+        const step = advanceBossSpawnState({
+            previousWaveElapsed,
+            waveElapsed: this.cs.waveElapsed,
+            bossDefeated: this.cs.bossDefeatedThisWave,
+            spawnTimer: this.cs.waveSpawnTimer,
+            overtimeActive: this.bossOvertimeActive,
+        });
+        this.cs.waveSpawnTimer = step.spawnTimer;
+
+        if (step.phase === 'victory') {
+            const victory = advanceBossVictoryTimer(this.bossVictoryTimer, dt);
+            this.bossVictoryTimer = victory.remaining;
+            if (victory.advanceWave) this.startNextWave();
             return;
         }
-        this.startNextWave();
+        if (step.phase === 'intro') return;
+        if (step.enteredOvertime) this.enterBossOvertime();
+
+        const profile = step.phase === 'overtime' ? BOSS_OVERTIME_PROFILE : BOSS_ADD_PROFILE;
+        for (let i = 0; i < step.batchesDue; i++) {
+            this.spawnBossAddBatch(profile);
+        }
+    }
+
+    private spawnBossAddBatch(profile: BossAddProfile): void {
+        const ordinaryAlive = this.enemies.reduce((count, enemy) => count + (enemy.boss ? 0 : 1), 0);
+        const rolledBatch = this.ctx.randomInt(profile.batchMin, profile.batchMax);
+        const budget = getBossAddSpawnBudget(profile, ordinaryAlive, rolledBatch);
+        if (budget > 0) {
+            const pool = this.getUnlockedEnemySpecs();
+            this.spawnPack(budget, true, pool, pool);
+        }
+    }
+
+    private enterBossOvertime(): void {
+        this.bossOvertimeActive = true;
+        const boss = this.enemies.find(enemy => enemy.boss && this.enemySet.has(enemy));
+        if (boss) {
+            boss.speed *= BOSS_OVERTIME_SPEED_MULTIPLIER;
+            boss.damage *= BOSS_OVERTIME_DAMAGE_MULTIPLIER;
+            boss.skillTimer *= BOSS_OVERTIME_SKILL_COOLDOWN_MULTIPLIER;
+        }
+        this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 4);
+        this.ctx.rumbleVfx('bossWarning');
+        this.ctx.playSfx('sfx_boss_warning', 0.95, 0.2);
+        this.ctx.showToast('Boss 进入超时狂暴：普通怪潮停止，援军改为每 10 秒一批！');
+    }
+
+    private updateScheduledMiniBoss(): void {
+        if (this.miniBossSpawnedThisWave || this.miniBossSpawnAt < 0) return;
+        if (this.cs.waveElapsed < this.miniBossSpawnAt) return;
+        this.miniBossSpawnedThisWave = true;
+        this.spawnScheduledMiniBoss();
     }
     public enemyShoot(enemy: Enemy, dirX: number, dirY: number) {
         const type = enemy.damageType;
@@ -704,8 +795,8 @@ export class EnemyManager {
             const wasHitColor = enemy['_wasHitColor'] || false;
             if (hitColor !== wasHitColor) {
                 enemy.sprite.color = hitColor
-                    ? this.ctx.hex('#FFFFFF', 255)
-                    : this.getEnemyTint(enemy, enemy.elite ? 255 : 235);
+                    ? this.ctx.hex('#FFF4B8', 255)
+                    : this.ctx.hex('#FFFFFF', 255);
                 enemy['_wasHitColor'] = hitColor;
             }
         } else if (enemy.hitFlash > 0) {
@@ -1121,7 +1212,7 @@ export class EnemyManager {
                         alloyChance: 0,
                         color: '#4C1D95',
                         accent: '#C4B5FD',
-                        spawnAfter: 50,
+                        unlockWave: 50,
                         weight: 0,
                     }, sx, sy, false, false);
                     enemy.spiderCount++;
@@ -1151,7 +1242,7 @@ export class EnemyManager {
                         alloyChance: 0,
                         color: '#4C1D95',
                         accent: '#C4B5FD',
-                        spawnAfter: 50,
+                        unlockWave: 50,
                         weight: 0,
                     }, sx, sy, false, false);
                     enemy.spiderCount++;
@@ -1164,10 +1255,19 @@ export class EnemyManager {
     }
     public getEnemySkillDelay(enemy: Enemy) {
         const base = enemy.elite || enemy.boss ? 1.25 : 1.9;
-        if (enemy.spec.family === 'runner' || enemy.spec.variantId === 'swift') return this.ctx.randomRange(1.1, base + 0.45);
-        if (enemy.spec.family === 'warden' || enemy.spec.variantId === 'arc') return this.ctx.randomRange(1.45, base + 0.75);
-        if (enemy.spec.variantId === 'rage' || enemy.spec.variantId === 'venom' || enemy.spec.variantId === 'crystal') return this.ctx.randomRange(1.55, base + 0.85);
-        return this.ctx.randomRange(2.0, 3.4);
+        let delay: number;
+        if (enemy.spec.family === 'runner' || enemy.spec.variantId === 'swift') {
+            delay = this.ctx.randomRange(1.1, base + 0.45);
+        } else if (enemy.spec.family === 'warden' || enemy.spec.variantId === 'arc') {
+            delay = this.ctx.randomRange(1.45, base + 0.75);
+        } else if (enemy.spec.variantId === 'rage' || enemy.spec.variantId === 'venom' || enemy.spec.variantId === 'crystal') {
+            delay = this.ctx.randomRange(1.55, base + 0.85);
+        } else {
+            delay = this.ctx.randomRange(2.0, 3.4);
+        }
+        return enemy.boss && this.bossOvertimeActive
+            ? delay * BOSS_OVERTIME_SKILL_COOLDOWN_MULTIPLIER
+            : delay;
     }
     public shouldEnemyDash(enemy: Enemy, dist: number) {
         if (dist < enemy.radius + this.cs.playerRadius + 12) return false;
@@ -1278,9 +1378,14 @@ export class EnemyManager {
         this.cs.bossDefeatedThisWave = false;
         this.cs.waveKillCount = 0;
         this.cs.waveChestDrops = 0;
+        this.bossOvertimeActive = false;
+        this.bossVictoryTimer = -1;
+        this.miniBossSpawnAt = -1;
+        this.miniBossSpawnedThisWave = false;
         this.currentWaveSpecs = this.getWaveEnemySpecs(this.cs.waveIndex);
 
         if (this.isBossWave()) {
+            this.cs.waveSpawnTimer = BOSS_ADD_PROFILE.interval;
             this.cs.bossSpawned = true;
             if (this.ctx.rumbleVfx) this.ctx.rumbleVfx('bossWarning');
             this.cs.shakeIntensity = Math.max(this.cs.shakeIntensity, 3.5);
@@ -1292,6 +1397,9 @@ export class EnemyManager {
         }
 
         this.cs.bossSpawned = false;
+        if (shouldScheduleMiniBoss(this.cs.waveIndex, false, Math.random())) {
+            this.miniBossSpawnAt = this.ctx.randomRange(MINI_BOSS_SPAWN_MIN_TIME, MINI_BOSS_SPAWN_MAX_TIME);
+        }
         this.ctx.requestBgm('bgm_combat_loop');
         this.ctx.bus.emit('wave-start', { wave: this.cs.waveIndex, isBoss: this.isBossWave() });
         this.ctx.showToast(`第 ${this.cs.waveIndex} 波开始，${Math.round(this.cs.waveDuration)} 秒内怪潮会持续涌入。`);
@@ -1304,58 +1412,34 @@ export class EnemyManager {
         this.ctx.showToast(`第 ${this.cs.waveIndex} 波清算：补给合金 +${reward}`);
     }
     public spawnCurrentWaveBatch() {
-        const ring = this.isBossWave() || this.cs.waveIndex % 3 === 0;
+        const ring = this.cs.waveIndex % 3 === 0;
         const count = this.getWaveSpawnBatchCount();
-        const fallback = this.isBossWave() ? ENEMY_SPECS : this.getUnlockedEnemySpecs();
+        const fallback = this.getUnlockedEnemySpecs();
         const spec = this.pickWeightedEnemySpec(this.currentWaveSpecs.length > 0 ? this.currentWaveSpecs : fallback);
 
-        // ── 出怪模式选择（概率随波次递增）────────────────────────
-        if (!this.isBossWave() && spec) {
+        // Formation changes spatial pressure only; every branch consumes exactly
+        // the batch budget returned above.
+        if (spec) {
             const wave = this.cs.waveIndex;
-
-            // 十字阵：波 8+，6% 概率，4 方向各出 2-3 只
-            if (wave >= 8 && Math.random() < 0.06 && count >= 5) {
-                const armCount = Math.min(3, Math.max(2, Math.floor(count / 3)));
-                spawnCross(this, spec, armCount, 400);
-                const extra = Math.max(1, count - armCount * 2);
-                this.spawnPack(extra, ring, this.currentWaveSpecs, fallback);
-                this.maybeSpawnMiniBoss();
+            if (wave >= 8 && Math.random() < 0.06 && count >= 4) {
+                spawnCross(this, spec, count, 400);
                 return;
             }
-
-            // 夹击波（pincer）：波 10+，8% 概率，双向高速冲锋
-            if (wave >= 10 && Math.random() < 0.08 && count >= 4) {
-                const perWave = Math.min(5, Math.max(2, Math.floor(count / 2)));
-                const angle = Math.random() * Math.PI * 2;
-                spawnPincer(this, spec, perWave, angle, 260, 0);
-                const extra = Math.max(1, count - perWave * 2);
-                this.spawnPack(extra, ring, this.currentWaveSpecs, fallback);
-                this.maybeSpawnMiniBoss();
+            if (wave >= 10 && Math.random() < 0.08 && count >= 2) {
+                spawnPincer(this, spec, count, Math.random() * Math.PI * 2, 260, 0);
                 return;
             }
-
-            // 冲锋波：波 6+，概率从 12% 递增到 25%
             const chargeChance = Math.min(0.25, 0.12 + (wave - 6) * 0.015);
             if (wave >= 6 && Math.random() < chargeChance && count >= 3) {
-                const angle = Math.random() * Math.PI * 2;
-                spawnChargeWave(this, spec, Math.min(count + 2, 8), angle, 240, 0);
-                const extra = Math.max(1, count - 3);
-                this.spawnPack(extra, ring, this.currentWaveSpecs, fallback);
-                this.maybeSpawnMiniBoss();
+                spawnChargeWave(this, spec, count, Math.random() * Math.PI * 2, 240, 0);
                 return;
             }
         }
         this.spawnPack(count, ring, this.currentWaveSpecs, fallback);
-        // 无尽模式（波13+）有 30% 概率穿插小 Boss（不挡进度）
-        this.maybeSpawnMiniBoss();
     }
 
-    /** 小 Boss 穿插：无尽模式波13+，30%概率出现1只 */
-    private maybeSpawnMiniBoss(): void {
-        if (this.cs.waveIndex < 13) return;
-        if (this.isBossWave()) return;
-        if (Math.random() > 0.30) return;
-        // 场上已存在小 Boss 则不刷
+    /** Spawn the single mini boss already scheduled for this wave. */
+    private spawnScheduledMiniBoss(): void {
         const hasMini = this.enemies.some(e => e.boss === false && e.elite && MINI_BOSS_SPECS.some(s => s.family === e.spec.family));
         if (hasMini) return;
         const spec = MINI_BOSS_SPECS[Math.floor(Math.random() * MINI_BOSS_SPECS.length)];
@@ -1369,87 +1453,53 @@ export class EnemyManager {
             hp: scaledHp,
             damage: Math.round(spec.damage * this.getEndlessScale() * (1 + (cycle - 1) * 0.15)),
         }, point.x, point.y, true, false);
+        this.ctx.showToast(`第 ${this.cs.waveIndex} 波：小 Boss ${spec.name} 介入！`);
     }
     public getWaveSpawnInterval() {
+        if (this.isBossWave()) {
+            return this.bossOvertimeActive ? BOSS_OVERTIME_PROFILE.interval : BOSS_ADD_PROFILE.interval;
+        }
         const slot = this.getWaveSlot();
         const base = 1.62 - slot * 0.035 - (this.cs.endlessCycle - 1) * 0.06 - Math.min(0.12, this.cs.waveElapsed / 420);
-        // 11 波后：间隔指数缩短（5% compound），波11略慢给喘口气
         if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
             const endlessFactor = this.getEndlessScale();
             const breather = this.cs.waveIndex === ENDLESS_START_WAVE ? 0.08 : 0;
             return Math.max(0.45, (base + breather) / endlessFactor);
         }
-        // Early waves are where new players learn the loop.  Keep pressure lower
-        // so starter weapons can actually kill, collect XP, and reach upgrades
-        // before the real squeeze begins around waves 5-6.
-        const earlyRelief = this.cs.endlessCycle === 1
-            ? this.cs.waveIndex <= 1 ? 0.15
-                : this.cs.waveIndex === 2 ? 0.15
-                    : this.cs.waveIndex === 3 ? 0.25
-                        : this.cs.waveIndex === 4 ? 0.3
-                            : this.cs.waveIndex === 5 ? 0.2
-                                : this.cs.waveIndex === 6 ? 0.15
-                                    : this.cs.waveIndex === 7 ? 0.15
-                                        : this.cs.waveIndex === 8 ? 0.15
-                                            : this.cs.waveIndex === 9 ? 0.10
-                                                : 0
-            : 0;
-        return Math.max(this.cs.waveIndex <= 1 ? 1.0 : this.cs.waveIndex === 2 ? 0.95 : this.cs.waveIndex === 3 ? 1.1 : this.cs.waveIndex === 4 ? 1.1 : this.cs.waveIndex === 5 ? 1.1 : this.cs.waveIndex === 6 ? 1.0 : this.cs.waveIndex <= 8 ? 0.95 : 0.95, base + earlyRelief);
+        return getConfiguredWaveSpawnInterval(this.cs.waveIndex, this.cs.waveElapsed, this.cs.waveDuration);
     }
     public getWaveSpawnBatchCount() {
+        if (this.isBossWave()) {
+            const profile = this.bossOvertimeActive ? BOSS_OVERTIME_PROFILE : BOSS_ADD_PROFILE;
+            return this.ctx.randomInt(profile.batchMin, profile.batchMax);
+        }
         const slot = this.getWaveSlot();
-        // 11 波后：每批数量指数增长（5% compound）
         if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
             const baseCount = 3 + Math.floor(slot * 0.38) + this.cs.endlessCycle;
-            const bossBonus = this.isBossWave() ? 5 : 0;
-            const endlessFactor = this.getEndlessScale();
-            return Math.min(60, Math.round((baseCount + bossBonus) * endlessFactor));
+            return Math.min(60, Math.round(baseCount * this.getEndlessScale()));
         }
-        if (this.cs.endlessCycle === 1 && this.cs.waveIndex <= 8) {
-            const earlyBase = this.cs.waveIndex <= 2
-                ? 3
-                : this.cs.waveIndex <= 4
-                    ? 3
-                    : this.cs.waveIndex <= 6
-                        ? 4
-                        : 5;
-            const earlyRandom = this.cs.waveIndex <= 2 ? 1 : this.ctx.randomInt(0, this.cs.waveIndex >= 7 ? 2 : 1);
-            return earlyBase + earlyRandom;
-        }
-        const earlyWave = this.cs.endlessCycle === 1 && this.cs.waveIndex <= 6;
-        const elapsedPressure = Math.floor(this.cs.waveElapsed / (earlyWave ? 42 : 24));
-        const pressure = 1 + Math.floor(slot * 0.38) + this.cs.endlessCycle + elapsedPressure;
-        const bossBonus = this.isBossWave() ? 3 : 0;
-        const randomBonus = earlyWave
-            ? this.cs.waveIndex <= 2 ? 0 : this.ctx.randomInt(0, 1)
-            : this.ctx.randomInt(0, 2);
-        return Math.min(22, Math.max(2, pressure + bossBonus + randomBonus));
+        const profile = getWaveSpawnProfile(this.cs.waveIndex);
+        return this.ctx.randomInt(profile.batchMin, profile.batchMax);
     }
     public getEnemyCap() {
-        // Boss 波：场上限砍到 60，给玩家空间打 Boss
         if (this.isBossWave()) {
-            return 60 + this.cs.endlessCycle * 10;
+            const profile = this.bossOvertimeActive ? BOSS_OVERTIME_PROFILE : BOSS_ADD_PROFILE;
+            return profile.aliveCap + 1;
         }
-        // 11 波后：上限指数增长
         if (this.cs.waveIndex >= ENDLESS_START_WAVE) {
             const endlessFactor = this.getEndlessScale();
             return Math.min(600, Math.max(240, Math.round(200 * endlessFactor)));
         }
-        if (this.cs.endlessCycle === 1) {
-            const earlyCaps: Record<number, number> = { 1: 40, 2: 55, 3: 75, 4: 95, 5: 130, 6: 170, 7: 200, 8: 240, 9: 240 };
-            const cap = earlyCaps[this.cs.waveIndex];
-            if (cap) return cap + this.cs.battleIndex * 2;
-        }
-        return Math.min(280, 90 + this.cs.battleIndex * 3 + this.cs.endlessCycle * 24 + this.cs.waveIndex * 6);
+        const profile = getWaveSpawnProfile(this.cs.waveIndex);
+        return profile.enemyCap + this.cs.battleIndex * 2;
     }
     private getEarlyProgressFactor(): number {
-        if (this.cs.waveIndex >= ENDLESS_START_WAVE) return 1;
         if (this.cs.endlessCycle !== 1) return 1;
-        if (this.cs.waveIndex <= 2) return 0.3;
-        if (this.cs.waveIndex <= 4) return 0.4;
-        if (this.cs.waveIndex <= 6) return 0.55;
-        if (this.cs.waveIndex <= 8) return 0.78;
-        return 1;
+        return getWaveProgressFactors(this.cs.waveIndex).hpProgressFactor;
+    }
+    private getEarlyDamageFactor(): number {
+        if (this.cs.endlessCycle !== 1) return 1;
+        return getWaveProgressFactors(this.cs.waveIndex).damageProgressFactor;
     }
     public getWaveSlot(wave = this.cs.waveIndex) {
         if (wave <= 0) return 1;
@@ -1678,13 +1728,7 @@ export class EnemyManager {
     }
     public createEnemy(spec: EnemySpec, x: number, y: number, elite: boolean, boss: boolean) {
         const earlyProgressFactor = this.getEarlyProgressFactor();
-        const earlyDamageFactor = this.cs.endlessCycle === 1
-            ? this.cs.waveIndex <= 2 ? 0.82
-                : this.cs.waveIndex <= 4 ? 0.75
-                    : this.cs.waveIndex <= 6 ? 0.85
-                        : this.cs.waveIndex <= 8 ? 0.95
-                            : 1
-            : 1;
+        const earlyDamageFactor = this.getEarlyDamageFactor();
         const endlessScale = this.getEndlessScale();
         const scale = (1 + this.cs.battleIndex * 0.06 + (this.cs.endlessCycle - 1) * 0.28 + (this.cs.waveIndex * 0.028 + this.cs.combatTime * 0.0018) * ENEMY_HP_PROGRESS_SCALE * earlyProgressFactor) * endlessScale;
         const eliteScale = boss ? 6.4 + this.cs.endlessCycle * 0.58 : elite ? 2.65 : 1;
@@ -1764,6 +1808,27 @@ export class EnemyManager {
         this.enemies.push(enemy);
         this.enemySet.add(enemy);
     }
+
+    /** Rebind enemies created during the async art-loading timeout. */
+    public refreshEnemyArt(): void {
+        for (const enemy of this.enemies) {
+            if (!this.enemySet.has(enemy)) continue;
+            const animation = this.ctx.getEnemyAnimation(enemy.spec, enemy.boss);
+            const frameName = this.ctx.getEnemyAnimationFrameName(enemy.spec, enemy.boss);
+            const frame = animation?.frames[0];
+            if (frame) {
+                enemy.animation = animation;
+                enemy.animationFrameIndex = 0;
+                if (enemy.sprite) {
+                    enemy.sprite.spriteFrame = frame;
+                    enemy.sprite.node.active = true;
+                }
+            } else if (enemy.sprite) {
+                const fallback = this.ctx.addSpriteChild(enemy.node, 'EnemyArtReloaded', frameName, enemy.visualRadius * 2, enemy.visualRadius * 2);
+                if (fallback) enemy.sprite = fallback;
+            }
+        }
+    }
     public getEnemyDamageType(spec: EnemySpec, boss: boolean): DamageType {
         if (boss) return 'magic';
         if (spec.id.indexOf('venom') >= 0 || spec.id.indexOf('acid') >= 0) return 'poison';
@@ -1811,38 +1876,10 @@ export class EnemyManager {
         return this.getUnlockedEnemySpecs();
     }
     public getUnlockedEnemySpecs() {
-        // 11 波后：所有种类全部解锁
-        if (this.cs.waveIndex >= ENDLESS_START_WAVE) return ENEMY_SPECS;
-        const slot = this.getWaveSlot();
-        if (this.cs.endlessCycle === 1) {
-            const families = slot <= 2
-                ? ['mite']
-                : slot <= 4
-                    ? ['mite', 'runner']
-                    : slot <= 6
-                        ? ['mite', 'runner', 'brute']
-                        : slot <= 8
-                            ? ['mite', 'runner', 'brute', 'splitter']
-                            : BASE_ENEMY_ARCHETYPES.map((base) => base.family);
-            const maxVariantIndex = slot <= 2 ? 0 : slot <= 4 ? 2 : slot <= 6 ? 4 : slot <= 8 ? 6 : 10;
-            const earlyPool = ENEMY_SPECS.filter((spec) =>
-                families.indexOf(spec.family) >= 0 && (spec.variantIndex ?? 0) <= maxVariantIndex,
-            );
-            if (earlyPool.length > 0) return earlyPool;
-        }
-        const wave = this.ctx.clamp(slot >= WAVES_PER_CYCLE ? ORDINARY_WAVES_PER_CYCLE : slot, 1, ORDINARY_WAVES_PER_CYCLE);
-        const end = Math.floor((wave * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
-        return ENEMY_SPECS.slice(0, Math.max(1, end));
+        return getUnlockedEnemySpecsForWave(ENEMY_SPECS, this.cs.waveIndex);
     }
     public getWaveEnemySpecs(wave: number) {
-        // 11 波后：全部种类
-        if (wave >= ENDLESS_START_WAVE) return ENEMY_SPECS;
-        const slot = this.getWaveSlot(wave);
-        if (this.cs.endlessCycle === 1 && slot <= 8) return this.getUnlockedEnemySpecs();
-        const ordinaryWave = this.ctx.clamp(slot >= WAVES_PER_CYCLE ? ORDINARY_WAVES_PER_CYCLE : slot, 1, ORDINARY_WAVES_PER_CYCLE);
-        const start = Math.floor(((ordinaryWave - 1) * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
-        const end = Math.floor((ordinaryWave * ENEMY_SPECS.length) / ORDINARY_WAVES_PER_CYCLE);
-        return ENEMY_SPECS.slice(start, Math.max(start + 1, end));
+        return getUnlockedEnemySpecsForWave(ENEMY_SPECS, wave);
     }
     public damageEnemy(enemy: Enemy, amount: number, color = '#F8FAFC', tag = '') {
         const finalAmount = enemy.armorTimer > 0 ? amount * (enemy.boss ? 0.58 : 0.72) : amount;
@@ -2033,8 +2070,9 @@ export class EnemyManager {
             if (this.ctx.tryDropEquipmentBlueprint) this.ctx.tryDropEquipmentBlueprint();
             this.cs.bossDefeatedThisWave = true;
             this.cs.bossSpawned = false;
+            this.bossVictoryTimer = BOSS_VICTORY_DELAY;
             this.ctx.requestBgm('bgm_combat_loop');
-            this.ctx.showToast(`第 ${this.cs.waveIndex} 波 Boss 已击杀，撑到本波结束进入下一波。`);
+            this.ctx.showToast(`第 ${this.cs.waveIndex} 波 Boss 已击杀，${BOSS_VICTORY_DELAY} 秒后进入下一波。`);
         }
         if (this.shouldEnemyExplodeOnDeath(enemy)) {
             this.enemyExplode(x, y, enemy.radius * (enemy.boss ? 3.2 : enemy.elite ? 2.45 : 2.15), enemy.damage * (enemy.boss ? 1.5 : 1.05), enemy.damageType);
@@ -2123,10 +2161,9 @@ export class EnemyManager {
         // The actual rendering is done once per frame in drawAllEnemiesBatch().
         // We still need to update sprite state for sprite-based enemies.
         if (enemy.sprite) {
-            const tint = this.getEnemyTint(enemy, 255);
             enemy.sprite.color = enemy.hitFlash > 0
-                ? this.ctx.hex('#FFFFFF', 255)
-                : tint;
+                ? this.ctx.hex('#FFF4B8', 255)
+                : this.ctx.hex('#FFFFFF', 255);
         }
     }
 
@@ -2150,17 +2187,37 @@ export class EnemyManager {
             // 屏幕外裁剪：超出视角范围+200像素的怪不画
             if (Math.abs(dx) > VIEW_HALF_W + 200 || Math.abs(dy) > VIEW_HALF_H + 200) continue;
             const r = enemy.radius;
-            // 主体
-            gfx.fillColor = enemy.hitFlash > 0
-                ? this.ctx.hex('#FFFFFF', 255)
-                : this.getEnemyTint(enemy, enemy.elite ? 255 : 230);
-            gfx.circle(pos.x, pos.y, r);
-            gfx.fill();
-            // 边框
-            gfx.strokeColor = this.ctx.hex(enemy.spec.accent, enemy.boss ? 140 : 120);
-            gfx.lineWidth = enemy.boss ? 2 : 1.5;
-            gfx.circle(pos.x, pos.y, r + 2);
-            gfx.stroke();
+            // Sprite-backed enemies own their body pixels. Keep the Graphics
+            // circle only as a fallback for legacy enemies without a sprite.
+            if (!enemy.sprite) {
+                gfx.fillColor = enemy.hitFlash > 0
+                    ? this.ctx.hex('#FFFFFF', 255)
+                    : this.getEnemyTint(enemy, enemy.elite ? 255 : 230);
+                gfx.circle(pos.x, pos.y, r);
+                gfx.fill();
+                gfx.strokeColor = this.ctx.hex(enemy.spec.accent, enemy.boss ? 140 : 120);
+                gfx.lineWidth = enemy.boss ? 2 : 1.5;
+                gfx.circle(pos.x, pos.y, r + 2);
+                gfx.stroke();
+            }
+            // Sprite-backed variants keep their original painted palette. A
+            // compact colored halo and indexed crown ticks preserve the 11
+            // catalog identities without multiplying the whole sprite color.
+            const variantIndex = enemy.boss ? 0 : enemy.spec.variantIndex || 0;
+            if (variantIndex > 0) {
+                gfx.strokeColor = this.getEnemyTint(enemy, 210);
+                gfx.lineWidth = enemy.elite ? 4 : 3;
+                gfx.circle(pos.x, pos.y, r + 5);
+                gfx.stroke();
+                const tickCount = 1 + ((variantIndex - 1) % 5);
+                const tickY = pos.y + r + 9;
+                const tickStartX = pos.x - (tickCount - 1) * 3;
+                gfx.fillColor = this.getEnemyTint(enemy, 235);
+                for (let tick = 0; tick < tickCount; tick++) {
+                    gfx.circle(tickStartX + tick * 6, tickY, 2.2);
+                    gfx.fill();
+                }
+            }
             // 精英/闪避/护甲标记
             if (enemy.armorTimer > 0 || enemy.dashTimer > 0) {
                 gfx.strokeColor = this.ctx.hex(enemy.armorTimer > 0 ? '#CBD5E1' : '#F59E0B', 160);

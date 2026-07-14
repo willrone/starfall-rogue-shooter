@@ -5,15 +5,15 @@
   "preview_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/previews/player_run_east.gif",
   "frames": 6,
   "cell_size": 80,
-  "fps": 8,
+  "fps": 10,
   "output_dir": "characters",
   "raw_size": [
     2172,
     724
   ],
   "trimmed_size": [
-    2115,
-    714
+    2172,
+    724
   ],
-  "generated_at": 1782726862
+  "generated_at": 1783921552
 }

@@ -5,15 +5,15 @@
   "preview_path": "/Users/ronghui/Documents/game_dev_cocos/assets/art_source/previews/enemy_brute_walk.gif",
   "frames": 6,
   "cell_size": 80,
-  "fps": 8,
+  "fps": 6,
   "output_dir": "enemies",
   "raw_size": [
     2172,
     724
   ],
   "trimmed_size": [
-    2141,
-    359
+    2172,
+    724
   ],
-  "generated_at": 1782724654
+  "generated_at": 1783920637
 }

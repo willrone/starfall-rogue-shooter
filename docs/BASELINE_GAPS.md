@@ -143,67 +143,97 @@
 | 证据 | `equipmentManager.ts:395-435,679-729` |
 | 下一步 | 指定唯一入口；另一入口复用同一个配方函数，不再复制材料表 |
 
-### GAP-WAVE-002：`spawnAfter` 与实际怪池解锁不是同一规则
+### GAP-WAVE-002：`spawnAfter` 与实际怪池解锁不是同一规则（已关闭）
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P1 / DECISION |
-| 设计期望 | catalog 的 `spawnAfter` 是每个基础怪/变体的明确解锁条件 |
-| 当前实现 | `getUnlockedEnemySpecs()` 主要按 wave slot、family 和 `variantIndex` 过滤；`getWaveEnemySpecs()` 在 9-10 波又按数组分片；没有统一按 `spawnAfter` 过滤 |
-| 证据 | `enemyCatalog.ts:371-397`；`enemyManager.ts:1745-1780` |
-| 下一步 | 选择一种解锁模型并删除另一套隐式规则；为每波候选 family/variant 建快照测试 |
+| 严重度 / 状态 | P1 / FIXED（2026-07-13） |
+| 设计期望 | 每个普通怪组合只有一个明确的首次出现波次，且后续候选池累计扩大 |
+| 当前实现 | `EnemySpec` 已删除 `spawnAfter`，只保留 `unlockWave`；`enemyCatalog.ts` 取家族与变体解锁波次的较大值，`waveCatalog.ts` 按 `unlockWave <= 当前波` 累计过滤；波 9~10 数组分片已移除 |
+| 证据 | `core/types.ts::EnemySpec`；`catalogs/enemyCatalog.ts::buildEnemyCatalog()`；`catalogs/waveCatalog.ts::getUnlockedEnemySpecsForWave()`；`tests/enemy/waveSystem.test.ts`；`tests/flows/waveSystemWiring.test.ts` |
+| 下一步 | 后续新增家族或变体时继续维护单一 `unlockWave`，并同步每波累计候选池契约测试 |
 
-### GAP-ART-001：运行时玩家动画合同缺少对应 PNG
+### GAP-ART-001：运行时玩家动画合同缺少对应 PNG（已关闭）
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P1 / OPEN |
-| 设计期望 | 角色能按 8 方向使用无武器身体条带，主武器作为独立挂载层显示 |
-| 当前实现 | 代码加载 `player_survivor_idle` 和 8 张 `player_survivor_run_*`，规格为 6 帧 × 160px；仓库只有这些文件的孤立 `.meta`，没有对应 960×160 PNG。现有 `player_*` 为 6×80 条带，`player_body_no_weapon_*` 也未接入当前 loader，干净导入会回退 placeholder |
+| 严重度 / 状态 | P1 / FIXED（2026-07-12） |
+| 设计期望 | 角色始终使用正面无武器身体动画，左右奔跑仍可辨识，主武器作为独立挂载层显示 |
+| 当前实现 | 运行时加载 `player_body_no_weapon_idle`、`player_body_no_weapon_run_south` 和 `player_run_east` 三张 6×80px 条带；上下保持正面同步跑步，右跑改变正面重心，左跑镜像同一条带 |
 | 证据 | `RogueShooterGame.ts` 角色资源加载；`assets/resources/art/characters/`；`ART_REPLACEMENT_GUIDE.md` 第 6 节 |
-| 下一步 | 选择补齐 9 张 960×160 资源，或正式把 loader、帧尺寸和方向状态迁移到 80px 合同；增加缺图与条带尺寸测试，并在干净 AssetDB 运行验证 |
+| 下一步 | 在干净 AssetDB 和 720×1280 跑局中验证正面 idle、上下跑步、左右镜像以及独立武器叠层 |
 
 ### GAP-ART-002：17 把主武器的场上挂载图未闭合
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P1 / OPEN |
+| 严重度 / 状态 | P1 / OPEN（2026-07-13 复核重开） |
 | 设计期望 | 每个主武器 family 都有可辨识的角色手持/场上挂载图 |
-| 当前实现 | 运行时按 `art/weapons/weapon_<family>_icon` 推导资源；当前仅 5/17 个 family 能命中同名文件，其余回退通用或无专属表现 |
-| 证据 | `RogueShooterGame.ts` 武器外观加载；`assets/resources/art/weapons/`；`ART_REPLACEMENT_GUIDE.md` 第 8 节 |
-| 下一步 | 为 17 个 family 建唯一 key 和尺寸合同，补齐缺失 PNG/meta、资源映射测试及逐武器运行截图 |
+| 当前实现 | 运行时按 `art/weapons/weapon_<family>_icon` 推导资源，17 个 family 均有 128×128 PNG；但场上资源与 UI 图标复用同一方形构图，不是独立手持/挂载图，缺图时仍保留 storm-rifle 回退 |
+| 证据 | `RogueShooterGame.ts` 武器外观加载；`assets/resources/art/weapons/`；`tests/visual/itemArtWiring.test.ts` |
+| 下一步 | 为需要独立轮廓的 family 补手持构图，并在 720×1280 跑局逐一装备，验收旋转中心、左右翻转、朝向和 42px 尺寸可读性 |
 
-### GAP-ART-003：霜束与织网武器 UI 图标 key 不完整
+### GAP-ART-003：霜束与织网武器 UI 图标 key 不完整（已关闭）
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P1 / OPEN |
+| 严重度 / 状态 | P1 / FIXED（2026-07-13） |
 | 设计期望 | 17 个主武器 family 都能在机库、掉落和详情界面显示唯一图标 |
-| 当前实现 | `frost-beamer` 通过通用推导得到 `wpn_frost_beamer`，现有文件/loader 使用 `wpn_frost_beam`；`webmaster` 缺少 `wpn_webmaster` 文件和 `loadIcons()` 项 |
-| 证据 | `equipmentManager.ts::equipIconKey()`；`RogueShooterGame.ts::loadIcons()`；`assets/resources/effects/ui_icons/` |
-| 下一步 | 建立显式 family→icon 映射或统一命名；补 17/17 映射测试，并验证异步加载后的机库刷新 |
+| 当前实现 | `wpn_frost_beamer` 和 `wpn_webmaster` 已补齐并进入 `loadIcons()`；17 个 family 的推导 key 均有 PNG，旧 `wpn_frost_beam` 仅兼容保留 |
+| 证据 | `core/artKeys.ts`；`RogueShooterGame.ts::loadIcons()`；`tests/visual/itemArtWiring.test.ts` |
+| 下一步 | 在异步资源加载完成后复查机库、掉落与详情界面刷新 |
 
 ## 4. P2 架构、状态与显示差异
 
-### GAP-ART-004：大 Boss 专属动画未被运行时使用
+### GAP-ART-004：大 Boss 专属动画未被运行时使用（已关闭）
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P2 / OPEN |
+| 严重度 / 状态 | P2 / FIXED（2026-07-13） |
 | 设计期望 | 5 个大 Boss 具有可辨识的专属轮廓与动画 |
-| 当前实现 | Boss 路径会强制选择通用 `boss` 条带；已有个别专属资源也无法从当前分支到达，5 个 Boss 主要共享同一视觉 |
-| 证据 | `enemyManager.ts` 的 strip 选择；`assets/resources/art/enemies/` |
-| 下一步 | 以 boss ID 建立专属 strip meta 与 fallback，补 5 个 Boss 资源和选择测试 |
+| 当前实现 | `ENEMY_STRIP_META` 已为 5 个大 Boss 和 5 个小 Boss 建立 family 级专属条带；运行时优先按 `spec.family` 选择，通用 `boss` 条带仅作未知 family 回退。普通怪变体通过批绘彩色环与索引冠点保持身份可见 |
+| 证据 | `RogueShooterGame.ts::getEnemyAnimation()`；`enemyConstants.ts::ENEMY_STRIP_META`；`assets/resources/art/enemies/enemy_*_idle.png`；`tests/visual/enemyBossArtWiring.test.ts` |
+| 下一步 | 在 720×1280 Cocos 跑局逐个验收 10 个 Boss 的缩放、动画节奏和密集战斗可读性 |
 
 ### GAP-ART-005：副武器没有专属战斗 Sprite 合同
 
 | 项 | 内容 |
 |---|---|
-| 严重度 / 状态 | P2 / DECISION |
+| 严重度 / 状态 | P1 / OPEN（2026-07-13 复核重开） |
 | 设计期望 | 15 把副武器有稳定、可替换且互相可辨识的战斗美术 |
-| 当前实现 | `offhandManager.ts` 主要用 Graphics/Node 绘制机制表现，catalog 的 `iconKey` 大量复用通用 UI 图标；没有独立 PNG loader、尺寸或命名合同 |
-| 证据 | `offhandCatalog.ts`；`offhand/offhandManager.ts`；`ART_REPLACEMENT_GUIDE.md` 第 9 节 |
-| 下一步 | 决定保留程序化表现还是新增专属 Sprite 层；若新增，先定义不改变 15 种机制身份的资源表、回退和对象池规则 |
+| 当前实现 | 15 把副武器各有 `offhand_<id>` PNG，但当前只用于玩家身边的 38px 身份徽章；刀刃、蜂群、地雷、裂隙等真实机制实体仍由 Graphics/VFX 绘制，且战斗 PNG 与 UI 图标复用同一构图 |
+| 证据 | `offhandCatalog.ts`；`offhand/offhandManager.ts`；`assets/resources/art/offhand/`；`tests/visual/itemArtWiring.test.ts` |
+| 下一步 | 明确 15 类机制实体的 Sprite/VFX 映射，接到实际实体而非仅接身份徽章；在 720×1280 跑局逐把验收层级、缩放和机制辨识度 |
+
+### GAP-ART-006：本局道具专属图标未接入商店
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P1 / OPEN |
+| 设计期望 | 65 个 RUN_ITEM 在商店、宝箱和选择界面使用同一权威图标映射，并能按 blueprint 辨识 |
+| 当前实现 | 65 个专属 PNG 和 `runItemIconKey` 已存在；拾取/选择路径会使用该映射，但 `equipmentManager.ts` 的 6 格商店仍按 ID 粗分为攻击或护盾两种通用图标 |
+| 证据 | `core/artKeys.ts::runItemIconKey()`；`pickup/pickupManager.ts`；`shop/equipmentManager.ts` 商店格构建；`assets/resources/art/run_items/` |
+| 下一步 | 让商店格直接使用权威 `runItemIconKey`，补 65 项映射契约测试和 6 格购买/补货实机截图 |
+
+### GAP-ART-007：启动超时后的异步补图不完整
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P1 / OPEN |
+| 设计期望 | 美术加载超过启动等待时间时，已创建的玩家、敌人、拾取物、装备表现和已打开 UI 能在资源到达后自动从 fallback 刷新为正式图 |
+| 当前实现 | 武器和弹丸具备重试或独立刷新；敌人刷新在已有 frame 但节点没有 Sprite 时不会补建 Sprite，玩家身体、拾取物、副武器徽章以及已打开的机库/副武器/熔炉界面也没有完整刷新链 |
+| 证据 | `RogueShooterGame.ts::buildSpriteStripAnimations()`、`loadIcons()`；`enemy/enemyManager.ts::refreshEnemyArt()`；`offhand/offhandManager.ts::updateEquippedVisual()` |
+| 下一步 | 建立统一 art-ready 刷新事件，允许补建缺失 Sprite/Icon 节点；加入资源延迟超过 4 秒的冷启动测试 |
+
+### GAP-ART-008：正式美术交付素材和视觉验收未闭环
+
+| 项 | 内容 |
+|---|---|
+| 严重度 / 状态 | P1 / OPEN |
+| 设计期望 | 提交目录只有唯一正式素材，文件扩展名与编码一致，并有覆盖核心流程和主要内容的 720×1280 运行证据 |
+| 当前实现 | `submission/` 同时存在新旧两个 app icon；两张 `.png` 截图实际为 JPEG 编码；现有证据只覆盖机库和第一波普通战斗，未逐项覆盖商店、升级、复活、结算、10 个 Boss、17 把主武器和 15 把副武器 |
+| 证据 | `submission/` 文件检查；`docs/SUBMISSION_CHECKLIST.md` 第 7、8、13 节 |
+| 下一步 | 清理冲突副本并转为真实 PNG；按视觉验收矩阵保存同一候选构建的截图/视频，完成模拟器和真机确认 |
 
 ### GAP-ARCH-001：战斗公式存在运行时与测试镜像双源
 

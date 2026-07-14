@@ -1,6 +1,6 @@
 # 星坠幸存者美术资源替换指南
 
-> 基线日期：2026-07-11
+> 基线日期：2026-07-13
 >
 > 适用工程：Cocos Creator 3.8.8 / TypeScript / 抖音小游戏 / 720×1280 竖屏
 >
@@ -25,8 +25,10 @@
 | 目录 | 数量 | 用途 | 加载方式 |
 |---|---:|---|---|
 | `assets/resources/art/characters/` | 11 PNG | 玩家身体动画条带 | `resources.loadDir('art/characters')` |
-| `assets/resources/art/enemies/` | 12 PNG | 普通怪、Boss 动画条带 | `resources.loadDir('art/enemies')` |
-| `assets/resources/art/weapons/` | 8 PNG | 玩家身边的主武器挂载图 | `resources.loadDir('art/weapons')` |
+| `assets/resources/art/enemies/` | 21 PNG | 普通怪、小 Boss、大 Boss 动画条带 | `resources.loadDir('art/enemies')` |
+| `assets/resources/art/weapons/` | 19 PNG | 17 个主武器 family 挂载图及兼容资源 | `resources.loadDir('art/weapons')` |
+| `assets/resources/art/offhand/` | 15 PNG | 15 把副武器的战斗 Sprite | `resources.loadDir('art/offhand')` |
+| `assets/resources/art/pickups/` | 13 PNG | 11 类可拾取资源与 2 类宝箱 | `resources.loadDir('art/pickups')` |
 | `assets/resources/art/placeholder/` | 9 PNG | 资源缺失时的静态兜底 | `resources.loadDir('art/placeholder')` |
 | `assets/resources/effects/` | 56 PNG | 子弹、HUD 条、毒雾及候选特效 | 按路径单独加载 |
 | `assets/resources/effects/ui_icons/` | 46 PNG | 武器、属性、槽位、资源和 HUD 图标 | `loadIcons()` 硬编码加载 |
@@ -35,9 +37,15 @@
 | `assets/resources/audio/bgm/` | 3 MP3 | 机库、战斗、Boss BGM | `resources.loadDir('audio')` |
 | `assets/resources/audio/sfx/` | 36 MP3 | 通用反馈和主武器射击音效 | `resources.loadDir('audio')` |
 
-`RogueShooterGame.ts` 会整目录加载 `art/placeholder`、`art/characters`、`art/enemies`、`art/weapons`，`AudioManager` 会整目录加载 `audio`。不要把未采用候选图或临时音频放进这些目录。
+`RogueShooterGame.ts` 会整目录加载 `art/placeholder`、`art/characters`、`art/enemies`、`art/weapons`、`art/offhand` 和 `art/pickups`，`AudioManager` 会整目录加载 `audio`。不要把未采用候选图或临时音频放进这些目录。
+
+2026-07-12 卡通 v2 批次使用 `assets/art_source/monster_prompts_cartoon_v2.json` 从零生成，统一采用鲜明平涂卡通轮廓；该批次不以旧 PNG 作为参考输入。
+
+美术加载允许在启动超时后继续进入菜单。当前异步补图链尚未闭合：`EnemyManager.refreshEnemyArt()` 不能为原本没有 Sprite 的敌人补建组件，玩家身体、拾取物、副武器徽章和已打开 UI 也没有完整刷新。资源延迟超过 4 秒时可能长期保留 fallback，见 `GAP-ART-007`。
 
 `art/characters` 和 `art/enemies` 中现存的同名 `.json` 是生成记录，不是 Cocos AnimationClip，也不会被 `SpriteFrame` 的 `loadDir` 调用读取。新增生成记录应归档到 `assets/art_source/`，不要继续把源侧 sidecar 扩散到 runtime 目录。
+
+战场地表使用 `assets/resources/art/world/battlefield_tile.png`。`generate_ui_world_art.py` 先把生成候选缩放为 512×512，再通过四象限镜像合成为 1024×1024 周期贴图；成品左右边和上下边逐像素闭合。运行时以 600×600 普通重复 Sprite 覆盖 1800×2400 战场，加载失败时保留程序化地表作为降级路径。生成脚本不得创建或改写 `.meta`；新增资源由 Cocos AssetDB 导入并分配 UUID。
 
 ## 3. 通用图片规范
 
@@ -161,21 +169,19 @@ player_body_no_weapon_run_south.png
 
 这两张也是 `480×80`、6 帧、单帧 80×80。
 
-### 6.2 当前运行时缺口
+### 6.2 当前运行时合同
 
-运行代码仍声明并加载：
+运行代码当前使用三条正面身体动画：
 
 ```text
-player_survivor_idle                 6×160×160
-player_survivor_run_<8 directions>  6×160×160
+player_body_no_weapon_idle       6×80×80
+player_body_no_weapon_run_south  6×80×80
+player_run_east                  6×80×80
 ```
 
-对应 `960×160` PNG 不存在，只剩孤立 `.meta`。因此角色替换合同尚未闭合：干净导入时会退回 `art/placeholder/player_ship.png`，旧缓存可能让问题暂时看不出来。该问题是明确的基线缺口，见 [BASELINE_GAPS.md](./BASELINE_GAPS.md)。
+角色始终保持正面。上下移动使用同步正面跑步，向右移动使用正面横向重心动画，向左移动镜像同一条带，从而保持角色身份一致并区分左右方向。
 
-在缺口修复前，不应宣称“替换 `player_idle.png` 即可在运行时生效”。修复时必须在以下方案中选定一个并同步代码、README 和工具：
-
-- 保留旧代码合同：补齐 9 张 `960×160` 的 `player_survivor_*`。
-- 采用当前物理资源：把代码合同改为 `player_idle/player_run_*`、6 帧、单帧 80px。
+角色替换直接覆盖上述三个文件即可生效；同名 `.meta` 必须保留。
 
 ### 6.3 角色制作要求
 
@@ -186,7 +192,7 @@ player_survivor_run_<8 directions>  6×160×160
 - 默认面向 south 的构图必须在 96px 左右运行时显示尺寸下清楚可读。
 - 武器由独立节点旋转叠加，身体手部应留出持枪空间。
 
-当前 `PLAYER_BODY_ANIMATION_DIRECTION` 固定为 south，八方向条带尚未真正按移动方向切换；这也是角色美术验收时必须知道的运行现状。
+运行时只切换正面上下跑步和正面横向跑步，并以镜像区分左右；武器仍由独立节点旋转叠加。
 
 ## 7. 怪物动画条带
 
@@ -205,7 +211,16 @@ player_survivor_run_<8 directions>  6×160×160
 | 磁暴卫士 | `enemy_warden_idle.png` | 6 | 96×96 | 576×96 | 8 |
 | 信标 | `enemy_beacon_idle.png` | 6 | 96×96 | 576×96 | 6 |
 | 通用大 Boss | `enemy_boss_idle.png` | 8 | 224×224 | 1792×224 | 8 |
-| 虚空巨像候选 | `enemy_void_colossus_idle.png` | 6 | 128×128 | 768×128 | 8 |
+| 狂暴重甲块 | `enemy_brute_prime_idle.png` | 6 | 128×128 | 768×128 | 6 |
+| 电弧灵能体 | `enemy_aura_arc_idle.png` | 6 | 128×128 | 768×128 | 8 |
+| 自爆母体 | `enemy_bomber_mother_idle.png` | 6 | 128×128 | 768×128 | 7 |
+| 迅捷分裂体 | `enemy_splitter_swift_idle.png` | 6 | 128×128 | 768×128 | 10 |
+| 再生巨兽 | `enemy_warden_regen_idle.png` | 6 | 128×128 | 768×128 | 6 |
+| 虚空巨像 | `enemy_void_colossus_idle.png` | 8 | 224×224 | 1792×224 | 8 |
+| 噬能蠕虫 | `enemy_energy_worm_idle.png` | 8 | 224×224 | 1792×224 | 10 |
+| 冰霜女皇 | `enemy_frost_queen_idle.png` | 8 | 224×224 | 1792×224 | 8 |
+| 狱炎领主 | `enemy_inferno_lord_idle.png` | 8 | 224×224 | 1792×224 | 7 |
+| 虚空织网者 | `enemy_void_weaver_idle.png` | 8 | 224×224 | 1792×224 | 8 |
 
 制作和替换规则：
 
@@ -214,8 +229,11 @@ player_survivor_run_<8 directions>  6×160×160
 3. 可见主体在每格内保持统一占比和中心，不因动作切换突然放大缩小。
 4. 碰撞半径由代码和 catalog 决定，替换图片不会自动改变碰撞体。
 5. 精英和词缀怪通常复用基础家族图，颜色、标记和数值由代码处理。
-6. 当前 5 个大 Boss 都优先使用通用 `enemy_boss_idle.png`；`enemy_void_colossus_idle.png` 因 boss 路由优先级当前不可达。
-7. 当前 5 个小 Boss 没有专属动画 key；部分使用静态 placeholder，部分退回 Graphics。
+6. 当前 5 个大 Boss 与 5 个小 Boss 均按 `spec.family` 优先命中专属条带；通用 `enemy_boss_idle.png` 只保留为未知 Boss family 的回退。
+7. 普通怪的 11 档变体复用家族主体条带，运行时通过原色主体外的彩色环和索引冠点保持可辨识，不再用乘色覆盖 PNG。
+8. 生图条带必须先经过 `monster_sprite_pipeline.py` 的背景连通域清理与投影谷值切帧；找不到干净帧间空隙时工具会直接失败，不得发布被等宽切断的条带。
+9. 基础怪统一使用朝屏幕下方的正面动画；左右轮廓保持平衡，动画只做同步压缩、开合、悬浮或中心脉冲，不使用侧身、三分之四侧向、单侧倾斜或改变朝向的帧。
+10. Sprite 怪物常态使用白色乘色以保留 PNG 原始色板；变体、精英和状态颜色只进入外圈/标记层。命中反馈使用短暂暖白色与缩放脉冲，不得用常态 tint 覆盖原画颜色。
 
 要增加专属 Boss 图，必须同时扩展 Boss ID/family 到动画 meta 的映射，不能只新增 PNG。
 
@@ -232,7 +250,7 @@ player_survivor_run_<8 directions>  6×160×160
 |---|---|---|---|---|
 | `storm-rifle` | `wpn_storm_rifle` | `weapon_storm_rifle_icon.png` | `vfx_bullet_smg.png` | `sfx_shoot_smg.mp3` |
 | `plague-sprayer` | `wpn_plague_sprayer` | `weapon_plague_sprayer_icon.png` | `vfx_bullet_spray.png` | `sfx_shoot_spray.mp3` |
-| `frost-beamer` | `wpn_frost_beamer`* | `weapon_frost_beamer_icon.png` | `vfx_bullet_frost.png` | `sfx_shoot_frost.mp3` |
+| `frost-beamer` | `wpn_frost_beamer` | `weapon_frost_beamer_icon.png` | `vfx_bullet_frost.png` | `sfx_shoot_frost.mp3` |
 | `echo-bow` | `wpn_echo_bow` | `weapon_echo_bow_icon.png` | `vfx_bullet_echo.png` | `sfx_shoot_echo.mp3` |
 | `split-barrel` | `wpn_split_barrel` | `weapon_split_barrel_icon.png` | `vfx_bullet_scatter.png` | `sfx_shoot_scatter.mp3` |
 | `mirror-prism` | `wpn_mirror_prism` | `weapon_mirror_prism_icon.png` | `vfx_bullet_prism.png` | `sfx_shoot_prism.mp3` |
@@ -246,11 +264,9 @@ player_survivor_run_<8 directions>  6×160×160
 | `gravity-hammer` | `wpn_gravity_hammer` | `weapon_gravity_hammer_icon.png` | `vfx_bullet_gravity.png` | `sfx_shoot_gravity_hammer.mp3` |
 | `void-tearer` | `wpn_void_tearer` | `weapon_void_tearer_icon.png` | `vfx_bullet_void_tear.png` | `sfx_shoot_void_tear.mp3` |
 | `icefire-judge` | `wpn_icefire_judge` | `weapon_icefire_judge_icon.png` | `vfx_bullet_icefire.png` | `sfx_shoot_icefire.mp3` |
-| `webmaster` | `wpn_webmaster`* | `weapon_webmaster_icon.png` | `vfx_bullet_web.png` | `sfx_shoot_web.mp3` |
+| `webmaster` | `wpn_webmaster` | `weapon_webmaster_icon.png` | `vfx_bullet_web.png` | `sfx_shoot_web.mp3` |
 
-`*` 表示当前基线缺口。现有文件是 `wpn_frost_beam.png`，不是推导出的 `wpn_frost_beamer.png`；`wpn_webmaster.png` 不存在。
-
-当前场上挂载文件只有 5 个正式 family 命中：storm-rifle、split-barrel、orbital-drone、ion-lance、rail-cannon。其余主武器挂载图缺失时会回退冲锋枪图或不显示。详见 [BASELINE_GAPS.md](./BASELINE_GAPS.md)。
+17 个 family 当前均具有推导 key 对应的 UI 图标和场上挂载 PNG；`wpn_frost_beam` 仅作为旧 key 兼容保留。资源合同由 `tests/visual/itemArtWiring.test.ts` 全量检查。
 
 挂载图建议使用 128×128 RGBA，枪口指向图片本地 +X（右侧），握把靠近中心，四边保留透明区。代码会围绕玩家旋转节点并在左右方向翻转 Y 轴。
 
@@ -258,37 +274,18 @@ player_survivor_run_<8 directions>  6×160×160
 
 主武器 VFX 的机制、Graphics 叠层和音效细节以 [weapon_attack_effects.md](./weapon_attack_effects.md) 为准。
 
-## 9. 副武器美术现状
+## 9. 副武器美术合同
 
-15 把副武器的战斗表现由 `assets/scripts/offhand/offhandManager.ts` 创建 Graphics 和运行节点，当前没有 `resources.load()`、SpriteFrame 表或专属战斗 PNG。
+15 把副武器各自使用 `offhand_<id>` key。UI PNG 位于 `effects/ui_icons/`，战斗 Sprite 位于 `art/offhand/`；`offhandCatalog.ts::iconKey` 和 `loadIcons()` 使用同一组 catalog key。`OffhandManager` 在玩家身边创建当前装备副武器的识别 Sprite，资源尚未导入或缺失时绘制 Graphics 标记作为降级路径；原机制 Graphics/VFX 继续独立运行。该接线不改变 15 种机制身份、数值或判定。
 
-因此：
+新增或替换副武器图片时必须保持两处同名 PNG，并让 Cocos AssetDB 生成或更新 `.meta`。战斗图建议为 128×128 RGBA，主体在 34px 运行尺寸下仍需可辨识。
 
-- 替换一张 PNG 不能改变副武器战斗表现。
-- 要做独立战斗美术，必须先设计 Sprite/VFX 加载合同并保留现有机制实现。
-- 不能为了换图改变 15 种副武器数量、分类或机制；这些受 `AGENTS.md` 保护。
+## 9.1 装备、本局道具与拾取物
 
-当前副武器 UI 图标复用如下：
-
-| 副武器 | 当前 iconKey |
-|---|---|
-| 回旋利刃 | `wpn_storm_rifle` |
-| 守护星环 | `stat_defense` |
-| 烈焰漩涡 | `stat_shield` |
-| 影刃猎手 | `wpn_rail_cannon` |
-| 静电蜂群 | `wpn_meteor_launcher` |
-| 幽影分身 | `stat_attack_power` |
-| 治愈蜂鸟 | `stat_hp` |
-| 冰霜地雷 | `wpn_frost_beam` |
-| 静电力场 | `stat_lightning_def` |
-| 黑曜石封印 | `stat_defense` |
-| 虚空裂隙 | `resource_core` |
-| 暴风之眼 | `stat_attack_speed` |
-| 时间扭曲 | `stat_attack_speed` |
-| 纳米修复器 | `stat_hp` |
-| 铜墙护盾 | `stat_defense` |
-
-替换这些通用图标会同时改变其他界面。若要 15 把副武器各有独立图标，新增 `offhand_<id>.png` 后，还要更新 `loadIcons()` 和 `offhandCatalog.ts::iconKey`。
+- 44 个 gear blueprint 使用 `gear_<blueprint_id>`，五个品质实例共享 blueprint 图标。
+- 65 个 RUN_ITEM blueprint 使用 `run_<blueprint_id>`，T1-T5 实例共享 blueprint 图标；运行时通过数字 tier 后缀反解 key。
+- 11 类资源与普通/稀有宝箱使用 `art/pickups/pickup_<type>.png`。XP 由击杀直接结算，不存在 `pickup_xp.png`。
+- `tools/generate_item_art.py` 只安装 PNG，不创建 `.meta` 或 UUID；新增资源元数据必须由 Cocos AssetDB 生成。
 
 ## 10. 子弹、VFX 与休眠资源
 

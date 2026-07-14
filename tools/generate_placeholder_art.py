@@ -123,11 +123,6 @@ def bullet_plasma(d: ImageDraw.ImageDraw) -> None:
     d.line((28, 64, 48, 64), fill=rgba("#4cc9f0", 140), width=7)
 
 
-def pickup_xp(d: ImageDraw.ImageDraw) -> None:
-    ellipse(d, (64, 64), 24, "#4cc9f0", "#e0fbff", 4)
-    d.polygon(polygon([(0, -15), (14, 0), (0, 15), (-14, 0)]), fill=rgba("#ffffff"))
-
-
 def pickup_alloy(d: ImageDraw.ImageDraw) -> None:
     d.polygon(polygon([(0, -35), (31, -13), (24, 27), (0, 39), (-24, 27), (-31, -13)]), fill=rgba("#f9c74f"), outline=rgba("#8a5a00"))
     d.line((44, 58, 84, 58), fill=rgba("#fff3b0"), width=5)
@@ -221,7 +216,6 @@ def main() -> None:
         ("enemy_warden", enemy_warden),
         ("enemy_boss", enemy_boss),
         ("bullet_plasma", bullet_plasma),
-        ("pickup_xp", pickup_xp),
         ("pickup_alloy", pickup_alloy),
         ("pickup_core", pickup_core),
         ("equipment_storm_rifle", icon_rifle),

@@ -124,7 +124,7 @@ const WORLD_BOTTOM = -1200;
 const WORLD_TOP = 1200;
 const CAMERA_FOCUS_X = 0;
 const CAMERA_FOCUS_Y = -96;
-const ART_DIRS = ['art/placeholder', 'art/characters', 'art/enemies', 'art/weapons'] as const;
+const ART_DIRS = ['art/placeholder', 'art/characters', 'art/enemies', 'art/weapons', 'art/offhand', 'art/pickups'] as const;
 const ART_LOAD_TIMEOUT_SECONDS = 4;
 const PLACEHOLDER_ART_DIR = 'art/placeholder';
 const HANGAR_EQUIPMENT_SLOTS = 9;
@@ -187,18 +187,17 @@ const GEAR_SLOT_LABELS: Record<GearSlot, string> = {
 const PLAYER_DIRECTIONS: PlayerDirection[] = ['south', 'south_east', 'east', 'north_east', 'north', 'north_west', 'west', 'south_west'];
 const PLAYER_DIRECTION_ANGLE_OFFSET = Math.PI / 2;
 const PLAYER_RUN_ANIMATION_META: Record<PlayerDirection, { frameName: string; frames: number; cellSize: number; fps: number }> = {
-    south: { frameName: 'player_survivor_run_south', frames: 6, cellSize: 160, fps: 10 },
-    south_east: { frameName: 'player_survivor_run_south_east', frames: 6, cellSize: 160, fps: 10 },
-    east: { frameName: 'player_survivor_run_east', frames: 6, cellSize: 160, fps: 10 },
-    north_east: { frameName: 'player_survivor_run_north_east', frames: 6, cellSize: 160, fps: 10 },
-    north: { frameName: 'player_survivor_run_north', frames: 6, cellSize: 160, fps: 10 },
-    north_west: { frameName: 'player_survivor_run_north_west', frames: 6, cellSize: 160, fps: 10 },
-    west: { frameName: 'player_survivor_run_west', frames: 6, cellSize: 160, fps: 10 },
-    south_west: { frameName: 'player_survivor_run_south_west', frames: 6, cellSize: 160, fps: 10 },
+    south: { frameName: 'player_body_no_weapon_run_south', frames: 6, cellSize: 80, fps: 10 },
+    south_east: { frameName: 'player_run_east', frames: 6, cellSize: 80, fps: 10 },
+    east: { frameName: 'player_run_east', frames: 6, cellSize: 80, fps: 10 },
+    north_east: { frameName: 'player_run_east', frames: 6, cellSize: 80, fps: 10 },
+    north: { frameName: 'player_body_no_weapon_run_south', frames: 6, cellSize: 80, fps: 10 },
+    north_west: { frameName: 'player_run_east', frames: 6, cellSize: 80, fps: 10 },
+    west: { frameName: 'player_run_east', frames: 6, cellSize: 80, fps: 10 },
+    south_west: { frameName: 'player_run_east', frames: 6, cellSize: 80, fps: 10 },
 };
-const PLAYER_IDLE_ANIMATION_META = { frameName: 'player_survivor_idle', frames: 6, cellSize: 160, fps: 8 };
+const PLAYER_IDLE_ANIMATION_META = { frameName: 'player_body_no_weapon_idle', frames: 6, cellSize: 80, fps: 8 };
 const PLAYER_VISUAL_SIZE = 96;
-const PLAYER_BODY_ANIMATION_DIRECTION: PlayerDirection = 'south';
 @ccclass('RogueShooterGame')
 export class RogueShooterGame extends Component {
     // ── UI Theme: Dark Glass ──────────────────────────────────────
@@ -806,6 +805,9 @@ export class RogueShooterGame extends Component {
             const animation = this.createSpriteStrip(meta.frameName, meta.frames, meta.cellSize, meta.fps);
             if (animation) this.playerRunAnimations.set(direction, animation);
         }
+        // A timeout can let combat begin before resources finish loading. Rebind
+        // any enemies created during that window to the real SpriteFrame strips.
+        this.enemyMgr.refreshEnemyArt();
     }
 
     private createSpriteStrip(frameName: string, frameCount: number, cellSize: number, fps: number): SpriteStripAnimation | null {
@@ -846,16 +848,17 @@ export class RogueShooterGame extends Component {
     }
 
     private enemyArtName(spec: EnemySpec, boss: boolean) {
-        return boss ? 'enemy_boss' : `enemy_${spec.artId}`;
+        const meta = ENEMY_STRIP_META[spec.family] || (boss ? ENEMY_STRIP_META.boss : undefined);
+        return meta?.frameName || `enemy_${spec.artId}`;
     }
 
     private getEnemyAnimationFrameName(spec: EnemySpec, boss: boolean) {
-        const meta = ENEMY_STRIP_META[boss ? 'boss' : spec.family];
+        const meta = ENEMY_STRIP_META[spec.family] || (boss ? ENEMY_STRIP_META.boss : undefined);
         return meta?.frameName || this.enemyArtName(spec, boss);
     }
 
     private getEnemyAnimation(spec: EnemySpec, boss: boolean): SpriteStripAnimation | null {
-        const meta = ENEMY_STRIP_META[boss ? 'boss' : spec.family];
+        const meta = ENEMY_STRIP_META[spec.family] || (boss ? ENEMY_STRIP_META.boss : undefined);
         if (!meta) return null;
         return this.spriteStripCache.get(meta.frameName) || this.createSpriteStrip(meta.frameName, meta.frames, meta.cellSize, meta.fps);
     }
@@ -982,6 +985,33 @@ export class RogueShooterGame extends Component {
             }
         }
         floorGfx.stroke();
+
+        // The installed PNG is post-processed into a periodic tile, so ordinary
+        // repeated sprites stay seamless without texture-wrap assumptions.
+        resources.load('art/world/battlefield_tile/spriteFrame', SpriteFrame, (error, frame) => {
+            if (error || !frame || !floor.isValid) {
+                if (error) console.warn('Battlefield texture unavailable; using procedural fallback.', error);
+                return;
+            }
+            const tileSize = 600;
+            const columns = Math.ceil((WORLD_RIGHT - WORLD_LEFT) / tileSize);
+            const rows = Math.ceil((WORLD_TOP - WORLD_BOTTOM) / tileSize);
+            for (let row = 0; row < rows; row++) {
+                for (let column = 0; column < columns; column++) {
+                    const tile = new Node(`BattlefieldTile_${column}_${row}`);
+                    tile.layer = Layers.Enum.UI_2D;
+                    floor.addChild(tile);
+                    tile.addComponent(UITransform).setContentSize(tileSize + 1, tileSize + 1);
+                    tile.addComponent(Sprite).spriteFrame = frame;
+                    tile.setPosition(
+                        WORLD_LEFT + tileSize * (column + 0.5),
+                        WORLD_BOTTOM + tileSize * (row + 0.5),
+                        0,
+                    );
+                }
+            }
+            floorGfx.clear();
+        });
     }
 
     private buildHud(root: Node) {
@@ -1484,6 +1514,10 @@ export class RogueShooterGame extends Component {
             'wpn_storm_rifle','wpn_plague_sprayer','wpn_frost_beam','wpn_echo_bow','wpn_split_barrel','wpn_mirror_prism','wpn_quantum_loom',
             'wpn_ion_lance','wpn_thorn_crossbow','wpn_rail_cannon','wpn_void_needle','wpn_meteor_launcher','wpn_orbital_drone','wpn_gravity_hammer',
             'wpn_void_tearer','wpn_icefire_judge',
+            'wpn_frost_beamer','wpn_webmaster',
+            ...OFFHAND_CATALOG.map((def) => def.iconKey),
+            ...GEAR_BLUEPRINTS.map((def) => `gear_${def.id.replace(/-/g, '_')}`),
+            ...catalogRUN_ITEM_BLUEPRINTS.map((def) => `run_${def.id.replace(/-/g, '_')}`),
             'stat_attack_power','stat_attack_speed','stat_crit_chance','stat_crit_damage',
             'stat_defense','stat_fire_def','stat_ice_def','stat_lightning_def','stat_lethal_chance','stat_lethal_damage',
             'slot_helmet','slot_armor','slot_boots','slot_accessory',
@@ -1893,7 +1927,7 @@ export class RogueShooterGame extends Component {
         this.requestBgm('bgm_combat_loop');
         this.cs.battleIndex = this.cs.battlesWon + 1;
         resetCombatSession(this.cs);
-        this.enemyMgr.currentWaveSpecs = [];
+        this.enemyMgr.resetWaveRuntime();
         this.pickupMgr.resetRun();
         this.shop.shopOffers = [];
         this.offhandMgr.clearBattleState();
@@ -2010,7 +2044,7 @@ export class RogueShooterGame extends Component {
         node.setPosition(this.cs.playerX, this.cs.playerY, 10);
         node.addComponent(UITransform).setContentSize(PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE);
         this.playerNode = node;
-        this.playerSprite = this.addSpriteChild(node, 'PlayerArt', 'player_survivor_idle', PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE) || this.addSpriteChild(node, 'PlayerArt', 'player_ship', 74, 74);
+        this.playerSprite = this.addSpriteChild(node, 'PlayerArt', 'player_body_no_weapon_idle', PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE) || this.addSpriteChild(node, 'PlayerArt', 'player_ship', 74, 74);
         this.playerWeaponSprite = this.createPlayerWeaponSprite(node);
         this.playerGfx = node.addComponent(Graphics);
         this.playerDirection = 'south';
@@ -2112,14 +2146,16 @@ export class RogueShooterGame extends Component {
 
     private getPlayerDirectionFromVector(x: number, y: number): PlayerDirection {
         const angle = Math.atan2(y, x);
-        const normalized = (PLAYER_DIRECTION_ANGLE_OFFSET - angle + Math.PI * 2) % (Math.PI * 2);
+        // PLAYER_DIRECTIONS starts at south and advances clockwise in screen
+        // coordinates. The previous subtraction mirrored north/south.
+        const normalized = (angle + PLAYER_DIRECTION_ANGLE_OFFSET + Math.PI * 2) % (Math.PI * 2);
         const index = Math.round(normalized / (Math.PI / 4)) % PLAYER_DIRECTIONS.length;
         return PLAYER_DIRECTIONS[index];
     }
 
     private updatePlayerSpriteAnimation(dt: number) {
         if (!this.playerSprite) return;
-        const bodyDirection = PLAYER_BODY_ANIMATION_DIRECTION;
+        const bodyDirection = this.playerDirection;
         const animation = this.playerMoving
             ? this.playerRunAnimations.get(bodyDirection) || this.playerRunAnimations.get('south') || this.playerIdleAnimation
             : this.playerIdleAnimation || this.playerRunAnimations.get(bodyDirection) || this.playerRunAnimations.get('south');
@@ -2138,7 +2174,9 @@ export class RogueShooterGame extends Component {
             this.playerSprite.node.getComponent(UITransform)?.setContentSize(PLAYER_VISUAL_SIZE, PLAYER_VISUAL_SIZE);
         }
         this.playerSprite.node.setPosition(0, 0, 0);
-        this.playerSprite.node.setScale(1, 1, 1);
+        const movingWest = bodyDirection === 'west' || bodyDirection === 'north_west' || bodyDirection === 'south_west';
+        this.playerSprite.node.angle = 0;
+        this.playerSprite.node.setScale(movingWest ? -1 : 1, 1, 1);
     }
 
     private resolvePlayerEnemyCollision(x: number, y: number): Vec2 {

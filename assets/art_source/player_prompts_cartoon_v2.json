@@ -1,0 +1,11 @@
+{
+  "player_run_east": {
+    "model": "gpt-image-2",
+    "size": "1536x1024",
+    "frames": 6,
+    "cell_size": 80,
+    "fps": 10,
+    "output_dir": "characters",
+    "prompt": "Create a completely original six-frame player animation sprite sheet for a mobile top-down survivor game. Subject: the same compact cheerful cyan salvage-mech hero in every frame, with a large white rounded face visor, centered yellow chest badge, two small coral shoulder fins, chunky yellow boots and simple white gloves. Body only, absolutely no gun, weapon, blade, shield, backpack or prop. Style: bright clean arcade sci-fi cartoon matching colorful simple cartoon monsters, chunky rounded geometry, saturated flat cyan/yellow/coral/white colors, uniform dark-navy outline, minimal internal detail, readable at 80px. The hero always faces straight toward the bottom of the canvas in a strict front view; never show profile, side view, back view or three-quarter side. This is a front-facing run-to-the-right indication: face and chest remain frontal, but the center of mass shifts slightly right, the right boot leads outward, the left boot follows inward, and both arms counter-swing subtly. Keep the frontal identity clear. Six smooth frames: right anticipation, right push, passing pose, right extension, recoil, return. Exactly 6 equal cells in one horizontal row, same identity, scale, palette, camera and center. Perfectly flat solid #FF00FF chroma-key background. No shadow, floor, motion line, effect, grid, label, text or watermark. Do not use magenta on the hero."
+  }
+}

@@ -1,8 +1,9 @@
 import { Color, Graphics, Label, Layers, Node, Sprite, SpriteFrame, UITransform, sys, Vec2 } from 'cc';
+import { gearIconKey, weaponIconKey } from '../core/artKeys';
 import { PanelManager } from '../ui/panels';
 import { CombatState } from '../state/combatState';
 import { EQUIPMENT, GEAR_COUNT, STARTER_EQUIPMENT_IDS } from '../catalogs/equipmentCatalog';
-import { WEAPON_CATALOG, WEAPON_COUNT, getWeaponStyleName, getWeaponTierForId, getWeaponFamilyId } from '../catalogs/weaponCatalog';
+import { WEAPON_CATALOG, WEAPON_COUNT, getWeaponStyleName, getWeaponTierForId } from '../catalogs/weaponCatalog';
 import { RUN_ITEMS, RUN_ITEM_COUNT, formatRunItemEffect } from '../catalogs/runItemCatalog';
 import { OFFHAND_CATALOG, findOffhand } from '../catalogs/offhandCatalog';
 import {
@@ -122,17 +123,9 @@ export class EquipmentManager {
 
     // ── Equipment → icon key mapping ──────────────────────────────────
     private equipIconKey(equipment: EquipmentDef): string {
-        // Weapon: extract family id → wpn_family_id icon
-        const familyId = getWeaponFamilyId(equipment.id);
-        if (familyId) return `wpn_${familyId.replace(/-/g, '_')}`;
-        // Gear slot icon
-        if (equipment.gearSlot) {
-            const slotMap: Record<string, string> = {
-                'hat': 'slot_helmet', 'armor': 'slot_armor',
-                'boots': 'slot_boots', 'accessory': 'slot_accessory',
-            };
-            return slotMap[equipment.gearSlot] || 'stat_shield';
-        }
+        const weaponKey = weaponIconKey(equipment);
+        if (weaponKey) return weaponKey;
+        if (equipment.gearSlot) return gearIconKey(equipment.id);
         const runMap: Record<string, string> = {
             'reactor_core': 'resource_core', 'magnet_coil': 'stat_lightning_def',
             'vampire_chip': 'stat_hp', 'phase_armor': 'stat_defense',

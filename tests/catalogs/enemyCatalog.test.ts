@@ -48,13 +48,13 @@ function testVariantStatScaling() {
         `Swift mite speed (${miteSwift!.speed}) should exceed base (${miteBase!.speed})`);
 }
 
-function testSpawnAfterProgression() {
-    // Later variants should have higher spawnAfter (unlock later)
+function testUnlockWaveProgression() {
     const miteBase = ENEMY_SPECS.find(e => e.id === 'mite');
     const mitePrime = ENEMY_SPECS.find(e => e.id === 'mite-prime');
     assert(miteBase && mitePrime, 'Should find mite variants');
-    assert(mitePrime!.spawnAfter >= miteBase!.spawnAfter,
-        `Prime spawnAfter (${mitePrime!.spawnAfter}) should be >= base (${miteBase!.spawnAfter})`);
+    assert.equal(miteBase!.unlockWave, 1, 'base mite unlocks on wave 1');
+    assert.equal(mitePrime!.unlockWave, 11, 'prime variants unlock on wave 11');
+    assert.ok(!('spawnAfter' in mitePrime!), 'legacy spawnAfter must be removed');
 }
 
 function testEnemyWeightPositive() {
@@ -83,7 +83,7 @@ testEnemyCatalogCount();
 testEnemyIdsAreUnique();
 testBaseArchetypeVariants();
 testVariantStatScaling();
-testSpawnAfterProgression();
+testUnlockWaveProgression();
 testEnemyWeightPositive();
 testEnemyHpPositive();
 testBuildEnemyCatalogFresh();

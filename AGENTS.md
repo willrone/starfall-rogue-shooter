@@ -167,10 +167,14 @@ price = max(50, round(baseCost × effectMultiplier
 
 ### 3.5 波次与敌人
 
-- 每波持续约 50~60 秒。
-- Boss 波为第 10 波，之后每 3 波一次。
+- 普通波持续 50~60 秒；Boss 波使用独立状态机，不继承普通波时长作为通关条件。
+- Boss 波为第 10 波，之后每 3 波一次：13、16、19……
 - 第 11 波开始使用 `endlessScale = 1.05^(wave - 10)`。
-- 第 13 波起的非 Boss 波可穿插小 Boss。
+- `assets/scripts/catalogs/waveCatalog.ts` 是波 1~9 压力表、Boss 阶段、Boss 援军、小 Boss 调度和阵型 budget 的权威配置；不得在文档或 Manager 中另抄第二套早期表。
+- 普通怪只使用 `unlockWave`：家族依次在波 1~9 解锁 `mite`、`swarm`、`runner`、`bomber`、`brute`、`aura`、`splitter`、`seeker`、`warden/beacon`；基础到 `prime` 的 11 档变体依次在波 1~11 解锁。组合实例取家族与变体解锁波次的较大值，怪池只累计扩大，不再使用 `spawnAfter` 或波 9~10 分片。
+- 阵型只改变空间分布，所有分组共享本批固定 budget，不得额外补怪。
+- 第 14 波起的非 Boss 波在开波时只判定一次小 Boss：35% 成功时安排在开波后 20~35 秒出现，每波最多 1 只。
+- Boss 波开场 3 秒；战斗阶段每 5 秒生成 3~4 只普通援军，普通援军存活上限 24；60 秒进入 overtime，Boss 速度 ×1.15、伤害 ×1.20、技能冷却 ×0.85，援军改为每 10 秒固定 4 只、存活上限 16；Boss 死亡 2.5 秒后进入下一波。
 - catalog 规模为 10 个基础 archetype × 11 个变体；另有 5 小 Boss 和 5 大 Boss。
 
 当前进度常量：
@@ -185,16 +189,16 @@ ENEMY_DAMAGE_PROGRESS_SCALE = 1.0
 ```text
 hpScale = (1 + battleIndex×0.06 + (endlessCycle-1)×0.28
            + (waveIndex×0.028 + combatTime×0.0018)
-             × 1.8 × earlyProgressFactor)
+             × 1.8 × hpProgressFactor)
           × endlessScale
 
 damageScale = (1 + (endlessCycle-1)×0.16
                + (waveIndex×0.012 + combatTime×0.0009)
-                 × 1.0 × earlyProgressFactor)
-              × earlyDamageFactor × endlessScale
+                 × 1.0 × hpProgressFactor)
+              × damageProgressFactor × endlessScale
 ```
 
-不得继续引用旧常量 `2.5 / 1.3`。刷怪间隔、批量、场上限和 `spawnAfter` 的当前行为以 `enemyManager.ts` 为准；已知解锁模型差异见 `GAP-WAVE-002`。
+`hpProgressFactor / damageProgressFactor` 由 `waveCatalog.ts` 给出：波 1~9 使用显式压力表，波 10 均为 `1.0`，波 11+ 保持 `1.0` 并叠加无尽指数。不得继续引用旧常量 `2.5 / 1.3`、旧 `spawnAfter` 双规则或旧批次/场上限表；完整压力表见机制基线第 9 节。
 
 ### 3.6 永久进度与未闭合机制
 

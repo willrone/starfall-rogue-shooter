@@ -5,10 +5,10 @@
     "tier": "novice",
     "target_profile": "novice",
     "runs": 1,
-    "p50": 1,
-    "p90": 1,
-    "avg_kills": 29,
-    "avg_level": 2,
+    "p50": 4,
+    "p90": 4,
+    "avg_kills": 244,
+    "avg_level": 6,
     "passes": false
   }
 ]
